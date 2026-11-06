@@ -85,7 +85,10 @@ impl TaskRuntime {
         }
     }
 
-    pub fn with_journal_manager(mut self, manager: Arc<crate::session::SessionManager>) -> Self { self.journal_manager = Some(manager); self }
+    pub fn with_journal_manager(mut self, manager: Arc<crate::session::SessionManager>) -> Self {
+        self.journal_manager = Some(manager);
+        self
+    }
 
     pub fn with_kernel(mut self, kernel: Arc<dyn KernelPort>) -> Self {
         self.kernel = Some(kernel);
@@ -201,7 +204,9 @@ impl TaskRuntime {
         self
     }
 
-    pub fn admission_coordinator(&self) -> Option<&Arc<crate::compute::WorkloadAdmissionCoordinator>> {
+    pub fn admission_coordinator(
+        &self,
+    ) -> Option<&Arc<crate::compute::WorkloadAdmissionCoordinator>> {
         self.admission_coordinator.as_ref()
     }
 
@@ -209,19 +214,29 @@ impl TaskRuntime {
     /// Distinguishes intentionally disabled capabilities from missing required wiring (A03).
     pub fn validate_ready(&self) -> Result<(), DomainError> {
         if self.kernel.is_none() {
-            return Err(DomainError::Validation("composition_incomplete: kernel port is required".into()));
+            return Err(DomainError::Validation(
+                "composition_incomplete: kernel port is required".into(),
+            ));
         }
         if self.run_store.is_none() {
-            return Err(DomainError::Validation("composition_incomplete: run_store port is required".into()));
+            return Err(DomainError::Validation(
+                "composition_incomplete: run_store port is required".into(),
+            ));
         }
         if self.session_store.is_none() {
-            return Err(DomainError::Validation("composition_incomplete: session_store port is required".into()));
+            return Err(DomainError::Validation(
+                "composition_incomplete: session_store port is required".into(),
+            ));
         }
         if self.model.is_none() {
-            return Err(DomainError::Validation("composition_incomplete: model port is required".into()));
+            return Err(DomainError::Validation(
+                "composition_incomplete: model port is required".into(),
+            ));
         }
         if self.workspace_coordinator.is_none() {
-            return Err(DomainError::Validation("composition_incomplete: workspace_coordinator is required".into()));
+            return Err(DomainError::Validation(
+                "composition_incomplete: workspace_coordinator is required".into(),
+            ));
         }
         Ok(())
     }
@@ -268,7 +283,9 @@ impl TaskRuntime {
     /// Checks if there is currently an active worker for a specific run ID
     pub async fn has_active_worker_for_run(&self, run_id: &str) -> bool {
         let workers = self.active_workers.read().await;
-        workers.values().any(|w| w.run_id.as_deref() == Some(run_id) || w.id == run_id)
+        workers
+            .values()
+            .any(|w| w.run_id.as_deref() == Some(run_id) || w.id == run_id)
     }
 
     /// Delivers mid-flight steering guidance to the active worker for a task
@@ -363,30 +380,68 @@ impl Default for TaskRuntime {
     }
 }
 
-
-
 mod execution;
 
 #[async_trait]
 impl WorkflowPort for TaskRuntime {
-    async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> { self.dispatch_run(cmd, false).await }
-    async fn start_run_background(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> { self.dispatch_run(cmd, true).await }
-    async fn live_run(&self, session_id: &str, run_id: &str, cursor: u64) -> Result<custos_domain::LiveRunReplay, DomainError> {
+    async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
+        self.dispatch_run(cmd, false).await
+    }
+    async fn start_run_background(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
+        self.dispatch_run(cmd, true).await
+    }
+    async fn live_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        cursor: u64,
+    ) -> Result<custos_domain::LiveRunReplay, DomainError> {
         match self.live.replay(session_id, run_id, cursor) {
             Ok(replay) => Ok(replay),
             Err(DomainError::NotFound { .. }) => {
-                let run = self.run_store.as_ref().ok_or_else(|| DomainError::Validation("Run storage unavailable".into()))?.get_run(run_id).await?.ok_or_else(|| DomainError::NotFound { kind:"Run".into(), id:run_id.into() })?;
-                if run.metadata.get("session_id").and_then(|v|v.as_str()) != Some(session_id) { return Err(DomainError::Validation("Run does not belong to this session".into())); }
+                let run = self
+                    .run_store
+                    .as_ref()
+                    .ok_or_else(|| DomainError::Validation("Run storage unavailable".into()))?
+                    .get_run(run_id)
+                    .await?
+                    .ok_or_else(|| DomainError::NotFound {
+                        kind: "Run".into(),
+                        id: run_id.into(),
+                    })?;
+                if run.metadata.get("session_id").and_then(|v| v.as_str()) != Some(session_id) {
+                    return Err(DomainError::Validation(
+                        "Run does not belong to this session".into(),
+                    ));
+                }
                 let (status_str, err_msg) = if run.status == RunStatus::Suspended {
-                    let reason = run.metadata.get("pending_approval_reason")
+                    let reason = run
+                        .metadata
+                        .get("pending_approval_reason")
                         .or_else(|| run.metadata.get("suspension_reason"))
                         .and_then(|v| v.as_str())
                         .map(str::to_string);
                     ("suspended".to_string(), reason)
-                } else if !run.status.is_terminal() || (run.status == RunStatus::Failed && run.metadata.get("completion_reason").is_none() && run.metadata.get("failure_reason").is_none()) {
-                    ("interrupted".to_string(), Some("Run interrupted by daemon restart; send a new prompt to continue".to_string()))
+                } else if !run.status.is_terminal()
+                    || (run.status == RunStatus::Failed
+                        && run.metadata.get("completion_reason").is_none()
+                        && run.metadata.get("failure_reason").is_none())
+                {
+                    (
+                        "interrupted".to_string(),
+                        Some(
+                            "Run interrupted by daemon restart; send a new prompt to continue"
+                                .to_string(),
+                        ),
+                    )
                 } else {
-                    (run.status.to_string(), run.metadata.get("failure_reason").and_then(|v| v.as_str()).map(str::to_string))
+                    (
+                        run.status.to_string(),
+                        run.metadata
+                            .get("failure_reason")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string),
+                    )
                 };
                 Ok(custos_domain::LiveRunReplay {
                     events: vec![],
@@ -396,15 +451,25 @@ impl WorkflowPort for TaskRuntime {
                         run_id: run.id,
                         task_id: run.task_id,
                         session_id: session_id.into(),
-                        turn_id: run.metadata.get("turn_id").and_then(|v|v.as_str()).unwrap_or("").into(),
+                        turn_id: run
+                            .metadata
+                            .get("turn_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .into(),
                         status: status_str,
-                        text: run.metadata.get("output").and_then(|v|v.as_str()).unwrap_or("").into(),
+                        text: run
+                            .metadata
+                            .get("output")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .into(),
                         activities: vec![],
                         usage: run.metadata.get("usage").cloned(),
                         error: err_msg,
-                    }
+                    },
                 })
-            },
+            }
             Err(error) => Err(error),
         }
     }
@@ -415,8 +480,18 @@ impl WorkflowPort for TaskRuntime {
         reason: &str,
     ) -> Result<CancelReceipt, DomainError> {
         if self.live.cancel(run_id) {
-            let task_id = self.active_runs.read().await.get(run_id).map(|run| run.task_id.clone()).unwrap_or_default();
-            let harness_id = self.active_runs.read().await.get(run_id).and_then(|r| r.metadata.get("harness_id").and_then(|h| h.as_str().map(str::to_string)));
+            let task_id = self
+                .active_runs
+                .read()
+                .await
+                .get(run_id)
+                .map(|run| run.task_id.clone())
+                .unwrap_or_default();
+            let harness_id = self.active_runs.read().await.get(run_id).and_then(|r| {
+                r.metadata
+                    .get("harness_id")
+                    .and_then(|h| h.as_str().map(str::to_string))
+            });
             if let Some(ref hid) = harness_id {
                 if let Ok(harness) = self.resolve_harness(Some(hid)) {
                     let _ = harness.cancel_run(run_id).await;
@@ -427,8 +502,15 @@ impl WorkflowPort for TaskRuntime {
                 let uncertain = outbox.list_by_status(OutboxStatus::Uncertain).await?;
                 let dispatching = outbox.list_by_status(OutboxStatus::Dispatching).await?;
                 u32::try_from(uncertain.len().saturating_add(dispatching.len())).unwrap_or(u32::MAX)
-            } else { 0 };
-            return Ok(CancelReceipt { run_id: run_id.into(), cancelled_at: Utc::now(), reason: reason.into(), uncertain_effects_count });
+            } else {
+                0
+            };
+            return Ok(CancelReceipt {
+                run_id: run_id.into(),
+                cancelled_at: Utc::now(),
+                reason: reason.into(),
+                uncertain_effects_count,
+            });
         }
         let mut run = {
             let runs = self.active_runs.read().await;
@@ -454,8 +536,12 @@ impl WorkflowPort for TaskRuntime {
         run.transition(RunStatus::Cancelled)?;
         if let Some(ref store) = self.run_store {
             store.save_run(&mut run).await?;
-            for mut w in store.list_worker_runs_for_run(run_id).await?
-                .into_iter().filter(|w| w.status == RunStatus::Active) {
+            for mut w in store
+                .list_worker_runs_for_run(run_id)
+                .await?
+                .into_iter()
+                .filter(|w| w.status == RunStatus::Active)
+            {
                 w.transition(RunStatus::Cancelled)?;
                 store.save_worker_run(&mut w).await?;
                 self.active_workers.write().await.remove(&w.id);
@@ -537,15 +623,23 @@ impl WorkflowPort for TaskRuntime {
 
         if run.status == RunStatus::Suspended {
             // Revalidate outbox approval if an attempt was recorded
-            if let Some(attempt_id) = run.metadata.get("pending_approval_attempt_id").and_then(|v| v.as_str()) {
+            if let Some(attempt_id) = run
+                .metadata
+                .get("pending_approval_attempt_id")
+                .and_then(|v| v.as_str())
+            {
                 if let Some(ref outbox) = self.outbox {
                     if let Ok(Some(entry)) = outbox.get(attempt_id).await {
                         match entry.status {
                             OutboxStatus::Failed => {
                                 run.transition(RunStatus::Failed)?;
-                                run.metadata["failure_reason"] = serde_json::json!("Approval rejected by user or outbox execution failed");
+                                run.metadata["failure_reason"] = serde_json::json!(
+                                    "Approval rejected by user or outbox execution failed"
+                                );
                                 if let Some(ref kernel) = self.kernel {
-                                    let _ = kernel.transition_task(&run.task_id, TaskStatus::Failed).await;
+                                    let _ = kernel
+                                        .transition_task(&run.task_id, TaskStatus::Failed)
+                                        .await;
                                 }
                                 if let Some(ref store) = self.run_store {
                                     store.save_run(&mut run).await?;
@@ -561,13 +655,21 @@ impl WorkflowPort for TaskRuntime {
                                     status: run.status,
                                     started_at: run.started_at,
                                     completed_at: run.ended_at,
-                                    output: run.metadata.get("output").and_then(|v| v.as_str().map(str::to_string)),
+                                    output: run
+                                        .metadata
+                                        .get("output")
+                                        .and_then(|v| v.as_str().map(str::to_string)),
                                 });
                             }
                             OutboxStatus::Pending => {
-                                return Err(DomainError::Conflict("Cannot resume run: approval is still pending".into()));
+                                return Err(DomainError::Conflict(
+                                    "Cannot resume run: approval is still pending".into(),
+                                ));
                             }
-                            OutboxStatus::Approved | OutboxStatus::Dispatching | OutboxStatus::Receipted | OutboxStatus::Uncertain => {
+                            OutboxStatus::Approved
+                            | OutboxStatus::Dispatching
+                            | OutboxStatus::Receipted
+                            | OutboxStatus::Uncertain => {
                                 // Approval recorded; proceed to reactivate run
                             }
                         }
@@ -581,26 +683,40 @@ impl WorkflowPort for TaskRuntime {
             }
             run.metadata["resumed_at"] = serde_json::json!(Utc::now().to_rfc3339());
             if let Some(ref kernel) = self.kernel {
-                let _ = kernel.transition_task(&run.task_id, TaskStatus::Running).await;
+                let _ = kernel
+                    .transition_task(&run.task_id, TaskStatus::Running)
+                    .await;
             }
             if let Some(ref store) = self.run_store {
                 store.save_run(&mut run).await?;
                 if let Ok(workers) = store.list_worker_runs_for_run(run_id).await {
-                    for mut wrun in workers.into_iter().filter(|w| w.status == RunStatus::Suspended) {
+                    for mut wrun in workers
+                        .into_iter()
+                        .filter(|w| w.status == RunStatus::Suspended)
+                    {
                         wrun.transition(RunStatus::Active)?;
                         let _ = store.save_worker_run(&mut wrun).await;
-                        self.active_workers.write().await.insert(wrun.id.clone(), wrun);
+                        self.active_workers
+                            .write()
+                            .await
+                            .insert(wrun.id.clone(), wrun);
                     }
                 }
             }
-            self.active_runs.write().await.insert(run.id.clone(), run.clone());
-            self.live.emit(&run.id, "status", serde_json::json!({ "status": "active" }));
+            self.active_runs
+                .write()
+                .await
+                .insert(run.id.clone(), run.clone());
+            self.live
+                .emit(&run.id, "status", serde_json::json!({ "status": "active" }));
 
             let runtime = self.clone();
             let resumed_run_id = run.id.clone();
             let resumed_task_id = run.task_id.clone();
             tokio::spawn(async move {
-                runtime.continue_resumed_run(&resumed_run_id, &resumed_task_id).await;
+                runtime
+                    .continue_resumed_run(&resumed_run_id, &resumed_task_id)
+                    .await;
             });
         }
 
@@ -661,7 +777,6 @@ impl WorkflowPort for TaskRuntime {
         self.execute_candidate_race(spec).await
     }
 }
-
 
 #[cfg(test)]
 mod tests;

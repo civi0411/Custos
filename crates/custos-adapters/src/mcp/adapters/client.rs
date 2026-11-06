@@ -167,7 +167,9 @@ impl StdioProcess {
             }
         });
 
-        writer.write_all(format!("{}\n", init_req).as_bytes()).await?;
+        writer
+            .write_all(format!("{}\n", init_req).as_bytes())
+            .await?;
         writer.flush().await?;
 
         // Wait for initialize response with 15s timeout
@@ -213,7 +215,9 @@ impl StdioProcess {
         let timeout_duration = std::time::Duration::from_secs(30);
         tokio::time::timeout(timeout_duration, self.send_request_inner(method, params))
             .await
-            .map_err(|_| anyhow::anyhow!("MCP stdio request '{}' timed out after 30 seconds", method))?
+            .map_err(|_| {
+                anyhow::anyhow!("MCP stdio request '{}' timed out after 30 seconds", method)
+            })?
     }
 
     async fn send_request_inner(&mut self, method: &str, params: Value) -> Result<Value> {
@@ -227,7 +231,9 @@ impl StdioProcess {
             "params": params
         });
 
-        self.stdin.write_all(format!("{}\n", req).as_bytes()).await?;
+        self.stdin
+            .write_all(format!("{}\n", req).as_bytes())
+            .await?;
         self.stdin.flush().await?;
 
         while let Some(line) = self.stdout_reader.next_line().await? {
@@ -239,7 +245,10 @@ impl StdioProcess {
                 if v.get("id").and_then(|i| i.as_u64()) == Some(id) {
                     if let Some(err) = v.get("error") {
                         let code = err.get("code");
-                        let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
+                        let msg = err
+                            .get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("unknown error");
                         anyhow::bail!("MCP error (code {:?}): {}", code, msg);
                     }
                     return Ok(v.get("result").cloned().unwrap_or(Value::Null));
@@ -247,7 +256,10 @@ impl StdioProcess {
             }
         }
 
-        anyhow::bail!("MCP child process stdout closed before response for request {}", id)
+        anyhow::bail!(
+            "MCP child process stdout closed before response for request {}",
+            id
+        )
     }
 }
 
@@ -261,11 +273,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    pub fn new(
-        url: String,
-        auth_token: Option<String>,
-        headers: HashMap<String, String>,
-    ) -> Self {
+    pub fn new(url: String, auth_token: Option<String>, headers: HashMap<String, String>) -> Self {
         Self {
             url,
             auth_token,
@@ -303,7 +311,10 @@ impl HttpClient {
         let v: Value = resp.json().await?;
         if let Some(err) = v.get("error") {
             let code = err.get("code");
-            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
+            let msg = err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error");
             anyhow::bail!("MCP HTTP error (code {:?}): {}", code, msg);
         }
 
@@ -552,9 +563,7 @@ impl McpClientTrait for CustosMcpClient {
 
     async fn read_resource(&self, uri: &str) -> Result<Value> {
         match &self.state {
-            TransportState::Mock { .. } => {
-                Ok(serde_json::json!({ "contents": [] }))
-            }
+            TransportState::Mock { .. } => Ok(serde_json::json!({ "contents": [] })),
             _ => {
                 let params = serde_json::json!({ "uri": uri });
                 self.send_request("resources/read", params).await
@@ -605,13 +614,21 @@ mod tests {
 
         // 1. Calling dangerous tool without permit must fail
         let unpermitted_ctx = ToolCallContext::new("sess-1", "req-1");
-        let res_err = client.call_tool(&unpermitted_ctx, "bash_execute", None).await;
+        let res_err = client
+            .call_tool(&unpermitted_ctx, "bash_execute", None)
+            .await;
         assert!(res_err.is_err());
-        assert!(res_err.unwrap_err().to_string().contains("requires explicit grant"));
+        assert!(res_err
+            .unwrap_err()
+            .to_string()
+            .contains("requires explicit grant"));
 
         // 2. Calling dangerous tool with permit succeeds on mock
-        let permitted_ctx = ToolCallContext::new("sess-1", "req-2")
-            .with_sade_scope("task-1", "run-1", Some("pmt-1".into()));
+        let permitted_ctx = ToolCallContext::new("sess-1", "req-2").with_sade_scope(
+            "task-1",
+            "run-1",
+            Some("pmt-1".into()),
+        );
         let res_ok = client.call_tool(&permitted_ctx, "bash_execute", None).await;
         assert!(res_ok.is_ok());
     }

@@ -1,7 +1,7 @@
 //! Transport and Binary Resolution Utilities for Custos Local API
 
-use std::sync::Mutex;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub fn default_model_probe_base_url(provider_type: &str) -> Option<&'static str> {
     match provider_type.to_ascii_lowercase().as_str() {
@@ -71,10 +71,7 @@ pub fn resolve_ssh_binary() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("ssh")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg("ssh").output() {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let p = PathBuf::from(path_str);
@@ -95,7 +92,13 @@ pub fn github_login_command(path: &Path) -> String {
 
 pub fn github_auth_metadata(success: bool, stdout: &[u8]) -> serde_json::Value {
     let user = serde_json::from_slice::<serde_json::Value>(stdout).ok();
-    if success && user.as_ref().and_then(|u| u.get("login")).and_then(|v| v.as_str()).is_some_and(|login| !login.trim().is_empty()) {
+    if success
+        && user
+            .as_ref()
+            .and_then(|u| u.get("login"))
+            .and_then(|v| v.as_str())
+            .is_some_and(|login| !login.trim().is_empty())
+    {
         // Whitelist profile metadata; never forward arbitrary CLI output.
         let user = user.as_ref();
         return serde_json::json!({"authenticated": true, "source": "gh_cli", "installed": true, "user": {
@@ -116,11 +119,7 @@ pub fn resolve_gh_binary() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    for candidate in [
-        "/opt/homebrew/bin/gh",
-        "/usr/local/bin/gh",
-        "/usr/bin/gh",
-    ] {
+    for candidate in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"] {
         let p = PathBuf::from(candidate);
         if p.exists() {
             return Some(p);
@@ -132,10 +131,7 @@ pub fn resolve_gh_binary() -> Option<PathBuf> {
             return Some(local_bin);
         }
     }
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("gh")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg("gh").output() {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let p = PathBuf::from(path_str);
@@ -169,7 +165,14 @@ pub fn resolve_git_binary() -> PathBuf {
 
 /// Parses a Git remote URL into (host, owner, repo, avatar_url)
 /// Supports SSH, HTTPS, git://, and custom enterprise GitHub hosts.
-pub fn parse_github_remote(remote_url: &str) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+pub fn parse_github_remote(
+    remote_url: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     let raw = remote_url.trim();
     if raw.is_empty() {
         return (None, None, None, None);
@@ -257,7 +260,8 @@ pub async fn resolve_deep_git_paths(path: &Path) -> Option<(PathBuf, PathBuf, bo
 
                     let commondir_file = gitdir_canonical.join("commondir");
                     let commondir_canonical = if commondir_file.is_file() {
-                        if let Ok(common_content) = tokio::fs::read_to_string(&commondir_file).await {
+                        if let Ok(common_content) = tokio::fs::read_to_string(&commondir_file).await
+                        {
                             let common_str = common_content.trim();
                             let common_path = if Path::new(common_str).is_absolute() {
                                 PathBuf::from(common_str)

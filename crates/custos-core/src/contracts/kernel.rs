@@ -77,12 +77,22 @@ pub trait KernelPort: Send + Sync {
     ) -> Result<Task, DomainError>;
 
     /// Classify the effect of a requested tool call into a RiskLevel.
-    fn classify_effect(&self, tool_name: &str, args: &serde_json::Value) -> custos_domain::RiskLevel {
+    fn classify_effect(
+        &self,
+        tool_name: &str,
+        args: &serde_json::Value,
+    ) -> custos_domain::RiskLevel {
         match tool_name {
-            "developer__read" | "read_file" | "read" | "list_dir" | "list" | "ls" => custos_domain::RiskLevel::Low,
+            "developer__read" | "read_file" | "read" | "list_dir" | "list" | "ls" => {
+                custos_domain::RiskLevel::Low
+            }
             "developer__write" | "write_file" | "write" => custos_domain::RiskLevel::Medium,
             "developer__bash" | "bash" | "shell" | "exec" => {
-                let cmd = args.get("command").or_else(|| args.get("cmd")).and_then(|v| v.as_str()).unwrap_or("");
+                let cmd = args
+                    .get("command")
+                    .or_else(|| args.get("cmd"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if cmd.contains("rm -rf") || cmd.contains("mkfs") || cmd.contains("dd if=") {
                     custos_domain::RiskLevel::Critical
                 } else {

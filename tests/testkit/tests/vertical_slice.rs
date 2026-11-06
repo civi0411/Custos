@@ -55,7 +55,10 @@ async fn vertical_slice_links_all_ports() {
 
     // 3. Context Compiler (Vĩ): 8-step pipeline produces a sealed ContextPack
     let mut files = std::collections::HashMap::new();
-    files.insert("src/lib.rs".into(), "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into());
+    files.insert(
+        "src/lib.rs".into(),
+        "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into(),
+    );
     let pack = ContextCompiler::with_memory_files(&h.workspace, files)
         .unwrap()
         .compile(&CompileContextRequest {

@@ -5,10 +5,10 @@
 //! modifying calendars, deleting files) possess valid user approval
 //! and un-tampered payload signatures before Gate 4 completion.
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use custos_core::authority::GrantStore;
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::verifier::{PackVerifier, VerificationContext, VerificationResult};
 
@@ -140,19 +140,16 @@ impl PackVerifier for UserAcceptanceOracle {
                     ),
                 }
             }
-            Some(expected_digest) => {
-                VerificationResult::Fail {
-                    reason: format!(
-                        "payload digest mismatch with trusted approval record: expected '{}', got '{}'",
-                        expected_digest, payload_digest
-                    ),
-                }
-            }
-            None => {
-                VerificationResult::Fail {
-                    reason: "no trusted approval record (missing payload_digest in grant constraints)".into(),
-                }
-            }
+            Some(expected_digest) => VerificationResult::Fail {
+                reason: format!(
+                    "payload digest mismatch with trusted approval record: expected '{}', got '{}'",
+                    expected_digest, payload_digest
+                ),
+            },
+            None => VerificationResult::Fail {
+                reason: "no trusted approval record (missing payload_digest in grant constraints)"
+                    .into(),
+            },
         }
     }
 }
@@ -201,7 +198,9 @@ mod tests {
         }));
 
         let res = oracle.verify(&ctx).await;
-        assert!(matches!(res, VerificationResult::Fail { ref reason } if reason.contains("no trusted approval record")));
+        assert!(
+            matches!(res, VerificationResult::Fail { ref reason } if reason.contains("no trusted approval record"))
+        );
     }
 
     #[tokio::test]
@@ -227,7 +226,9 @@ mod tests {
         }));
 
         let res = oracle.verify(&ctx).await;
-        assert!(matches!(res, VerificationResult::Fail { ref reason } if reason.contains("payload digest mismatch")));
+        assert!(
+            matches!(res, VerificationResult::Fail { ref reason } if reason.contains("payload digest mismatch"))
+        );
     }
 
     #[tokio::test]

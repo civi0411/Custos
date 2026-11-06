@@ -276,7 +276,9 @@ mod tests {
         let cancel = observer.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(150)).await;
-            cancel.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            cancel
+                .cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
         let result = tokio::time::timeout(
@@ -291,6 +293,9 @@ mod tests {
         let count_at_cancel = observer.events.lock().unwrap().len();
         tokio::time::sleep(Duration::from_millis(100)).await;
         let count_after_wait = observer.events.lock().unwrap().len();
-        assert_eq!(count_at_cancel, count_after_wait, "No events must be emitted after cancellation");
+        assert_eq!(
+            count_at_cancel, count_after_wait,
+            "No events must be emitted after cancellation"
+        );
     }
 }

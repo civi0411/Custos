@@ -4,9 +4,9 @@
 //! accelerator specifications, safe checkpoint manifests, cloud pod leases,
 //! and hardware adaptation planning for cross-platform failover.
 
+use crate::DomainError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::DomainError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -260,35 +260,59 @@ impl TrainingCheckpointManifest {
             || self.storage_uri.trim().is_empty()
             || self.storage_uri.contains(['?', '#'])
             || self.storage_uri.chars().any(char::is_whitespace)
-            || self.storage_uri.split("://").nth(1)
-                .and_then(|rest| rest.split('/').next()).is_some_and(|authority| authority.contains('@'))
-            || !self.epoch.is_finite() || self.epoch < 0.0
+            || self
+                .storage_uri
+                .split("://")
+                .nth(1)
+                .and_then(|rest| rest.split('/').next())
+                .is_some_and(|authority| authority.contains('@'))
+            || !self.epoch.is_finite()
+            || self.epoch < 0.0
             || self.loss.is_some_and(|v| !v.is_finite())
-            || self.learning_rate.is_some_and(|v| !v.is_finite() || v < 0.0)
+            || self
+                .learning_rate
+                .is_some_and(|v| !v.is_finite() || v < 0.0)
             || !matches!(self.precision.as_str(), "fp16" | "bf16" | "fp32" | "fp64")
         {
             return Err(invalid("Invalid checkpoint identity, metrics or precision"));
         }
-        let digest_valid = |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
+        let digest_valid =
+            |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
         let mut paths = std::collections::HashSet::new();
         for file in &self.files {
-            if file.path.is_empty() || file.path.contains(['\\', ':'])
-                || file.path.split('/').any(|part| part.is_empty() || part == "." || part == "..")
-                || !paths.insert(&file.path) || file.size_bytes == 0 || !digest_valid(&file.digest)
+            if file.path.is_empty()
+                || file.path.contains(['\\', ':'])
+                || file
+                    .path
+                    .split('/')
+                    .any(|part| part.is_empty() || part == "." || part == "..")
+                || !paths.insert(&file.path)
+                || file.size_bytes == 0
+                || !digest_valid(&file.digest)
             {
-                return Err(invalid("Checkpoint contains invalid, duplicate or unsafe file entries"));
+                return Err(invalid(
+                    "Checkpoint contains invalid, duplicate or unsafe file entries",
+                ));
             }
         }
         if self.commit_status == CheckpointCommitStatus::CommittedProtected
             && (self.files.is_empty() || !digest_valid(&self.storage_digest))
         {
-            return Err(invalid("Protected checkpoint requires a file inventory and manifest digest"));
+            return Err(invalid(
+                "Protected checkpoint requires a file inventory and manifest digest",
+            ));
         }
         if self.resumability_level.allows_state_continuation()
-            && (!self.optimizer_state_preserved || !self.scheduler_state_preserved
+            && (!self.optimizer_state_preserved
+                || !self.scheduler_state_preserved
                 || !self.rng_state_preserved
-                || [&self.base_model_revision, &self.engine_version, &self.dataset_cursor]
-                    .iter().any(|v| v.as_ref().is_none_or(|s| s.trim().is_empty()))
+                || [
+                    &self.base_model_revision,
+                    &self.engine_version,
+                    &self.dataset_cursor,
+                ]
+                .iter()
+                .any(|v| v.as_ref().is_none_or(|s| s.trim().is_empty()))
                 || !self.files.iter().any(|f| f.required_for_state_resume))
         {
             return Err(invalid("Full-state resume requires engine/model/data references and inventoried training state"));
@@ -304,9 +328,22 @@ impl TrainingCheckpointManifest {
         {
             return Err(DomainError::Validation("State resume requires a protected full-state checkpoint; warm start is a separate operation".into()));
         }
-        let required = |name: &str| self.files.iter().any(|file| file.path == name && file.required_for_state_resume);
-        if !(required("model.safetensors") || required("adapter_model.safetensors") || required("pytorch_model.bin"))
-            || !["optimizer.pt", "scheduler.pt", "rng_state.pth", "trainer_state.json"].iter().all(|name| required(name))
+        let required = |name: &str| {
+            self.files
+                .iter()
+                .any(|file| file.path == name && file.required_for_state_resume)
+        };
+        if !(required("model.safetensors")
+            || required("adapter_model.safetensors")
+            || required("pytorch_model.bin"))
+            || ![
+                "optimizer.pt",
+                "scheduler.pt",
+                "rng_state.pth",
+                "trainer_state.json",
+            ]
+            .iter()
+            .all(|name| required(name))
         {
             return Err(DomainError::Validation("State resume currently requires an inventoried single-GPU Trainer model/optimizer/scheduler/RNG/trainer-state bundle".into()));
         }
@@ -368,14 +405,22 @@ impl HardwareAdaptationPlan {
         let mut notes = Vec::new();
 
         let effective_batch = source_batch.checked_mul(source_grad_accum);
-        if source_batch == 0 || source_grad_accum == 0 || effective_batch.is_none()
-            || source.memory_mb == 0 || target.memory_mb == 0
+        if source_batch == 0
+            || source_grad_accum == 0
+            || effective_batch.is_none()
+            || source.memory_mb == 0
+            || target.memory_mb == 0
         {
             return CompatibilityGateEvaluation {
-                source_accelerator: source.name.clone(), target_accelerator: target.name.clone(),
-                source_precision: checkpoint.precision.clone(), target_precision: checkpoint.precision.clone(),
-                verdict: CompatibilityVerdict::Incompatible { reasons: vec!["Invalid hardware memory or batch dimensions".into()] },
-                plan: None, notes,
+                source_accelerator: source.name.clone(),
+                target_accelerator: target.name.clone(),
+                source_precision: checkpoint.precision.clone(),
+                target_precision: checkpoint.precision.clone(),
+                verdict: CompatibilityVerdict::Incompatible {
+                    reasons: vec!["Invalid hardware memory or batch dimensions".into()],
+                },
+                plan: None,
+                notes,
             };
         }
 
@@ -432,7 +477,9 @@ impl HardwareAdaptationPlan {
             }
         };
         if target_batch != source_batch {
-            warnings.push("Batch adaptation requires explicit recipe approval and engine validation".into());
+            warnings.push(
+                "Batch adaptation requires explicit recipe approval and engine validation".into(),
+            );
         }
         if resulting_effective_batch != effective_batch {
             warnings.push(format!(
@@ -497,7 +544,9 @@ impl HardwareAdaptationPlan {
         checkpoint: &TrainingCheckpointManifest,
     ) -> Result<Self, DomainError> {
         let eval = Self::evaluate_gate(source, target, source_batch, source_grad_accum, checkpoint);
-        eval.plan.ok_or_else(|| DomainError::Validation("No compatible hardware adaptation proposal".into()))
+        eval.plan.ok_or_else(|| {
+            DomainError::Validation("No compatible hardware adaptation proposal".into())
+        })
     }
 }
 
@@ -623,7 +672,12 @@ impl ComputeDeviceRef {
         }
     }
 
-    pub fn cuda(ordinal: u32, name: impl Into<String>, memory_mb: u64, uuid: Option<String>) -> Self {
+    pub fn cuda(
+        ordinal: u32,
+        name: impl Into<String>,
+        memory_mb: u64,
+        uuid: Option<String>,
+    ) -> Self {
         Self {
             device_id: format!("dev_cuda_{ordinal}"),
             backend: ComputeBackendKind::Local,
@@ -715,9 +769,16 @@ pub struct WorkloadAdmissionRequest {
 /// Structured outcome of an admission decision
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadAdmissionVerdict {
-    Admitted { lease: WorkloadLease },
-    Queued { queue_position: usize, reason: String },
-    Rejected { reason: String },
+    Admitted {
+        lease: WorkloadLease,
+    },
+    Queued {
+        queue_position: usize,
+        reason: String,
+    },
+    Rejected {
+        reason: String,
+    },
 }
 
 #[cfg(test)]
@@ -726,14 +787,26 @@ mod tests {
 
     #[test]
     fn checkpoint_admission_is_fail_closed() {
-        let mut manifest = TrainingCheckpointManifest::new("c", 400, 1.0, "s3://bucket/c", "a".repeat(64));
+        let mut manifest =
+            TrainingCheckpointManifest::new("c", 400, 1.0, "s3://bucket/c", "a".repeat(64));
         assert_eq!(manifest.commit_status, CheckpointCommitStatus::Observed);
         assert!(manifest.validate_for_state_resume().is_err());
-        manifest = manifest.with_full_state("model@rev", "unsloth@rev", "cursor400")
+        manifest = manifest
+            .with_full_state("model@rev", "unsloth@rev", "cursor400")
             .with_commit_status(CheckpointCommitStatus::CommittedProtected);
-        for path in ["adapter_model.safetensors", "optimizer.pt", "scheduler.pt", "rng_state.pth", "trainer_state.json"] {
-            manifest.files.push(CheckpointFileEntry { path: path.into(), size_bytes: 1,
-                digest: "a".repeat(64), required_for_state_resume: true });
+        for path in [
+            "adapter_model.safetensors",
+            "optimizer.pt",
+            "scheduler.pt",
+            "rng_state.pth",
+            "trainer_state.json",
+        ] {
+            manifest.files.push(CheckpointFileEntry {
+                path: path.into(),
+                size_bytes: 1,
+                digest: "a".repeat(64),
+                required_for_state_resume: true,
+            });
         }
         assert!(manifest.validate_for_state_resume().is_ok());
         let mut secret_uri = manifest.clone();
@@ -753,7 +826,11 @@ mod tests {
         let gpu = AcceleratorSpec::tesla_t4();
         let checkpoint = TrainingCheckpointManifest::new("c", 0, 0.0, "s3://b/c", "");
         for (batch, accum) in [(0, 1), (1, 0), (u32::MAX, 2)] {
-            assert!(HardwareAdaptationPlan::evaluate_gate(&gpu, &gpu, batch, accum, &checkpoint).plan.is_none());
+            assert!(
+                HardwareAdaptationPlan::evaluate_gate(&gpu, &gpu, batch, accum, &checkpoint)
+                    .plan
+                    .is_none()
+            );
         }
         let tiny = AcceleratorSpec::new("tiny", 1, false);
         assert!(HardwareAdaptationPlan::compute(&gpu, &tiny, 1, 1, &checkpoint).is_err());
@@ -774,16 +851,14 @@ mod tests {
         .with_precision("bf16");
 
         // Evaluate via compatibility gate
-        let eval = HardwareAdaptationPlan::evaluate_gate(
-            &source_a100,
-            &target_t4,
-            8,
-            2,
-            &checkpoint,
-        );
+        let eval =
+            HardwareAdaptationPlan::evaluate_gate(&source_a100, &target_t4, 8, 2, &checkpoint);
 
         // Target lacks bf16 -> Requires adaptation with warning
-        assert!(matches!(eval.verdict, CompatibilityVerdict::RequiresAdaptation { .. }));
+        assert!(matches!(
+            eval.verdict,
+            CompatibilityVerdict::RequiresAdaptation { .. }
+        ));
         assert_eq!(eval.target_precision, "fp16");
 
         let plan = eval.plan.expect("plan should be available");
@@ -811,13 +886,8 @@ mod tests {
         )
         .with_full_state("meta-llama/Llama-3-8B", "unsloth-2024.8", "train:100/1000");
 
-        let eval = HardwareAdaptationPlan::evaluate_gate(
-            &source_t4,
-            &target_4090,
-            4,
-            4,
-            &checkpoint,
-        );
+        let eval =
+            HardwareAdaptationPlan::evaluate_gate(&source_t4, &target_4090, 4, 4, &checkpoint);
 
         // Fully compatible
         assert_eq!(eval.verdict, CompatibilityVerdict::Compatible);
@@ -834,16 +904,14 @@ mod tests {
         let source = AcceleratorSpec::rtx_4090();
         let tiny_gpu = AcceleratorSpec::new("Tiny Embedded GPU", 2048, false);
 
-        let checkpoint = TrainingCheckpointManifest::new(
-            "ckpt_tiny",
-            50,
-            0.1,
-            "s3://bucket/test",
-            "hash",
-        );
+        let checkpoint =
+            TrainingCheckpointManifest::new("ckpt_tiny", 50, 0.1, "s3://bucket/test", "hash");
 
         let eval = HardwareAdaptationPlan::evaluate_gate(&source, &tiny_gpu, 2, 2, &checkpoint);
-        assert!(matches!(eval.verdict, CompatibilityVerdict::Incompatible { .. }));
+        assert!(matches!(
+            eval.verdict,
+            CompatibilityVerdict::Incompatible { .. }
+        ));
         assert!(eval.plan.is_none());
     }
 
@@ -874,9 +942,15 @@ mod tests {
                 required_for_state_resume: true,
             });
 
-        assert_eq!(manifest.resumability_level, ResumabilityLevel::TrainingStateResume);
+        assert_eq!(
+            manifest.resumability_level,
+            ResumabilityLevel::TrainingStateResume
+        );
         assert!(manifest.resumability_level.allows_state_continuation());
-        assert_eq!(manifest.commit_status, CheckpointCommitStatus::CommittedProtected);
+        assert_eq!(
+            manifest.commit_status,
+            CheckpointCommitStatus::CommittedProtected
+        );
         assert_eq!(manifest.files.len(), 1);
         assert!(manifest.optimizer_state_preserved);
     }
@@ -918,4 +992,3 @@ mod tests {
         assert_eq!(lease.status, WorkloadLeaseStatus::Admitted);
     }
 }
-

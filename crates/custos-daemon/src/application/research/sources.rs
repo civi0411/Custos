@@ -179,7 +179,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown research sources method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown research sources method: {unknown}"),
+            ),
         }
     }
 }
@@ -224,7 +227,8 @@ pub(crate) mod tests {
             created_at: 100,
         };
 
-        repo.ingest_source_and_claim_atomic(&source1, &claim1).unwrap();
+        repo.ingest_source_and_claim_atomic(&source1, &claim1)
+            .unwrap();
         assert_eq!(repo.list_sources().unwrap().len(), 1);
         assert_eq!(repo.list_claims().unwrap().len(), 1);
 
@@ -255,16 +259,27 @@ pub(crate) mod tests {
         };
 
         let result = repo.ingest_source_and_claim_atomic(&source2, &broken_claim);
-        assert!(result.is_err(), "Transaction should fail and abort on invalid claim");
+        assert!(
+            result.is_err(),
+            "Transaction should fail and abort on invalid claim"
+        );
 
         // Verify Rollback: source2 was NOT committed to the database!
         let sources = repo.list_sources().unwrap();
-        assert_eq!(sources.len(), 1, "Only source1 should exist in the repository");
+        assert_eq!(
+            sources.len(),
+            1,
+            "Only source1 should exist in the repository"
+        );
         assert_eq!(sources[0].id, "src-1");
         assert!(!sources.iter().any(|s| s.id == "src-2-should-rollback"));
 
         let claims = repo.list_claims().unwrap();
-        assert_eq!(claims.len(), 1, "Only claim1 should exist in the repository");
+        assert_eq!(
+            claims.len(),
+            1,
+            "Only claim1 should exist in the repository"
+        );
         assert_eq!(claims[0].id, "claim-1");
     }
 }

@@ -37,7 +37,11 @@ fn main() -> Result<()> {
             println!("==> [2/4] Canvas Smoke Invariants");
             cmd!(sh, "node --test tools/canvas-smoke.mjs").run()?;
             println!("==> [3/4] Architecture Invariants & Contracts");
-            cmd!(sh, "cargo test -p custos-testkit -p custos-tests-contract --offline").run()?;
+            cmd!(
+                sh,
+                "cargo test -p custos-testkit -p custos-tests-contract --offline"
+            )
+            .run()?;
             println!("==> [4/4] Workspace Cargo Check");
             cmd!(sh, "cargo check --workspace --all-targets --offline").run()?;
             println!("==> All Quality Gates Passed cleanly!");

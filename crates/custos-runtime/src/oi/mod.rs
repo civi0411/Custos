@@ -9,10 +9,10 @@ pub mod topologies;
 
 pub use baseline::*;
 pub use candidate_builder::*;
+pub use custos_domain::oi::evaluation::*;
 pub use engine::*;
 pub use estimator::*;
 pub use explain::*;
 pub use replanner::*;
 pub use selector::*;
 pub use topologies::*;
-pub use custos_domain::oi::evaluation::*;

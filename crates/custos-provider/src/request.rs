@@ -83,7 +83,12 @@ pub struct ModelResponse {
 }
 
 impl ModelResponse {
-    pub fn with_usage(mut self, input: Option<usize>, output: Option<usize>, total: Option<usize>) -> Self {
+    pub fn with_usage(
+        mut self,
+        input: Option<usize>,
+        output: Option<usize>,
+        total: Option<usize>,
+    ) -> Self {
         self.input_tokens = input;
         self.output_tokens = output;
         self.total_tokens = total.or_else(|| input.zip(output).map(|(i, o)| i.saturating_add(o)));
@@ -113,12 +118,17 @@ mod usage_tests {
     #[test]
     fn measured_zero_is_distinct_from_unknown_and_old_requests_decode() {
         let unknown = ModelResponse::text("answer", "test", 42);
-        assert_eq!(unknown.total_tokens,None);
-        let measured = unknown.with_usage(Some(7),Some(3),None);
-        assert_eq!(measured.total_tokens,Some(10));
-        assert_eq!(ModelResponse::text("", "test",0).with_usage(Some(0),Some(0),None).total_tokens,Some(0));
+        assert_eq!(unknown.total_tokens, None);
+        let measured = unknown.with_usage(Some(7), Some(3), None);
+        assert_eq!(measured.total_tokens, Some(10));
+        assert_eq!(
+            ModelResponse::text("", "test", 0)
+                .with_usage(Some(0), Some(0), None)
+                .total_tokens,
+            Some(0)
+        );
         let request: ProviderRequest = serde_json::from_value(serde_json::json!({"request_id":"req","task_id":"task","span_num":1,"prompt":"hello","model":"test"})).unwrap();
-        assert_eq!(request.provider_account_id,None);
+        assert_eq!(request.provider_account_id, None);
     }
 }
 
@@ -128,8 +138,16 @@ mod reasoning_compatibility_tests {
     #[test]
     fn legacy_requests_omit_effort_and_exact_levels_round_trip() {
         let request:ProviderRequest=serde_json::from_value(serde_json::json!({"request_id":"r","task_id":"t","span_num":1,"prompt":"hello","model":"gpt-6-sol"})).unwrap();
-        assert_eq!(request.reasoning_effort,None);
-        assert!(serde_json::to_value(&request).unwrap().get("reasoning_effort").is_none());
-        for level in ["xhigh","max","ultra"] { let mut selected=request.clone();selected.reasoning_effort=Some(level.into());let value=serde_json::to_value(selected).unwrap();assert_eq!(value["reasoning_effort"],level); }
+        assert_eq!(request.reasoning_effort, None);
+        assert!(serde_json::to_value(&request)
+            .unwrap()
+            .get("reasoning_effort")
+            .is_none());
+        for level in ["xhigh", "max", "ultra"] {
+            let mut selected = request.clone();
+            selected.reasoning_effort = Some(level.into());
+            let value = serde_json::to_value(selected).unwrap();
+            assert_eq!(value["reasoning_effort"], level);
+        }
     }
 }

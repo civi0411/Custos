@@ -195,8 +195,7 @@ impl ResearchRepository {
         notebook_id: Option<&str>,
         cells: &[NotebookCell],
     ) -> Result<(), DomainError> {
-        let ids: std::collections::HashSet<_> =
-            cells.iter().map(|cell| cell.id.as_str()).collect();
+        let ids: std::collections::HashSet<_> = cells.iter().map(|cell| cell.id.as_str()).collect();
         if session_id.trim().is_empty()
             || cells.len() > 256
             || ids.len() != cells.len()

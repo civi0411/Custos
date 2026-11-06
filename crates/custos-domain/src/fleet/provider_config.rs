@@ -139,7 +139,7 @@ fn default_true() -> bool {
 #[serde(rename_all = "lowercase")]
 pub enum ModelCompatibility {
     #[default]
-    Green,  // Fits 100% in Metal VRAM (Fast GPU inference)
+    Green, // Fits 100% in Metal VRAM (Fast GPU inference)
     Yellow, // Fits partially in VRAM / RAM offload
     Red,    // Exceeds total usable memory (OOM risk)
 }

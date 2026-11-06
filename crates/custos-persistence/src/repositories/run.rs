@@ -16,7 +16,9 @@ impl RunRepository {
 
     pub fn save_run(&self, run: &mut Run) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let next_version = run.state_version.checked_add(1)
+        let next_version = run
+            .state_version
+            .checked_add(1)
             .filter(|v| *v <= i64::MAX as u64)
             .ok_or_else(|| DomainError::Validation("Run state version exhausted".into()))?;
         let meta_str = serde_json::to_string(&run.metadata)
@@ -59,7 +61,10 @@ impl RunRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
         if changed != 1 {
-            return Err(DomainError::Conflict(format!("Stale or invalid run update: {}", run.id)));
+            return Err(DomainError::Conflict(format!(
+                "Stale or invalid run update: {}",
+                run.id
+            )));
         }
         run.state_version = next_version;
         Ok(())
@@ -104,7 +109,9 @@ impl RunRepository {
 
     pub fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let next_version = wrun.state_version.checked_add(1)
+        let next_version = wrun
+            .state_version
+            .checked_add(1)
             .filter(|v| *v <= i64::MAX as u64)
             .ok_or_else(|| DomainError::Validation("Worker state version exhausted".into()))?;
         let ended_at_str = wrun.ended_at.map(|dt| dt.to_rfc3339());
@@ -146,7 +153,10 @@ impl RunRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
         if changed != 1 {
-            return Err(DomainError::Conflict(format!("Stale or invalid worker update: {}", wrun.id)));
+            return Err(DomainError::Conflict(format!(
+                "Stale or invalid worker update: {}",
+                wrun.id
+            )));
         }
         wrun.state_version = next_version;
         Ok(())
@@ -722,9 +732,15 @@ mod tests {
         repo.save_run(&mut run).unwrap();
         assert_eq!(run.state_version, 2);
         stale.attempt = 2;
-        assert!(matches!(repo.save_run(&mut stale), Err(DomainError::Conflict(_))));
+        assert!(matches!(
+            repo.save_run(&mut stale),
+            Err(DomainError::Conflict(_))
+        ));
         assert_eq!(stale.state_version, 1);
-        assert_eq!(repo.get_run(&run.id).unwrap().unwrap().metadata["output"], "new");
+        assert_eq!(
+            repo.get_run(&run.id).unwrap().unwrap().metadata["output"],
+            "new"
+        );
 
         let mut worker = WorkerRun::new("cas_task".into(), "actor".into(), 3).with_run_id(&run.id);
         worker.transition(RunStatus::Active).unwrap();
@@ -732,17 +748,32 @@ mod tests {
         let mut stale_worker = repo.get_worker_run(&worker.id).unwrap().unwrap();
         worker.record_attempt().unwrap();
         repo.save_worker_run(&mut worker).unwrap();
-        assert!(matches!(repo.save_worker_run(&mut stale_worker), Err(DomainError::Conflict(_))));
+        assert!(matches!(
+            repo.save_worker_run(&mut stale_worker),
+            Err(DomainError::Conflict(_))
+        ));
 
         repo.reconcile_runs_on_startup().unwrap();
-        assert!(matches!(repo.save_run(&mut run), Err(DomainError::Conflict(_))));
-        assert!(matches!(repo.save_worker_run(&mut worker), Err(DomainError::Conflict(_))));
+        assert!(matches!(
+            repo.save_run(&mut run),
+            Err(DomainError::Conflict(_))
+        ));
+        assert!(matches!(
+            repo.save_worker_run(&mut worker),
+            Err(DomainError::Conflict(_))
+        ));
         let mut terminal = repo.get_run(&run.id).unwrap().unwrap();
         terminal.status = RunStatus::Active;
-        assert!(matches!(repo.save_run(&mut terminal), Err(DomainError::Conflict(_))));
+        assert!(matches!(
+            repo.save_run(&mut terminal),
+            Err(DomainError::Conflict(_))
+        ));
         let mut forged = Run::new("cas_task".into(), 1);
         forged.state_version = 1;
-        assert!(matches!(repo.save_run(&mut forged), Err(DomainError::Conflict(_))));
+        assert!(matches!(
+            repo.save_run(&mut forged),
+            Err(DomainError::Conflict(_))
+        ));
     }
 
     #[test]
@@ -793,11 +824,14 @@ mod tests {
         let mut stale_dispatch = released_claim1.clone();
         stale_dispatch.status = ClaimStatus::Dispatched;
         stale_dispatch.worker_run_id = Some("wrun_stale".to_string());
-        let cas_err = repo.update_claim(&stale_dispatch).expect_err("Stale dispatch must fail with CAS conflict");
+        let cas_err = repo
+            .update_claim(&stale_dispatch)
+            .expect_err("Stale dispatch must fail with CAS conflict");
         assert!(matches!(cas_err, DomainError::Conflict(_)));
 
         // 5. Idempotent release succeeds
-        repo.update_claim(&released_claim1).expect("Idempotent release must succeed");
+        repo.update_claim(&released_claim1)
+            .expect("Idempotent release must succeed");
     }
 
     #[test]

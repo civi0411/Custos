@@ -41,8 +41,8 @@ pub struct ExitReasonCohort {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticCheck {
-    pub code: String,       // "costs", "frequency", "exits", "position_risk"
-    pub severity: String,   // "pass", "warning", "critical"
+    pub code: String,     // "costs", "frequency", "exits", "position_risk"
+    pub severity: String, // "pass", "warning", "critical"
     pub summary: String,
     pub recommendation: String,
 }
@@ -99,12 +99,13 @@ impl PostTradeAnalyzer {
         }
 
         // Holding buckets: <5m (0..300), 5-30m (300..1800), 30-120m (1800..7200), >2h (7200+)
-        let mut bucket_under_5m = (0usize, 0usize, 0.0f64, 0.0f64);   // count, win, gross, comm
+        let mut bucket_under_5m = (0usize, 0usize, 0.0f64, 0.0f64); // count, win, gross, comm
         let mut bucket_5_to_30m = (0usize, 0usize, 0.0f64, 0.0f64);
         let mut bucket_30_to_120m = (0usize, 0usize, 0.0f64, 0.0f64);
         let mut bucket_over_2h = (0usize, 0usize, 0.0f64, 0.0f64);
 
-        let mut exit_reason_map: std::collections::HashMap<String, (usize, f64)> = std::collections::HashMap::new();
+        let mut exit_reason_map: std::collections::HashMap<String, (usize, f64)> =
+            std::collections::HashMap::new();
 
         let mut open_longs: VecDeque<OpenPositionFill> = VecDeque::new();
         let mut open_shorts: VecDeque<OpenPositionFill> = VecDeque::new();
@@ -119,7 +120,11 @@ impl PostTradeAnalyzer {
 
         for fill in fills {
             total_commission += fill.commission;
-            let comm_per_unit = if fill.quantity > 0.0 { fill.commission / fill.quantity } else { 0.0 };
+            let comm_per_unit = if fill.quantity > 0.0 {
+                fill.commission / fill.quantity
+            } else {
+                0.0
+            };
 
             match fill.direction {
                 OrderDirection::Buy => {
@@ -146,28 +151,39 @@ impl PostTradeAnalyzer {
                         let is_win = gross_trade_pnl > 0.0;
                         if duration < 300 {
                             bucket_under_5m.0 += 1;
-                            if is_win { bucket_under_5m.1 += 1; }
+                            if is_win {
+                                bucket_under_5m.1 += 1;
+                            }
                             bucket_under_5m.2 += gross_trade_pnl;
                             bucket_under_5m.3 += trade_comm;
                         } else if duration < 1800 {
                             bucket_5_to_30m.0 += 1;
-                            if is_win { bucket_5_to_30m.1 += 1; }
+                            if is_win {
+                                bucket_5_to_30m.1 += 1;
+                            }
                             bucket_5_to_30m.2 += gross_trade_pnl;
                             bucket_5_to_30m.3 += trade_comm;
                         } else if duration < 7200 {
                             bucket_30_to_120m.0 += 1;
-                            if is_win { bucket_30_to_120m.1 += 1; }
+                            if is_win {
+                                bucket_30_to_120m.1 += 1;
+                            }
                             bucket_30_to_120m.2 += gross_trade_pnl;
                             bucket_30_to_120m.3 += trade_comm;
                         } else {
                             bucket_over_2h.0 += 1;
-                            if is_win { bucket_over_2h.1 += 1; }
+                            if is_win {
+                                bucket_over_2h.1 += 1;
+                            }
                             bucket_over_2h.2 += gross_trade_pnl;
                             bucket_over_2h.3 += trade_comm;
                         }
 
                         // Exit reason aggregation
-                        let reason = fill.exit_reason.clone().unwrap_or_else(|| "signal_exit".into());
+                        let reason = fill
+                            .exit_reason
+                            .clone()
+                            .unwrap_or_else(|| "signal_exit".into());
                         let entry = exit_reason_map.entry(reason).or_insert((0, 0.0));
                         entry.0 += 1;
                         entry.1 += gross_trade_pnl - trade_comm;
@@ -211,27 +227,38 @@ impl PostTradeAnalyzer {
                         let is_win = gross_trade_pnl > 0.0;
                         if duration < 300 {
                             bucket_under_5m.0 += 1;
-                            if is_win { bucket_under_5m.1 += 1; }
+                            if is_win {
+                                bucket_under_5m.1 += 1;
+                            }
                             bucket_under_5m.2 += gross_trade_pnl;
                             bucket_under_5m.3 += trade_comm;
                         } else if duration < 1800 {
                             bucket_5_to_30m.0 += 1;
-                            if is_win { bucket_5_to_30m.1 += 1; }
+                            if is_win {
+                                bucket_5_to_30m.1 += 1;
+                            }
                             bucket_5_to_30m.2 += gross_trade_pnl;
                             bucket_5_to_30m.3 += trade_comm;
                         } else if duration < 7200 {
                             bucket_30_to_120m.0 += 1;
-                            if is_win { bucket_30_to_120m.1 += 1; }
+                            if is_win {
+                                bucket_30_to_120m.1 += 1;
+                            }
                             bucket_30_to_120m.2 += gross_trade_pnl;
                             bucket_30_to_120m.3 += trade_comm;
                         } else {
                             bucket_over_2h.0 += 1;
-                            if is_win { bucket_over_2h.1 += 1; }
+                            if is_win {
+                                bucket_over_2h.1 += 1;
+                            }
                             bucket_over_2h.2 += gross_trade_pnl;
                             bucket_over_2h.3 += trade_comm;
                         }
 
-                        let reason = fill.exit_reason.clone().unwrap_or_else(|| "signal_exit".into());
+                        let reason = fill
+                            .exit_reason
+                            .clone()
+                            .unwrap_or_else(|| "signal_exit".into());
                         let entry = exit_reason_map.entry(reason).or_insert((0, 0.0));
                         entry.0 += 1;
                         entry.1 += gross_trade_pnl - trade_comm;
@@ -257,13 +284,33 @@ impl PostTradeAnalyzer {
         }
 
         let net_pnl = total_gross_pnl - total_commission;
-        let profit_factor = if gross_losses > 1e-6 { gross_wins / gross_losses } else { 1.0 };
-        let avg_win = if win_trades > 0 { gross_wins / win_trades as f64 } else { 0.0 };
-        let avg_loss = if loss_trades > 0 { gross_losses / loss_trades as f64 } else { 0.0 };
-        let win_loss_ratio = if avg_loss > 1e-6 { avg_win / avg_loss } else { 1.0 };
+        let profit_factor = if gross_losses > 1e-6 {
+            gross_wins / gross_losses
+        } else {
+            1.0
+        };
+        let avg_win = if win_trades > 0 {
+            gross_wins / win_trades as f64
+        } else {
+            0.0
+        };
+        let avg_loss = if loss_trades > 0 {
+            gross_losses / loss_trades as f64
+        } else {
+            0.0
+        };
+        let win_loss_ratio = if avg_loss > 1e-6 {
+            avg_win / avg_loss
+        } else {
+            1.0
+        };
 
         let make_cohort = |label: &str, data: (usize, usize, f64, f64)| -> HoldingCohort {
-            let win_rate = if data.0 > 0 { data.1 as f64 / data.0 as f64 } else { 0.0 };
+            let win_rate = if data.0 > 0 {
+                data.1 as f64 / data.0 as f64
+            } else {
+                0.0
+            };
             HoldingCohort {
                 label: label.into(),
                 trade_count: data.0,
@@ -284,7 +331,11 @@ impl PostTradeAnalyzer {
 
         let mut exit_cohorts: Vec<ExitReasonCohort> = exit_reason_map
             .into_iter()
-            .map(|(reason, (count, pnl))| ExitReasonCohort { reason, count, net_pnl: pnl })
+            .map(|(reason, (count, pnl))| ExitReasonCohort {
+                reason,
+                count,
+                net_pnl: pnl,
+            })
             .collect();
         exit_cohorts.sort_by_key(|a| std::cmp::Reverse(a.count));
 
@@ -303,7 +354,10 @@ impl PostTradeAnalyzer {
             diagnostics.push(DiagnosticCheck {
                 code: "costs".into(),
                 severity: "pass".into(),
-                summary: format!("Commissions (${:.2}) remain within sustainable boundaries", total_commission),
+                summary: format!(
+                    "Commissions (${:.2}) remain within sustainable boundaries",
+                    total_commission
+                ),
                 recommendation: "Fee drag is nominal".into(),
             });
         }
@@ -313,8 +367,14 @@ impl PostTradeAnalyzer {
             diagnostics.push(DiagnosticCheck {
                 code: "frequency".into(),
                 severity: "warning".into(),
-                summary: format!("{:.1}% of trades held under 5 minutes with net PnL ${:.2}", (bucket_under_5m.0 as f64 / total_trades_paired as f64) * 100.0, bucket_under_5m.2 - bucket_under_5m.3),
-                recommendation: "Ultra-short holding duration is susceptible to execution noise and slippage".into(),
+                summary: format!(
+                    "{:.1}% of trades held under 5 minutes with net PnL ${:.2}",
+                    (bucket_under_5m.0 as f64 / total_trades_paired as f64) * 100.0,
+                    bucket_under_5m.2 - bucket_under_5m.3
+                ),
+                recommendation:
+                    "Ultra-short holding duration is susceptible to execution noise and slippage"
+                        .into(),
             });
         } else {
             diagnostics.push(DiagnosticCheck {
@@ -332,8 +392,13 @@ impl PostTradeAnalyzer {
                 diagnostics.push(DiagnosticCheck {
                     code: "exits".into(),
                     severity: "warning".into(),
-                    summary: format!("Stop-losses triggered in {}/{} trades (Net PnL ${:.2})", sl.count, total_trades_paired, sl.net_pnl),
-                    recommendation: "Stop-loss distance may be too tight relative to prevailing market ATR".into(),
+                    summary: format!(
+                        "Stop-losses triggered in {}/{} trades (Net PnL ${:.2})",
+                        sl.count, total_trades_paired, sl.net_pnl
+                    ),
+                    recommendation:
+                        "Stop-loss distance may be too tight relative to prevailing market ATR"
+                            .into(),
                 });
             }
         }
@@ -343,14 +408,21 @@ impl PostTradeAnalyzer {
             diagnostics.push(DiagnosticCheck {
                 code: "position_risk".into(),
                 severity: "critical".into(),
-                summary: format!("Win/Loss ratio ({:.2}) indicates average loss is more than double average win", win_loss_ratio),
-                recommendation: "Enforce strict risk-to-reward ratio >= 1.5:1 before signal trigger".into(),
+                summary: format!(
+                    "Win/Loss ratio ({:.2}) indicates average loss is more than double average win",
+                    win_loss_ratio
+                ),
+                recommendation:
+                    "Enforce strict risk-to-reward ratio >= 1.5:1 before signal trigger".into(),
             });
         } else {
             diagnostics.push(DiagnosticCheck {
                 code: "position_risk".into(),
                 severity: "pass".into(),
-                summary: format!("Win/Loss ratio ({:.2}) and profit factor ({:.2}) remain positive", win_loss_ratio, profit_factor),
+                summary: format!(
+                    "Win/Loss ratio ({:.2}) and profit factor ({:.2}) remain positive",
+                    win_loss_ratio, profit_factor
+                ),
                 recommendation: "Position risk sizing is healthy".into(),
             });
         }

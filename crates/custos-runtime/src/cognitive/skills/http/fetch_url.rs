@@ -61,7 +61,13 @@ fn is_safe_ip(ip: IpAddr) -> bool {
             }
             // Check IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
             let segments = ipv6.segments();
-            if segments[0] == 0 && segments[1] == 0 && segments[2] == 0 && segments[3] == 0 && segments[4] == 0 && segments[5] == 0xffff {
+            if segments[0] == 0
+                && segments[1] == 0
+                && segments[2] == 0
+                && segments[3] == 0
+                && segments[4] == 0
+                && segments[5] == 0xffff
+            {
                 let v4 = std::net::Ipv4Addr::new(
                     (segments[6] >> 8) as u8,
                     segments[6] as u8,

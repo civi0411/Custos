@@ -67,30 +67,22 @@ impl HeadlessArgs {
                 instruction.to_string(),
                 "--yes-always".to_string(),
             ],
-            Self::DashP => vec![
-                "-p".to_string(),
-                instruction.to_string(),
-            ],
-            Self::RunPositional => vec![
-                "run".to_string(),
-                instruction.to_string(),
-            ],
-            Self::DoubleDash => vec![
-                "--".to_string(),
-                instruction.to_string(),
-            ],
-            Self::Positional => vec![
-                instruction.to_string(),
-            ],
+            Self::DashP => vec!["-p".to_string(), instruction.to_string()],
+            Self::RunPositional => vec!["run".to_string(), instruction.to_string()],
+            Self::DoubleDash => vec!["--".to_string(), instruction.to_string()],
+            Self::Positional => vec![instruction.to_string()],
         }
     }
 
     pub fn apply(&self, cmd: &mut tokio::process::Command, instruction: &str) {
         match self {
             Self::ClaudeCode => {
-                cmd.arg("--print")
-                    .arg(instruction)
-                    .args(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+                cmd.arg("--print").arg(instruction).args([
+                    "--output-format",
+                    "stream-json",
+                    "--verbose",
+                    "--include-partial-messages",
+                ]);
             }
             Self::Codex => {
                 cmd.arg("exec").arg("--json").arg(instruction);
@@ -157,14 +149,36 @@ mod tests {
     fn test_headless_args_generation() {
         assert_eq!(
             HeadlessArgs::ClaudeCode.build_args("hi"),
-            vec!["--print", "hi", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+            vec![
+                "--print",
+                "hi",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--include-partial-messages"
+            ]
         );
-        assert_eq!(HeadlessArgs::Codex.build_args("hi"), vec!["exec", "--json", "hi"]);
-        assert_eq!(HeadlessArgs::OpenCode.build_args("hi"), vec!["run", "--format", "json", "hi"]);
-        assert_eq!(HeadlessArgs::Goose.build_args("hi"), vec!["run", "--text", "hi"]);
-        assert_eq!(HeadlessArgs::Aider.build_args("hi"), vec!["--message", "hi", "--yes-always"]);
+        assert_eq!(
+            HeadlessArgs::Codex.build_args("hi"),
+            vec!["exec", "--json", "hi"]
+        );
+        assert_eq!(
+            HeadlessArgs::OpenCode.build_args("hi"),
+            vec!["run", "--format", "json", "hi"]
+        );
+        assert_eq!(
+            HeadlessArgs::Goose.build_args("hi"),
+            vec!["run", "--text", "hi"]
+        );
+        assert_eq!(
+            HeadlessArgs::Aider.build_args("hi"),
+            vec!["--message", "hi", "--yes-always"]
+        );
         assert_eq!(HeadlessArgs::DashP.build_args("hi"), vec!["-p", "hi"]);
-        assert_eq!(HeadlessArgs::RunPositional.build_args("hi"), vec!["run", "hi"]);
+        assert_eq!(
+            HeadlessArgs::RunPositional.build_args("hi"),
+            vec!["run", "hi"]
+        );
         assert_eq!(HeadlessArgs::DoubleDash.build_args("hi"), vec!["--", "hi"]);
         assert_eq!(HeadlessArgs::Positional.build_args("hi"), vec!["hi"]);
     }

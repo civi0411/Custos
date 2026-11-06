@@ -18,4 +18,3 @@ pub use observer::{CancellableObserver, NoopObserver};
 pub use registry::*;
 pub use spec::{HarnessSpec, HeadlessArgs, StreamProtocol};
 pub use stream::extract_observed_intents;
-

@@ -69,7 +69,6 @@ pub const METHOD_QUANT_REVIEW_COMPUTE: &str = "v1.quant.review.compute";
 pub const METHOD_QUANT_ORDERBOOK_GET: &str = "v1.quant.orderbook.get";
 pub const METHOD_QUANT_PBO_COMPUTE: &str = "v1.quant.pbo.compute";
 
-
 pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";
 pub const METHOD_WORKSPACE_FILES_READ: &str = "v1.workspace.files.read";
 pub const METHOD_WORKSPACE_FILES_WRITE: &str = "v1.workspace.files.write";
@@ -266,7 +265,6 @@ pub struct RunPacksJobRequest {
     #[serde(default)]
     pub inputs: serde_json::Value,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthAuthorizeParams {

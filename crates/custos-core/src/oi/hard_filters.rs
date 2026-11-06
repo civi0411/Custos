@@ -22,7 +22,9 @@ impl HardFilters {
 
         // 0. Available Executors Catalog check
         if !snapshot.available_executors.is_empty()
-            && !snapshot.available_executors.contains(&proposal.candidate_harness)
+            && !snapshot
+                .available_executors
+                .contains(&proposal.candidate_harness)
         {
             reasons.push(RejectionReason::CapabilityMissing(format!(
                 "executor '{}' is unavailable or not configured",
@@ -53,14 +55,12 @@ impl HardFilters {
             || proposal.candidate_harness.contains("mlx")
             || proposal.candidate_harness.contains("ollama");
 
-        let is_local_only = snapshot
-            .required_capabilities
-            .iter()
-            .any(|c| c.eq_ignore_ascii_case("LocalOnly") || c.eq_ignore_ascii_case("local-only"))
-            || snapshot
-                .egress_rules
-                .iter()
-                .any(|r| r.eq_ignore_ascii_case("LocalOnly") || r.eq_ignore_ascii_case("local-only"));
+        let is_local_only =
+            snapshot.required_capabilities.iter().any(|c| {
+                c.eq_ignore_ascii_case("LocalOnly") || c.eq_ignore_ascii_case("local-only")
+            }) || snapshot.egress_rules.iter().any(|r| {
+                r.eq_ignore_ascii_case("LocalOnly") || r.eq_ignore_ascii_case("local-only")
+            });
 
         if is_local_only && !is_candidate_local {
             reasons.push(RejectionReason::LocalOnlyConstraint);
@@ -132,7 +132,9 @@ mod tests {
         let cloud_proposal = StrategyProposal::native_baseline("task_local", "claude-code");
         let cloud_res = HardFilters::evaluate(&cloud_proposal, &snapshot);
         assert!(cloud_res.is_err());
-        assert!(cloud_res.unwrap_err().contains(&RejectionReason::LocalOnlyConstraint));
+        assert!(cloud_res
+            .unwrap_err()
+            .contains(&RejectionReason::LocalOnlyConstraint));
 
         let local_proposal = StrategyProposal::native_baseline("task_local", "custos-local");
         let local_res = HardFilters::evaluate(&local_proposal, &snapshot);
@@ -145,7 +147,13 @@ mod tests {
         snapshot.egress_rules = vec!["no-external-egress".into()];
 
         // External harnesses that previously could bypass string-matching
-        for harness in &["codex", "gemini-1.5-pro", "openrouter/anthropic", "gpt-4o", "unknown-cloud"] {
+        for harness in &[
+            "codex",
+            "gemini-1.5-pro",
+            "openrouter/anthropic",
+            "gpt-4o",
+            "unknown-cloud",
+        ] {
             let proposal = StrategyProposal::native_baseline("task_egress", *harness);
             let res = HardFilters::evaluate(&proposal, &snapshot);
             assert!(
@@ -154,8 +162,9 @@ mod tests {
                 harness
             );
             assert!(
-                res.unwrap_err()
-                    .contains(&RejectionReason::EgressViolation("no-external-egress".into())),
+                res.unwrap_err().contains(&RejectionReason::EgressViolation(
+                    "no-external-egress".into()
+                )),
                 "Harness {} should have EgressViolation reason",
                 harness
             );

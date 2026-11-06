@@ -14,19 +14,19 @@ pub mod integration;
 pub use crate::context::memory as memory_service;
 pub mod notebook;
 pub mod oi;
+pub mod packages;
 pub mod session;
 pub mod terminal;
 pub mod workflow;
 pub mod workspace;
-pub mod packages;
 
-pub use packages::WorkerLease;
 pub use clock::{ClockError, ClockTick, PrecisionEventClock};
 pub use event_bus::{EventBusError, PipelineEvent, PipelineEventBus};
 pub use integration::{
     BindingDirection, IntegrationBinding, IntegrationKind, IntegrationRegistry, LifecycleState,
     MediationLevel,
 };
+pub use packages::WorkerLease;
 
 // Targeted root re-exports
 pub use compute::{
@@ -38,4 +38,3 @@ pub use session::SessionManager;
 pub use terminal::TerminalCoordinator;
 pub use workflow::{TaskRuntime, WorkspaceLeaseManager};
 pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
-

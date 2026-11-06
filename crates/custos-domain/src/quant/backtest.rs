@@ -158,29 +158,29 @@ pub fn probit(p: f64) -> f64 {
     }
 
     const A1: f64 = -3.969683028665376e+01;
-    const A2: f64 =  2.209460984245205e+02;
+    const A2: f64 = 2.209460984245205e+02;
     const A3: f64 = -2.759285104469687e+02;
-    const A4: f64 =  1.383577518672690e+02;
+    const A4: f64 = 1.383577518672690e+02;
     const A5: f64 = -3.066479806614716e+01;
-    const A6: f64 =  2.506628277459239e+00;
+    const A6: f64 = 2.506628277459239e+00;
 
     const B1: f64 = -5.447609879822406e+01;
-    const B2: f64 =  1.615858368580409e+02;
+    const B2: f64 = 1.615858368580409e+02;
     const B3: f64 = -1.556989798598866e+02;
-    const B4: f64 =  6.680131188771972e+01;
+    const B4: f64 = 6.680131188771972e+01;
     const B5: f64 = -1.328068155288572e+01;
 
     const C1: f64 = -7.784894002430293e-03;
     const C2: f64 = -3.223964580411365e-01;
     const C3: f64 = -2.400758277161838e+00;
     const C4: f64 = -2.549732539343734e+00;
-    const C5: f64 =  4.374664141464968e+00;
-    const C6: f64 =  2.938163982698783e+00;
+    const C5: f64 = 4.374664141464968e+00;
+    const C6: f64 = 2.938163982698783e+00;
 
-    const D1: f64 =  7.784695709041462e-03;
-    const D2: f64 =  3.224671290700398e-01;
-    const D3: f64 =  2.445134137142996e+00;
-    const D4: f64 =  3.754408661907416e+00;
+    const D1: f64 = 7.784695709041462e-03;
+    const D2: f64 = 3.224671290700398e-01;
+    const D3: f64 = 2.445134137142996e+00;
+    const D4: f64 = 3.754408661907416e+00;
 
     const P_LOW: f64 = 0.02425;
     const P_HIGH: f64 = 1.0 - P_LOW;
@@ -219,7 +219,11 @@ pub fn calculate_dsr(
     let n = trials_count as f64;
     let t = sample_length as f64;
     let euler = 0.57721566490153286;
-    let var = if variance_of_trials > 1e-9 { variance_of_trials } else { 1.0 };
+    let var = if variance_of_trials > 1e-9 {
+        variance_of_trials
+    } else {
+        1.0
+    };
 
     let exp_max_sr = if n <= 1.0 {
         0.0

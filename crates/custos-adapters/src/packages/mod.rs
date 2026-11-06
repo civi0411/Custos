@@ -85,7 +85,9 @@ pub fn scan_local_packages(packages_dir: &Path) -> Result<Vec<DiscoveredPackage>
             None => continue,
         };
 
-        if comp_name.starts_with('.') || LocalPackageTransferAdapter::sanitize_name(&comp_name).is_err() {
+        if comp_name.starts_with('.')
+            || LocalPackageTransferAdapter::sanitize_name(&comp_name).is_err()
+        {
             continue;
         }
 
@@ -105,7 +107,9 @@ pub fn scan_local_packages(packages_dir: &Path) -> Result<Vec<DiscoveredPackage>
                 None => continue,
             };
 
-            if version.starts_with('.') || LocalPackageTransferAdapter::sanitize_name(&version).is_err() {
+            if version.starts_with('.')
+                || LocalPackageTransferAdapter::sanitize_name(&version).is_err()
+            {
                 continue;
             }
 
@@ -261,10 +265,7 @@ impl PackageTransferPort for LocalPackageTransferAdapter {
             if staged.staging_path.exists() {
                 let _ = fs::remove_file(&staged.staging_path).await;
             }
-            return Err(PackageError::DigestMismatch {
-                expected,
-                actual,
-            });
+            return Err(PackageError::DigestMismatch { expected, actual });
         }
         Ok(())
     }
@@ -316,7 +317,9 @@ mod tests {
         let expected_digest = format!("{:x}", hasher.finalize());
 
         let source_file = root.path().join("quant.pkg");
-        fs::write(&source_file, payload).await.expect("write source");
+        fs::write(&source_file, payload)
+            .await
+            .expect("write source");
 
         let source_url = format!("file://{}", source_file.display());
 
@@ -383,7 +386,10 @@ mod tests {
             .expect("download");
 
         let err = adapter
-            .verify_staged(&staged, "0000000000000000000000000000000000000000000000000000000000000000")
+            .verify_staged(
+                &staged,
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            )
             .await
             .unwrap_err();
 
@@ -401,20 +407,28 @@ mod tests {
         // Create pre-existing local workbench directory structure
         let quant_dir = packages_dir.join("quant").join("0.3.0");
         std::fs::create_dir_all(&quant_dir).expect("create dir");
-        std::fs::write(quant_dir.join("package.bundle"), b"mock-quant-bundle").expect("write bundle");
+        std::fs::write(quant_dir.join("package.bundle"), b"mock-quant-bundle")
+            .expect("write bundle");
 
         let research_dir = packages_dir.join("research").join("1.2.0");
         std::fs::create_dir_all(&research_dir).expect("create dir");
-        std::fs::write(research_dir.join("manifest.json"), b"{\"id\":\"research\"}").expect("write manifest");
+        std::fs::write(research_dir.join("manifest.json"), b"{\"id\":\"research\"}")
+            .expect("write manifest");
 
         let discovered = scan_local_packages(&packages_dir).expect("scan_local_packages");
         assert_eq!(discovered.len(), 2);
 
-        let quant = discovered.iter().find(|d| d.component_id == "quant").expect("quant found");
+        let quant = discovered
+            .iter()
+            .find(|d| d.component_id == "quant")
+            .expect("quant found");
         assert_eq!(quant.version, "0.3.0");
         assert!(quant.digest.starts_with("sha256:"));
 
-        let research = discovered.iter().find(|d| d.component_id == "research").expect("research found");
+        let research = discovered
+            .iter()
+            .find(|d| d.component_id == "research")
+            .expect("research found");
         assert_eq!(research.version, "1.2.0");
     }
 }

@@ -44,7 +44,10 @@ impl WorkspaceLease {
     }
 
     /// Releases and marks the lease inactive using the provided Git port.
-    pub fn release_with_git(&mut self, git_port: &dyn RepositoryGitPort) -> Result<(), DomainError> {
+    pub fn release_with_git(
+        &mut self,
+        git_port: &dyn RepositoryGitPort,
+    ) -> Result<(), DomainError> {
         let expected_parent = self.base_path.join(".custos").join("worktrees");
         if !self.lease_path.starts_with(&expected_parent) || self.lease_path == expected_parent {
             return Err(DomainError::Validation(format!(
@@ -82,9 +85,9 @@ impl WorkspaceLease {
             return Ok(());
         }
 
-        for entry in fs::read_dir(current)
-            .map_err(|e| DomainError::Validation(format!("Failed to read dir {:?}: {}", current, e)))?
-        {
+        for entry in fs::read_dir(current).map_err(|e| {
+            DomainError::Validation(format!("Failed to read dir {:?}: {}", current, e))
+        })? {
             let entry = entry.map_err(|e| DomainError::Validation(e.to_string()))?;
             let path = entry.path();
             let file_name = entry.file_name();
@@ -389,10 +392,8 @@ mod tests {
         fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
         fs::write(temp_dir.path().join("README.md"), "baseline").unwrap();
 
-        let manager = WorkspaceLeaseManager::with_git_port(
-            temp_dir.path(),
-            Arc::new(MockFailingGitPort),
-        );
+        let manager =
+            WorkspaceLeaseManager::with_git_port(temp_dir.path(), Arc::new(MockFailingGitPort));
         let lease = manager.acquire_lease("task", "worker").unwrap();
         let new_file = lease.lease_path.join("untracked.txt");
         fs::write(&new_file, "keep this result").unwrap();

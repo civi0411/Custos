@@ -202,22 +202,20 @@ impl DomainPack for AssistantPack {
     }
 
     fn tool_declarations(&self) -> Vec<serde_json::Value> {
-        vec![
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "schedule_task",
-                    "description": "Propose or schedule an automated assistant task or reminder",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "title": { "type": "string", "description": "Task or reminder title" },
-                            "due_at": { "type": "string", "description": "ISO timestamp for execution" }
-                        },
-                        "required": ["title"]
-                    }
+        vec![serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "schedule_task",
+                "description": "Propose or schedule an automated assistant task or reminder",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": { "type": "string", "description": "Task or reminder title" },
+                        "due_at": { "type": "string", "description": "ISO timestamp for execution" }
+                    },
+                    "required": ["title"]
                 }
-            }),
-        ]
+            }
+        })]
     }
 }

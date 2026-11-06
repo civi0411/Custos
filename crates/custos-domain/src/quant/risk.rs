@@ -29,7 +29,10 @@ impl std::fmt::Display for RiskBreach {
                     limit * 100.0
                 )
             }
-            RiskBreach::PositionSizeExceeded { actual_pct, limit_pct } => {
+            RiskBreach::PositionSizeExceeded {
+                actual_pct,
+                limit_pct,
+            } => {
                 write!(
                     f,
                     "Position size ({:.2}%) exceeded limit ({:.2}%)",
@@ -41,10 +44,17 @@ impl std::fmt::Display for RiskBreach {
                 write!(f, "Leverage ({actual:.2}x) exceeded limit ({limit:.2}x)")
             }
             RiskBreach::DsrBelowThreshold { actual, threshold } => {
-                write!(f, "Deflated Sharpe Ratio ({actual:.3}) fell below threshold ({threshold:.3})")
+                write!(
+                    f,
+                    "Deflated Sharpe Ratio ({actual:.3}) fell below threshold ({threshold:.3})"
+                )
             }
             RiskBreach::StopLossInvalid { stop_loss } => {
-                write!(f, "Configured stop loss ({:.2}%) is invalid", stop_loss * 100.0)
+                write!(
+                    f,
+                    "Configured stop loss ({:.2}%) is invalid",
+                    stop_loss * 100.0
+                )
             }
         }
     }
@@ -161,11 +171,11 @@ pub struct ProtectionSpec {
 impl Default for ProtectionSpec {
     fn default() -> Self {
         Self {
-            stop_loss_pct: 0.05,        // 5% Stop loss
-            take_profit_pct: 0.15,      // 15% Take profit
-            trailing_stop_pct: 0.03,    // 3% Trailing stop
+            stop_loss_pct: 0.05,           // 5% Stop loss
+            take_profit_pct: 0.15,         // 15% Take profit
+            trailing_stop_pct: 0.03,       // 3% Trailing stop
             trailing_activation_pct: 0.05, // 5% Profit needed to activate trailing stop
-            time_limit_seconds: 86_400, // 24 hours
+            time_limit_seconds: 86_400,    // 24 hours
         }
     }
 }
@@ -266,4 +276,3 @@ impl ProtectionState {
         false
     }
 }
-

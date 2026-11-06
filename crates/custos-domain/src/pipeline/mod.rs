@@ -13,8 +13,8 @@ pub use structure::{
     TabularStructureDetector,
 };
 
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// The three canonical stages of the sovereign data pipeline.
@@ -68,7 +68,9 @@ impl ClosedBarInvariant {
 impl DataInvariant for ClosedBarInvariant {
     fn verify(&self) -> Result<(), DomainError> {
         if self.duration_seconds <= 0 {
-            return Err(DomainError::Validation("Bar duration must be positive".to_string()));
+            return Err(DomainError::Validation(
+                "Bar duration must be positive".to_string(),
+            ));
         }
         let bar_close_ts = self.bar_open_ts.saturating_add(self.duration_seconds);
         if bar_close_ts > self.reference_ts {
@@ -112,13 +114,19 @@ impl EvidenceGroundingInvariant {
 impl DataInvariant for EvidenceGroundingInvariant {
     fn verify(&self) -> Result<(), DomainError> {
         if self.source_id.trim().is_empty() {
-            return Err(DomainError::Validation("Claim must specify a non-empty source ID".to_string()));
+            return Err(DomainError::Validation(
+                "Claim must specify a non-empty source ID".to_string(),
+            ));
         }
         if self.document_hash.trim().is_empty() {
-            return Err(DomainError::Validation("Claim must bind to a valid document content hash".to_string()));
+            return Err(DomainError::Validation(
+                "Claim must bind to a valid document content hash".to_string(),
+            ));
         }
         if self.quote_text.trim().is_empty() {
-            return Err(DomainError::Validation("Claim must cite non-empty grounding passage text".to_string()));
+            return Err(DomainError::Validation(
+                "Claim must cite non-empty grounding passage text".to_string(),
+            ));
         }
         if self.start_offset >= self.end_offset {
             return Err(DomainError::Validation(format!(
@@ -158,7 +166,9 @@ impl GovernedOutboxInvariant {
 impl DataInvariant for GovernedOutboxInvariant {
     fn verify(&self) -> Result<(), DomainError> {
         if self.action_id.trim().is_empty() {
-            return Err(DomainError::Validation("Action ID cannot be empty".to_string()));
+            return Err(DomainError::Validation(
+                "Action ID cannot be empty".to_string(),
+            ));
         }
         if !self.is_read_only && self.permit_id.as_deref().unwrap_or("").trim().is_empty() {
             return Err(DomainError::Validation(format!(
@@ -189,7 +199,9 @@ impl AstSyntaxInvariant {
 impl DataInvariant for AstSyntaxInvariant {
     fn verify(&self) -> Result<(), DomainError> {
         if self.path.trim().is_empty() {
-            return Err(DomainError::Validation("Source file path cannot be empty".to_string()));
+            return Err(DomainError::Validation(
+                "Source file path cannot be empty".to_string(),
+            ));
         }
         let mut brace = 0i32;
         let mut bracket = 0i32;
@@ -255,7 +267,12 @@ pub struct PipelineRecord<T> {
 
 impl<T: Serialize> PipelineRecord<T> {
     /// Create a new raw Bronze record.
-    pub fn new_bronze(id: impl Into<String>, modality: DataModality, payload: T, timestamp: i64) -> Self {
+    pub fn new_bronze(
+        id: impl Into<String>,
+        modality: DataModality,
+        payload: T,
+        timestamp: i64,
+    ) -> Self {
         let serialized = serde_json::to_vec(&payload).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(&serialized);
@@ -284,7 +301,8 @@ impl<T: Serialize> PipelineRecord<T> {
     pub fn promote_to_gold(mut self) -> Result<Self, DomainError> {
         if self.stage != PipelineStage::Silver || !self.is_verified {
             return Err(DomainError::Validation(
-                "Record must pass Silver stage invariant verification before promotion to Gold".to_string(),
+                "Record must pass Silver stage invariant verification before promotion to Gold"
+                    .to_string(),
             ));
         }
         self.stage = PipelineStage::Gold;
@@ -330,7 +348,8 @@ mod tests {
         );
         assert!(invalid_offsets.verify().is_err());
 
-        let empty_quote = EvidenceGroundingInvariant::new("paper_42", "sha256_abcd1234", "   ", 10, 20);
+        let empty_quote =
+            EvidenceGroundingInvariant::new("paper_42", "sha256_abcd1234", "   ", 10, 20);
         assert!(empty_quote.verify().is_err());
     }
 
@@ -341,17 +360,20 @@ mod tests {
         assert!(read_action.verify().is_ok());
 
         // Effectful action with permit is allowed
-        let effect_with_permit = GovernedOutboxInvariant::new("act_2", "fs.write", Some("permit_99"), false);
+        let effect_with_permit =
+            GovernedOutboxInvariant::new("act_2", "fs.write", Some("permit_99"), false);
         assert!(effect_with_permit.verify().is_ok());
 
         // Effectful action WITHOUT permit is strictly rejected!
-        let effect_no_permit = GovernedOutboxInvariant::new("act_3", "shell.exec", None::<String>, false);
+        let effect_no_permit =
+            GovernedOutboxInvariant::new("act_3", "shell.exec", None::<String>, false);
         assert!(effect_no_permit.verify().is_err());
     }
 
     #[test]
     fn test_ast_syntax_invariant_validation() {
-        let valid_code = AstSyntaxInvariant::new("src/main.rs", "fn main() { println!(\"Hello\"); }");
+        let valid_code =
+            AstSyntaxInvariant::new("src/main.rs", "fn main() { println!(\"Hello\"); }");
         assert!(valid_code.verify().is_ok());
 
         let unbalanced_code = AstSyntaxInvariant::new("src/lib.rs", "fn test() { let x = [1, 2; }");
@@ -366,7 +388,9 @@ mod tests {
         assert!(!record.is_verified);
 
         let inv = ClosedBarInvariant::new(1000, 60, 1060);
-        let silver = record.promote_to_silver(&inv).expect("silver promotion succeeds");
+        let silver = record
+            .promote_to_silver(&inv)
+            .expect("silver promotion succeeds");
         assert_eq!(silver.stage, PipelineStage::Silver);
         assert!(silver.is_verified);
 

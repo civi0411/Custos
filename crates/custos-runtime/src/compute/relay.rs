@@ -53,13 +53,12 @@ impl CheckpointRelayCoordinator {
                     reasons.join("; ")
                 )));
             }
-            CompatibilityVerdict::RequiresAdaptation { warnings: _ } | CompatibilityVerdict::Compatible => {
-                gate_eval.plan.ok_or_else(|| {
-                    DomainError::Validation(
-                        "No adaptation plan generated for compatible hardware target".into(),
-                    )
-                })?
-            }
+            CompatibilityVerdict::RequiresAdaptation { warnings: _ }
+            | CompatibilityVerdict::Compatible => gate_eval.plan.ok_or_else(|| {
+                DomainError::Validation(
+                    "No adaptation plan generated for compatible hardware target".into(),
+                )
+            })?,
         };
 
         // 3. Child attempt creation with incremented generation (anti-split-brain fencing)
@@ -91,7 +90,9 @@ impl CheckpointRelayCoordinator {
         checkpoint_id: &str,
         generation: u64,
     ) -> Result<PromotionOutcome, DomainError> {
-        store.promote(experiment_id, checkpoint_id, generation).await
+        store
+            .promote(experiment_id, checkpoint_id, generation)
+            .await
     }
 
     /// Hands off a failed/crashed attempt to a fallback compute target using the last protected checkpoint
@@ -109,7 +110,10 @@ impl CheckpointRelayCoordinator {
         // 1. Mark crashed attempt as failed if not already terminal
         if matches!(
             crashed_attempt.exec_state,
-            ExecState::Submitting | ExecState::Submitted | ExecState::Running | ExecState::Uncertain
+            ExecState::Submitting
+                | ExecState::Submitted
+                | ExecState::Running
+                | ExecState::Uncertain
         ) {
             let _ = crashed_attempt.apply(ExecEvent::RemoteFailed);
         }

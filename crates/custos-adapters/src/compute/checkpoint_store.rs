@@ -3,11 +3,11 @@
 //! Provides durable content-addressed storage for checkpoint blobs, manifest publishing,
 //! generation-CAS promotion fencing (stopping zombie writers), and corrupt checkpoint quarantining.
 
+use async_trait::async_trait;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use async_trait::async_trait;
-use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use custos_core::contracts::checkpoint_store::{
@@ -39,7 +39,11 @@ impl CasCheckpointStoreAdapter {
     }
 
     fn blob_key(prefix: &str, name: &str) -> String {
-        format!("{}/{}", prefix.trim_end_matches('/'), name.trim_start_matches('/'))
+        format!(
+            "{}/{}",
+            prefix.trim_end_matches('/'),
+            name.trim_start_matches('/')
+        )
     }
 }
 
@@ -109,7 +113,11 @@ impl CheckpointStorePort for CasCheckpointStoreAdapter {
         Ok(None)
     }
 
-    async fn head_blob(&self, prefix: &str, name: &str) -> Result<Option<BlobMetadata>, DomainError> {
+    async fn head_blob(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Result<Option<BlobMetadata>, DomainError> {
         let key = Self::blob_key(prefix, name);
         let blobs = self.blobs.lock().await;
         if let Some((_, meta)) = blobs.get(&key) {
@@ -142,7 +150,9 @@ impl CheckpointStorePort for CasCheckpointStoreAdapter {
         for file in &manifest.files {
             let key = Self::blob_key(prefix, &file.path);
             if let Some((data, meta)) = blobs.get(&key) {
-                if data.len() as u64 != file.size_bytes || meta.digest != file.digest.to_ascii_lowercase() {
+                if data.len() as u64 != file.size_bytes
+                    || meta.digest != file.digest.to_ascii_lowercase()
+                {
                     return Err(DomainError::Validation(format!(
                         "Inventoried file '{}' digest/size mismatch in store",
                         file.path

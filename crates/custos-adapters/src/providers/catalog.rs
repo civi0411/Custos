@@ -545,57 +545,169 @@ pub struct ModelAvailability {
 }
 
 impl ModelAvailability {
-    pub fn snapshot(&self, scope: &str) -> Result<HashMap<String, ModelUnavailable>, custos_domain::DomainError> {
+    pub fn snapshot(
+        &self,
+        scope: &str,
+    ) -> Result<HashMap<String, ModelUnavailable>, custos_domain::DomainError> {
         let now = chrono::Utc::now().timestamp_millis();
-        let entries = self.entries.read().map_err(|_| custos_domain::DomainError::Validation("Model availability lock unavailable".into()))?;
-        Ok(entries.iter().filter(|((key, _), value)| key == scope && value.retry_at.is_none_or(|time| time > now))
-            .map(|((_, model), value)| (model.clone(), value.clone())).collect())
+        let entries = self.entries.read().map_err(|_| {
+            custos_domain::DomainError::Validation("Model availability lock unavailable".into())
+        })?;
+        Ok(entries
+            .iter()
+            .filter(|((key, _), value)| {
+                key == scope && value.retry_at.is_none_or(|time| time > now)
+            })
+            .map(|((_, model), value)| (model.clone(), value.clone()))
+            .collect())
     }
 
     pub fn check(&self, scope: &str, model: &str) -> Result<(), custos_domain::DomainError> {
         let blocked = self.snapshot(scope)?;
         if let Some(reason) = blocked.get("*").or_else(|| blocked.get(model)) {
-            return Err(custos_domain::DomainError::Validation(format!("Model unavailable: {}", reason.reason)));
+            return Err(custos_domain::DomainError::Validation(format!(
+                "Model unavailable: {}",
+                reason.reason
+            )));
         }
         Ok(())
     }
 
     pub fn refresh(&self, scope: &str) -> Result<(), custos_domain::DomainError> {
-        let mut entries = self.entries.write().map_err(|_| custos_domain::DomainError::Validation("Model availability lock unavailable".into()))?;
-        entries.retain(|(key, _), value| key != scope || matches!(value.kind.as_str(), "quota" | "rate"));
+        let mut entries = self.entries.write().map_err(|_| {
+            custos_domain::DomainError::Validation("Model availability lock unavailable".into())
+        })?;
+        entries.retain(|(key, _), value| {
+            key != scope || matches!(value.kind.as_str(), "quota" | "rate")
+        });
         Ok(())
     }
 
     pub fn quota_recovered(&self, scope: &str) -> Result<(), custos_domain::DomainError> {
-        self.entries.write().map_err(|_| custos_domain::DomainError::Validation("Model availability lock unavailable".into()))?
+        self.entries
+            .write()
+            .map_err(|_| {
+                custos_domain::DomainError::Validation("Model availability lock unavailable".into())
+            })?
             .retain(|(key, _), value| key != scope || value.kind != "quota");
         Ok(())
     }
 
-    pub fn observe(&self, scope: &str, model: &str, status: u16, body: &str, retry_at: Option<i64>) -> Result<(), custos_domain::DomainError> {
+    pub fn observe(
+        &self,
+        scope: &str,
+        model: &str,
+        status: u16,
+        body: &str,
+        retry_at: Option<i64>,
+    ) -> Result<(), custos_domain::DomainError> {
         let lower = body.to_ascii_lowercase();
         let value = serde_json::from_str::<serde_json::Value>(body).ok();
-        let retry_at = value.as_ref().and_then(|value| value.pointer("/error/resets_at").or_else(|| value.pointer("/error/reset_at"))).and_then(|reset| {
-            reset.as_i64().map(|timestamp| if timestamp < 10_000_000_000 { timestamp.saturating_mul(1000) } else { timestamp })
-                .or_else(|| reset.as_str().and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok()).map(|time| time.timestamp_millis()))
-        }).or(retry_at);
-        let code = value.as_ref().and_then(|v| v.pointer("/error/code").filter(|value| value.is_string()).or_else(|| v.pointer("/error/type")).or_else(|| v.get("code"))).and_then(|v| v.as_str()).unwrap_or("");
+        let retry_at = value
+            .as_ref()
+            .and_then(|value| {
+                value
+                    .pointer("/error/resets_at")
+                    .or_else(|| value.pointer("/error/reset_at"))
+            })
+            .and_then(|reset| {
+                reset
+                    .as_i64()
+                    .map(|timestamp| {
+                        if timestamp < 10_000_000_000 {
+                            timestamp.saturating_mul(1000)
+                        } else {
+                            timestamp
+                        }
+                    })
+                    .or_else(|| {
+                        reset
+                            .as_str()
+                            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+                            .map(|time| time.timestamp_millis())
+                    })
+            })
+            .or(retry_at);
+        let code = value
+            .as_ref()
+            .and_then(|v| {
+                v.pointer("/error/code")
+                    .filter(|value| value.is_string())
+                    .or_else(|| v.pointer("/error/type"))
+                    .or_else(|| v.get("code"))
+            })
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let (target, kind, reason) = if status == 0 {
-            ("*", "offline", "Provider connection unavailable; refresh models to reconnect")
+            (
+                "*",
+                "offline",
+                "Provider connection unavailable; refresh models to reconnect",
+            )
         } else if status == 401 {
-            ("*", "credentials", "Provider authentication failed; reconnect this account")
-        } else if status == 429 && (matches!(code, "insufficient_quota" | "credit_balance_exhausted" | "quota_exhausted" | "usage_limit_reached") || lower.contains("quota exhausted") || lower.contains("usage limit") || lower.contains("insufficient_quota")) {
-            ("*", "quota", "Provider quota exhausted; refresh quota or wait for reset")
+            (
+                "*",
+                "credentials",
+                "Provider authentication failed; reconnect this account",
+            )
+        } else if status == 429
+            && (matches!(
+                code,
+                "insufficient_quota"
+                    | "credit_balance_exhausted"
+                    | "quota_exhausted"
+                    | "usage_limit_reached"
+            ) || lower.contains("quota exhausted")
+                || lower.contains("usage limit")
+                || lower.contains("insufficient_quota"))
+        {
+            (
+                "*",
+                "quota",
+                "Provider quota exhausted; refresh quota or wait for reset",
+            )
         } else if status == 429 {
             (model, "rate", "Model temporarily rate limited")
-        } else if matches!(status, 403 | 404) && (matches!(code, "model_not_found" | "model_not_supported" | "model_access_denied") || lower.contains("model not found") || lower.contains("model is not supported") || lower.contains("do not have access to model")) {
-            (model, "access", "This account cannot access the model; refresh models")
+        } else if matches!(status, 403 | 404)
+            && (matches!(
+                code,
+                "model_not_found" | "model_not_supported" | "model_access_denied"
+            ) || lower.contains("model not found")
+                || lower.contains("model is not supported")
+                || lower.contains("do not have access to model"))
+        {
+            (
+                model,
+                "access",
+                "This account cannot access the model; refresh models",
+            )
         } else if status == 403 {
-            ("*", "access", "Provider denied access; refresh models or reconnect")
-        } else { return Ok(()); };
-        let retry_at = if kind == "rate" { Some(retry_at.unwrap_or_else(|| chrono::Utc::now().timestamp_millis() + 30_000)) } else { retry_at };
-        self.entries.write().map_err(|_| custos_domain::DomainError::Validation("Model availability lock unavailable".into()))?
-            .insert((scope.to_string(), target.to_string()), ModelUnavailable { reason: reason.into(), kind: kind.into(), retry_at });
+            (
+                "*",
+                "access",
+                "Provider denied access; refresh models or reconnect",
+            )
+        } else {
+            return Ok(());
+        };
+        let retry_at = if kind == "rate" {
+            Some(retry_at.unwrap_or_else(|| chrono::Utc::now().timestamp_millis() + 30_000))
+        } else {
+            retry_at
+        };
+        self.entries
+            .write()
+            .map_err(|_| {
+                custos_domain::DomainError::Validation("Model availability lock unavailable".into())
+            })?
+            .insert(
+                (scope.to_string(), target.to_string()),
+                ModelUnavailable {
+                    reason: reason.into(),
+                    kind: kind.into(),
+                    retry_at,
+                },
+            );
         Ok(())
     }
 }
@@ -606,9 +718,25 @@ mod availability_tests {
     #[test]
     fn transient_blocks_are_scoped_and_prompt_errors_do_not_hide_models() {
         let state = ModelAvailability::default();
-        state.observe("A", "gpt", 400, r#"{"error":{"code":"invalid_reasoning_effort"}}"#, None).unwrap();
+        state
+            .observe(
+                "A",
+                "gpt",
+                400,
+                r#"{"error":{"code":"invalid_reasoning_effort"}}"#,
+                None,
+            )
+            .unwrap();
         assert!(state.check("A", "gpt").is_ok());
-        state.observe("A", "gpt", 404, r#"{"error":{"code":"model_not_found"}}"#, None).unwrap();
+        state
+            .observe(
+                "A",
+                "gpt",
+                404,
+                r#"{"error":{"code":"model_not_found"}}"#,
+                None,
+            )
+            .unwrap();
         assert!(state.check("A", "gpt").is_err());
         assert!(state.check("B", "gpt").is_ok());
         assert!(state.check("A", "another").is_ok());
@@ -625,28 +753,67 @@ mod availability_tests {
     #[test]
     fn catalog_refresh_does_not_reset_quota_or_retry_window() {
         let state = ModelAvailability::default();
-        state.observe("A", "gpt", 429, r#"{"error":{"code":"insufficient_quota"}}"#, None).unwrap();
+        state
+            .observe(
+                "A",
+                "gpt",
+                429,
+                r#"{"error":{"code":"insufficient_quota"}}"#,
+                None,
+            )
+            .unwrap();
         state.refresh("A").unwrap();
         assert!(state.check("A", "gpt").is_err());
         state.quota_recovered("A").unwrap();
         assert!(state.check("A", "gpt").is_ok());
-        state.observe("A", "gpt", 429, r#"{"error":{"code":"rate_limit_exceeded"}}"#, None).unwrap();
+        state
+            .observe(
+                "A",
+                "gpt",
+                429,
+                r#"{"error":{"code":"rate_limit_exceeded"}}"#,
+                None,
+            )
+            .unwrap();
         state.refresh("A").unwrap();
         assert_eq!(state.snapshot("A").unwrap()["gpt"].kind, "rate");
         assert!(state.check("A", "another").is_ok());
-        state.observe("A", "gpt", 429, "rate", Some(chrono::Utc::now().timestamp_millis()-1)).unwrap();
+        state
+            .observe(
+                "A",
+                "gpt",
+                429,
+                "rate",
+                Some(chrono::Utc::now().timestamp_millis() - 1),
+            )
+            .unwrap();
         assert!(state.check("A", "gpt").is_ok());
     }
     #[test]
     fn merge_preserves_exact_advertised_efforts_without_name_heuristics() {
         let service = ModelCatalogService::new();
-        let result = service.merge_probed_models("openai", vec![
-            ProbedModel { id:"gpt-6-sol".into(), efforts:vec!["xhigh".into(),"max".into(),"ultra".into()], default_effort:Some("max".into()), ..Default::default() },
-            ProbedModel { id:"sonnet-pro-thinking".into(), ..Default::default() },
-        ]);
-        assert_eq!(result.models[0].efforts, vec!["xhigh","max","ultra"]);
+        let result = service.merge_probed_models(
+            "openai",
+            vec![
+                ProbedModel {
+                    id: "gpt-6-sol".into(),
+                    efforts: vec!["xhigh".into(), "max".into(), "ultra".into()],
+                    default_effort: Some("max".into()),
+                    ..Default::default()
+                },
+                ProbedModel {
+                    id: "sonnet-pro-thinking".into(),
+                    ..Default::default()
+                },
+            ],
+        );
+        assert_eq!(result.models[0].efforts, vec!["xhigh", "max", "ultra"]);
         assert_eq!(result.models[0].default_effort.as_deref(), Some("max"));
         assert!(result.models[1].efforts.is_empty());
-        assert!(!service.get_catalog(Some("openai")).models.iter().any(|model| model.id == "sonnet-pro-thinking"));
+        assert!(!service
+            .get_catalog(Some("openai"))
+            .models
+            .iter()
+            .any(|model| model.id == "sonnet-pro-thinking"));
     }
 }

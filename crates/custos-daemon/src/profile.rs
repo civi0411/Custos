@@ -28,7 +28,6 @@ pub use custos_sdk::profile::{
     ProfileResolver,
 };
 
-
 /// Exclusive process-level lock held by the running daemon.
 ///
 /// Uses OS kernel advisory locking (`flock`/`LockFileEx` via `fs2`).

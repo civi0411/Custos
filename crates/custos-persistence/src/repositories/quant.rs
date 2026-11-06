@@ -1,7 +1,9 @@
 use crate::connection::DbConnection;
 use async_trait::async_trait;
 use custos_core::contracts::storage::QuantPort;
-use custos_domain::quant::{BacktestTearsheet, OhlcvBar, OrderDirection, OrderTicket, OrderTicketStatus, OrderType};
+use custos_domain::quant::{
+    BacktestTearsheet, OhlcvBar, OrderDirection, OrderTicket, OrderTicketStatus, OrderType,
+};
 use custos_domain::DomainError;
 use rusqlite::{params, OptionalExtension};
 
@@ -18,9 +20,14 @@ impl QuantRepository {
 
 #[async_trait]
 impl QuantPort for QuantRepository {
-    async fn save_tearsheet(&self, tearsheet: &BacktestTearsheet, task_id: &str) -> Result<(), DomainError> {
+    async fn save_tearsheet(
+        &self,
+        tearsheet: &BacktestTearsheet,
+        task_id: &str,
+    ) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let payload = serde_json::to_string(tearsheet).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let payload =
+            serde_json::to_string(tearsheet).map_err(|e| DomainError::Validation(e.to_string()))?;
         conn.execute(
             "INSERT INTO quant_backtest_tearsheets (id, strategy_id, task_id, annualized_sharpe, deflated_sharpe_ratio, max_drawdown, calmar_ratio, sortino_ratio, var_95, lookahead_clean, tearsheet_payload, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -42,7 +49,10 @@ impl QuantPort for QuantRepository {
         Ok(())
     }
 
-    async fn get_latest_tearsheet(&self, strategy_id: &str) -> Result<Option<BacktestTearsheet>, DomainError> {
+    async fn get_latest_tearsheet(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<BacktestTearsheet>, DomainError> {
         let conn = self.db.lock()?;
         let payload: Option<String> = conn.query_row(
             "SELECT tearsheet_payload FROM quant_backtest_tearsheets WHERE strategy_id = ?1 ORDER BY created_at DESC LIMIT 1",
@@ -52,19 +62,28 @@ impl QuantPort for QuantRepository {
 
         match payload {
             Some(json) => {
-                let sheet: BacktestTearsheet = serde_json::from_str(&json)
-                    .map_err(|e| DomainError::Validation(format!("Corrupt tearsheet payload: {e}")))?;
+                let sheet: BacktestTearsheet = serde_json::from_str(&json).map_err(|e| {
+                    DomainError::Validation(format!("Corrupt tearsheet payload: {e}"))
+                })?;
                 Ok(Some(sheet))
             }
             None => Ok(None),
         }
     }
 
-    async fn save_order_ticket(&self, ticket: &OrderTicket, task_id: &str) -> Result<(), DomainError> {
+    async fn save_order_ticket(
+        &self,
+        ticket: &OrderTicket,
+        task_id: &str,
+    ) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         let now = chrono::Utc::now().timestamp();
         let payload_digest = custos_domain::digest(
-            format!("{}:{}:{}:{}:{}", ticket.id, ticket.strategy_id, ticket.symbol, ticket.direction, ticket.quantity).as_bytes()
+            format!(
+                "{}:{}:{}:{}:{}",
+                ticket.id, ticket.strategy_id, ticket.symbol, ticket.direction, ticket.quantity
+            )
+            .as_bytes(),
         );
         let status_str = match ticket.status {
             OrderTicketStatus::Draft => "draft",
@@ -117,7 +136,11 @@ impl QuantPort for QuantRepository {
         Ok(())
     }
 
-    async fn list_order_tickets(&self, strategy_id: Option<&str>, task_id: Option<&str>) -> Result<Vec<OrderTicket>, DomainError> {
+    async fn list_order_tickets(
+        &self,
+        strategy_id: Option<&str>,
+        task_id: Option<&str>,
+    ) -> Result<Vec<OrderTicket>, DomainError> {
         let conn = self.db.lock()?;
         let mut sql = "SELECT id, strategy_id, symbol, direction, order_type, quantity, limit_price, target_weight, estimated_slippage_bps, status, permit_id, created_at FROM quant_order_tickets WHERE 1=1".to_string();
         let mut params_vec: Vec<rusqlite::types::Value> = Vec::new();
@@ -132,60 +155,64 @@ impl QuantPort for QuantRepository {
         }
         sql.push_str(" ORDER BY created_at DESC");
 
-        let mut stmt = conn.prepare(&sql).map_err(|e| DomainError::Validation(e.to_string()))?;
-        let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
-            let id: String = row.get(0)?;
-            let strategy_id: String = row.get(1)?;
-            let symbol: String = row.get(2)?;
-            let direction_str: String = row.get(3)?;
-            let type_str: String = row.get(4)?;
-            let quantity: f64 = row.get(5)?;
-            let limit_price: Option<f64> = row.get(6)?;
-            let target_weight: f64 = row.get(7)?;
-            let estimated_slippage_bps: f64 = row.get(8)?;
-            let status_str: String = row.get(9)?;
-            let permit_id: Option<String> = row.get(10)?;
-            let created_at: i64 = row.get(11)?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+                let id: String = row.get(0)?;
+                let strategy_id: String = row.get(1)?;
+                let symbol: String = row.get(2)?;
+                let direction_str: String = row.get(3)?;
+                let type_str: String = row.get(4)?;
+                let quantity: f64 = row.get(5)?;
+                let limit_price: Option<f64> = row.get(6)?;
+                let target_weight: f64 = row.get(7)?;
+                let estimated_slippage_bps: f64 = row.get(8)?;
+                let status_str: String = row.get(9)?;
+                let permit_id: Option<String> = row.get(10)?;
+                let created_at: i64 = row.get(11)?;
 
-            let direction = match direction_str.as_str() {
-                "sell" => OrderDirection::Sell,
-                "sell_short" => OrderDirection::SellShort,
-                "buy_to_cover" => OrderDirection::BuyToCover,
-                _ => OrderDirection::Buy,
-            };
-            let order_type = match type_str.as_str() {
-                "limit" => OrderType::Limit,
-                "stop" => OrderType::Stop,
-                "twap" => OrderType::Twap,
-                "vwap" => OrderType::Vwap,
-                _ => OrderType::Market,
-            };
-            let status = match status_str.as_str() {
-                "awaiting_permit" => OrderTicketStatus::AwaitingPermit,
-                "approved" => OrderTicketStatus::Approved,
-                "rejected" => OrderTicketStatus::Rejected,
-                "routed" => OrderTicketStatus::Routed,
-                "filled" => OrderTicketStatus::Filled,
-                "cancelled" => OrderTicketStatus::Cancelled,
-                _ => OrderTicketStatus::Draft,
-            };
+                let direction = match direction_str.as_str() {
+                    "sell" => OrderDirection::Sell,
+                    "sell_short" => OrderDirection::SellShort,
+                    "buy_to_cover" => OrderDirection::BuyToCover,
+                    _ => OrderDirection::Buy,
+                };
+                let order_type = match type_str.as_str() {
+                    "limit" => OrderType::Limit,
+                    "stop" => OrderType::Stop,
+                    "twap" => OrderType::Twap,
+                    "vwap" => OrderType::Vwap,
+                    _ => OrderType::Market,
+                };
+                let status = match status_str.as_str() {
+                    "awaiting_permit" => OrderTicketStatus::AwaitingPermit,
+                    "approved" => OrderTicketStatus::Approved,
+                    "rejected" => OrderTicketStatus::Rejected,
+                    "routed" => OrderTicketStatus::Routed,
+                    "filled" => OrderTicketStatus::Filled,
+                    "cancelled" => OrderTicketStatus::Cancelled,
+                    _ => OrderTicketStatus::Draft,
+                };
 
-            Ok(OrderTicket {
-                id,
-                strategy_id,
-                symbol,
-                direction,
-                order_type,
-                quantity,
-                limit_price,
-                target_weight,
-                estimated_slippage_bps,
-                approved_by_human: status == OrderTicketStatus::Approved,
-                status,
-                permit_id,
-                created_at,
+                Ok(OrderTicket {
+                    id,
+                    strategy_id,
+                    symbol,
+                    direction,
+                    order_type,
+                    quantity,
+                    limit_price,
+                    target_weight,
+                    estimated_slippage_bps,
+                    approved_by_human: status == OrderTicketStatus::Approved,
+                    status,
+                    permit_id,
+                    created_at,
+                })
             })
-        }).map_err(|e| DomainError::Validation(e.to_string()))?;
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut tickets = Vec::new();
         for r in rows {
@@ -277,9 +304,16 @@ impl QuantPort for QuantRepository {
         Ok(())
     }
 
-    async fn save_market_bars(&self, symbol: &str, timeframe: &str, bars: &[OhlcvBar]) -> Result<(), DomainError> {
+    async fn save_market_bars(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        bars: &[OhlcvBar],
+    ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         {
             let mut stmt = tx.prepare(
                 "INSERT OR REPLACE INTO quant_market_bars (symbol, timeframe, timestamp, open, high, low, close, volume)
@@ -296,31 +330,42 @@ impl QuantPort for QuantRepository {
                     bar.low,
                     bar.close,
                     bar.volume,
-                ]).map_err(|e| DomainError::Validation(e.to_string()))?;
+                ])
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
             }
         }
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
-    async fn get_market_bars(&self, symbol: &str, timeframe: &str, limit: usize) -> Result<Vec<OhlcvBar>, DomainError> {
+    async fn get_market_bars(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+    ) -> Result<Vec<OhlcvBar>, DomainError> {
         let conn = self.db.lock()?;
-        let mut stmt = conn.prepare(
-            "SELECT timestamp, open, high, low, close, volume FROM quant_market_bars
+        let mut stmt = conn
+            .prepare(
+                "SELECT timestamp, open, high, low, close, volume FROM quant_market_bars
              WHERE symbol = ?1 AND timeframe = ?2
-             ORDER BY timestamp ASC LIMIT ?3"
-        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+             ORDER BY timestamp ASC LIMIT ?3",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let rows = stmt.query_map(params![symbol, timeframe, limit as i64], |row| {
-            Ok(OhlcvBar {
-                timestamp: row.get(0)?,
-                open: row.get(1)?,
-                high: row.get(2)?,
-                low: row.get(3)?,
-                close: row.get(4)?,
-                volume: row.get(5)?,
+        let rows = stmt
+            .query_map(params![symbol, timeframe, limit as i64], |row| {
+                Ok(OhlcvBar {
+                    timestamp: row.get(0)?,
+                    open: row.get(1)?,
+                    high: row.get(2)?,
+                    low: row.get(3)?,
+                    close: row.get(4)?,
+                    volume: row.get(5)?,
+                })
             })
-        }).map_err(|e| DomainError::Validation(e.to_string()))?;
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut bars = Vec::new();
         for r in rows {
@@ -329,4 +374,3 @@ impl QuantPort for QuantRepository {
         Ok(bars)
     }
 }
-

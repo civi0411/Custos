@@ -314,7 +314,13 @@ impl ProviderRepository {
             [],
         )
         .map_err(error)?;
-        Self::record_provider_event(&tx,"provider.credentials.wal.cleaned","database","metadata",0)?;
+        Self::record_provider_event(
+            &tx,
+            "provider.credentials.wal.cleaned",
+            "database",
+            "metadata",
+            0,
+        )?;
         tx.commit().map_err(error)?;
         Ok(())
     }

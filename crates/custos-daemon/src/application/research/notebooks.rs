@@ -1,15 +1,10 @@
 //! Research notebook cells and experiment runs use cases.
 
 use crate::api::*;
-use custos_domain::{
-    CellExecutionStatus, NotebookCell, ResearchExperimentRun,
-};
+use custos_domain::{CellExecutionStatus, NotebookCell, ResearchExperimentRun};
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_research_notebooks(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_research_notebooks(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_RESEARCH_RUNS_LIST => {
                 let research = match self.research.as_ref() {
@@ -235,10 +230,9 @@ impl LocalApiDispatcher {
                     Some(repository) => repository,
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
                 };
-                let saved = match research.list_notebook_cells_scoped(
-                    &params.session_id,
-                    params.notebook_id.as_deref(),
-                ) {
+                let saved = match research
+                    .list_notebook_cells_scoped(&params.session_id, params.notebook_id.as_deref())
+                {
                     Ok(cells) => cells,
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 };
@@ -431,7 +425,10 @@ impl LocalApiDispatcher {
                     Err(error) => ApiResponse::error(req.id, error.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown research notebook method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown research notebook method: {unknown}"),
+            ),
         }
     }
 }

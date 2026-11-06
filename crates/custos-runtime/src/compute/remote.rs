@@ -201,10 +201,7 @@ impl RemoteExecutionCoordinator {
     }
 
     /// Decoupled Release: Destroys remote cloud pod or deallocates compute lease
-    pub async fn release_compute(
-        &self,
-        attempt: &mut ExecutionAttempt,
-    ) -> Result<(), DomainError> {
+    pub async fn release_compute(&self, attempt: &mut ExecutionAttempt) -> Result<(), DomainError> {
         let ext_ref = match attempt.external_ref.as_ref() {
             Some(r) => r.clone(),
             None => {

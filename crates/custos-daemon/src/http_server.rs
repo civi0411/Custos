@@ -89,7 +89,10 @@ fn is_authorized_ipc_client(
         let expected = expected_token.trim();
         if !expected.is_empty() {
             let provided = auth_header
-                .and_then(|h| h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")))
+                .and_then(|h| {
+                    h.strip_prefix("Bearer ")
+                        .or_else(|| h.strip_prefix("bearer "))
+                })
                 .map(|s| s.trim())
                 .or_else(|| custom_token_header.map(|s| s.trim()))
                 .or_else(|| query_token.map(|s| s.trim()));
@@ -206,16 +209,20 @@ Connection: close\r\n\r\n",
         return Ok(());
     }
 
-    let query_token = path.split_once('?')
-        .and_then(|(_, q)| {
-            q.split('&')
-                .filter_map(|p| p.split_once('='))
-                .find(|(k, _)| *k == "token")
-                .map(|(_, v)| v)
-        });
+    let query_token = path.split_once('?').and_then(|(_, q)| {
+        q.split('&')
+            .filter_map(|p| p.split_once('='))
+            .find(|(k, _)| *k == "token")
+            .map(|(_, v)| v)
+    });
 
     // IPC Token gate: verify token if mandated by CUSTOS_IPC_TOKEN
-    if !is_authorized_ipc_client(req_origin.as_deref(), auth_header.as_deref(), token_header.as_deref(), query_token) {
+    if !is_authorized_ipc_client(
+        req_origin.as_deref(),
+        auth_header.as_deref(),
+        token_header.as_deref(),
+        query_token,
+    ) {
         let unauth = r#"{"error":"Unauthorized: valid IPC token required"}"#;
         let resp = format!(
             "HTTP/1.1 401 Unauthorized\r\n\
@@ -232,37 +239,89 @@ Content-Length: {}\r\n\
     }
 
     if method == "GET" && path.starts_with("/api/events?") {
-        let query = path.split_once('?').map(|(_,q)|q).unwrap_or("");
-        let param = |key: &str| query.split('&').filter_map(|p|p.split_once('=')).find(|(k,_)|*k==key).map(|(_,v)|v.to_string()).unwrap_or_default();
-        let session = param("session_id"); let run = param("run_id");
-        let valid = |id: &str| !id.is_empty() && id.len() <= 256 && id.bytes().all(|b|b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-        let mut cursor = last_event_id.or_else(||param("cursor").parse().ok()).unwrap_or(0);
-        let initial = if valid(&session) && valid(&run) { api.live_run(&session,&run,cursor).await } else { Err(custos_domain::DomainError::Validation("Invalid event scope".into())) };
+        let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
+        let param = |key: &str| {
+            query
+                .split('&')
+                .filter_map(|p| p.split_once('='))
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| v.to_string())
+                .unwrap_or_default()
+        };
+        let session = param("session_id");
+        let run = param("run_id");
+        let valid = |id: &str| {
+            !id.is_empty()
+                && id.len() <= 256
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        };
+        let mut cursor = last_event_id
+            .or_else(|| param("cursor").parse().ok())
+            .unwrap_or(0);
+        let initial = if valid(&session) && valid(&run) {
+            api.live_run(&session, &run, cursor).await
+        } else {
+            Err(custos_domain::DomainError::Validation(
+                "Invalid event scope".into(),
+            ))
+        };
         if initial.is_err() {
             let body = "{\"error\":\"Invalid or inaccessible run/session\"}";
             let response = format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",body.len(),cors_origin_header,body);
-            write_live(&mut stream,response.as_bytes()).await?; return Ok(());
+            write_live(&mut stream, response.as_bytes()).await?;
+            return Ok(());
         }
         let headers = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\n{}Connection: close\r\n\r\nretry: 1000\n\n",cors_origin_header);
-        write_live(&mut stream,headers.as_bytes()).await?;
+        write_live(&mut stream, headers.as_bytes()).await?;
         tracing::debug!(run_id = %run, session_id = %session, "SSE subscriber connected");
         let mut initial = initial.ok();
         let mut heartbeat = tokio::time::Instant::now();
         loop {
-            let replay = match initial.take() { Some(replay) => replay, None => match api.live_run(&session,&run,cursor).await { Ok(replay)=>replay, Err(_)=>break } };
-            if replay.gap || (replay.events.is_empty() && matches!(replay.snapshot.status.as_str(),"completed"|"failed"|"cancelled"|"interrupted")) {
+            let replay = match initial.take() {
+                Some(replay) => replay,
+                None => match api.live_run(&session, &run, cursor).await {
+                    Ok(replay) => replay,
+                    Err(_) => break,
+                },
+            };
+            if replay.gap
+                || (replay.events.is_empty()
+                    && matches!(
+                        replay.snapshot.status.as_str(),
+                        "completed" | "failed" | "cancelled" | "interrupted"
+                    ))
+            {
                 cursor = replay.snapshot.cursor;
-                let data = serde_json::to_string(&replay.snapshot).map_err(std::io::Error::other)?;
-                write_live(&mut stream,format!("id: {cursor}\nevent: snapshot\ndata: {data}\n\n").as_bytes()).await?;
+                let data =
+                    serde_json::to_string(&replay.snapshot).map_err(std::io::Error::other)?;
+                write_live(
+                    &mut stream,
+                    format!("id: {cursor}\nevent: snapshot\ndata: {data}\n\n").as_bytes(),
+                )
+                .await?;
             } else {
                 for event in replay.events {
                     cursor = event.id;
-                    let data=serde_json::to_string(&event).map_err(std::io::Error::other)?;
-                    write_live(&mut stream,format!("id: {cursor}\nevent: run\ndata: {data}\n\n").as_bytes()).await?;
+                    let data = serde_json::to_string(&event).map_err(std::io::Error::other)?;
+                    write_live(
+                        &mut stream,
+                        format!("id: {cursor}\nevent: run\ndata: {data}\n\n").as_bytes(),
+                    )
+                    .await?;
                 }
             }
-            if matches!(replay.snapshot.status.as_str(),"completed"|"failed"|"cancelled"|"interrupted") { break; }
-            if heartbeat.elapsed() >= Duration::from_secs(15) { write_live(&mut stream,b": heartbeat\n\n").await?; heartbeat=tokio::time::Instant::now(); }
+            if matches!(
+                replay.snapshot.status.as_str(),
+                "completed" | "failed" | "cancelled" | "interrupted"
+            ) {
+                break;
+            }
+            if heartbeat.elapsed() >= Duration::from_secs(15) {
+                write_live(&mut stream, b": heartbeat\n\n").await?;
+                heartbeat = tokio::time::Instant::now();
+            }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         return Ok(());
@@ -393,8 +452,16 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     None
 }
 
-async fn write_live<W: tokio::io::AsyncWrite + Unpin>(stream: &mut W, bytes: &[u8]) -> std::io::Result<()> {
-    tokio::time::timeout(Duration::from_secs(5), async { stream.write_all(bytes).await?; stream.flush().await }).await.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut,"Slow SSE subscriber"))?
+async fn write_live<W: tokio::io::AsyncWrite + Unpin>(
+    stream: &mut W,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        stream.write_all(bytes).await?;
+        stream.flush().await
+    })
+    .await
+    .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "Slow SSE subscriber"))?
 }
 
 #[cfg(test)]
@@ -404,35 +471,83 @@ mod tests {
     #[tokio::test]
     async fn slow_subscriber_writer_times_out() {
         use super::*;
-        let (mut server,client)=tokio::io::duplex(64);
-        let data=vec![b'x';1024];
-        let error=tokio::time::timeout(Duration::from_secs(7),write_live(&mut server,&data)).await.unwrap().unwrap_err();
-        assert_eq!(error.kind(),std::io::ErrorKind::TimedOut);drop(client);
+        let (mut server, client) = tokio::io::duplex(64);
+        let data = vec![b'x'; 1024];
+        let error = tokio::time::timeout(Duration::from_secs(7), write_live(&mut server, &data))
+            .await
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        drop(client);
     }
 
     #[tokio::test]
     async fn sse_replays_after_start_and_checks_session_scope() {
-        use std::sync::Arc;
-        use custos_core::{contracts::workflow::WorkflowPort,TaskService};
-        use custos_runtime::{SessionManager,workflow::TaskRuntime};
-        use custos_domain::{SessionMode,StartRunCommand};
         use super::*;
-        let store=Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
-        let tasks=Arc::new(TaskService::new(store.clone()));let sessions=Arc::new(SessionManager::with_store(store.clone()));
-        let task=tasks.create_task("SSE fixture".into()).await.unwrap();
-        let session=sessions.create_session(SessionMode::Assisted).await;
-        let other=sessions.create_session(SessionMode::Assisted).await;
-        let bridge=Arc::new(custos_bridge::BridgeService::new(sessions.clone(),tasks.clone()));
-        let runtime=Arc::new(TaskRuntime::new().with_run_store(store.clone()).with_model(Arc::new(custos_adapters::providers::fake::FakeProvider::with_default_text("test","answer"))));
-        let run=runtime.start_run_background(StartRunCommand::new(&task.id,"chat").with_prompt("prompt").with_session_id(session.id.to_string()).with_preferred_mode("model")).await.unwrap();
-        let api=Arc::new(LocalApiDispatcher::new(tasks,sessions,bridge).with_workflow(runtime));
-        let (port,server)=start_http_server("127.0.0.1:0",api).await.unwrap();
-        let url=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",session.id,run.run_id);
-        let response=reqwest::get(&url).await.unwrap();assert_eq!(response.status(),200);assert!(response.headers()["content-type"].to_str().unwrap().starts_with("text/event-stream"));
-        let events=response.text().await.unwrap();assert!(events.contains("event: run"));assert!(events.contains("queued"));assert!(events.contains("completed"));assert!(events.contains("answer"));
-        let cursor=events.lines().filter_map(|line|line.strip_prefix("id: ")).next_back().unwrap();
-        let response=reqwest::Client::new().get(&url).header("Last-Event-ID",cursor).send().await.unwrap();let replay=response.text().await.unwrap();assert!(replay.contains("event: snapshot"));assert!(!replay.contains("text_delta"));
-        let wrong=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",other.id,run.run_id);assert_eq!(reqwest::get(wrong).await.unwrap().status(),403);
+        use custos_core::{contracts::workflow::WorkflowPort, TaskService};
+        use custos_domain::{SessionMode, StartRunCommand};
+        use custos_runtime::{workflow::TaskRuntime, SessionManager};
+        use std::sync::Arc;
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let tasks = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::with_store(store.clone()));
+        let task = tasks.create_task("SSE fixture".into()).await.unwrap();
+        let session = sessions.create_session(SessionMode::Assisted).await;
+        let other = sessions.create_session(SessionMode::Assisted).await;
+        let bridge = Arc::new(custos_bridge::BridgeService::new(
+            sessions.clone(),
+            tasks.clone(),
+        ));
+        let runtime = Arc::new(TaskRuntime::new().with_run_store(store.clone()).with_model(
+            Arc::new(
+                custos_adapters::providers::fake::FakeProvider::with_default_text("test", "answer"),
+            ),
+        ));
+        let run = runtime
+            .start_run_background(
+                StartRunCommand::new(&task.id, "chat")
+                    .with_prompt("prompt")
+                    .with_session_id(session.id.to_string())
+                    .with_preferred_mode("model"),
+            )
+            .await
+            .unwrap();
+        let api = Arc::new(LocalApiDispatcher::new(tasks, sessions, bridge).with_workflow(runtime));
+        let (port, server) = start_http_server("127.0.0.1:0", api).await.unwrap();
+        let url = format!(
+            "http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",
+            session.id, run.run_id
+        );
+        let response = reqwest::get(&url).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert!(response.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("text/event-stream"));
+        let events = response.text().await.unwrap();
+        assert!(events.contains("event: run"));
+        assert!(events.contains("queued"));
+        assert!(events.contains("completed"));
+        assert!(events.contains("answer"));
+        let cursor = events
+            .lines()
+            .filter_map(|line| line.strip_prefix("id: "))
+            .next_back()
+            .unwrap();
+        let response = reqwest::Client::new()
+            .get(&url)
+            .header("Last-Event-ID", cursor)
+            .send()
+            .await
+            .unwrap();
+        let replay = response.text().await.unwrap();
+        assert!(replay.contains("event: snapshot"));
+        assert!(!replay.contains("text_delta"));
+        let wrong = format!(
+            "http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",
+            other.id, run.run_id
+        );
+        assert_eq!(reqwest::get(wrong).await.unwrap().status(), 403);
         server.abort();
     }
 
@@ -469,31 +584,76 @@ mod tests {
         std::env::set_var("CUSTOS_IPC_TOKEN", "secret-token-123");
 
         // Allowed origin without token MUST be rejected
-        assert!(!is_authorized_ipc_client(Some("http://localhost:1420"), None, None, None));
+        assert!(!is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            None,
+            None,
+            None
+        ));
 
         // Allowed origin with wrong token MUST be rejected
-        assert!(!is_authorized_ipc_client(Some("http://localhost:1420"), Some("Bearer wrong"), None, None));
+        assert!(!is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            Some("Bearer wrong"),
+            None,
+            None
+        ));
 
         // Untrusted origin even with valid token MUST be rejected
-        assert!(!is_authorized_ipc_client(Some("http://evil.com"), Some("Bearer secret-token-123"), None, None));
+        assert!(!is_authorized_ipc_client(
+            Some("http://evil.com"),
+            Some("Bearer secret-token-123"),
+            None,
+            None
+        ));
 
         // Allowed origin with valid Bearer token MUST be accepted
-        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), Some("Bearer secret-token-123"), None, None));
+        assert!(is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            Some("Bearer secret-token-123"),
+            None,
+            None
+        ));
 
         // Allowed origin with valid X-Custos-Token header MUST be accepted
-        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, Some("secret-token-123"), None));
+        assert!(is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            None,
+            Some("secret-token-123"),
+            None
+        ));
 
         // Allowed origin with valid query token MUST be accepted
-        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, None, Some("secret-token-123")));
+        assert!(is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            None,
+            None,
+            Some("secret-token-123")
+        ));
 
         // Direct client without origin with valid token MUST be accepted
-        assert!(is_authorized_ipc_client(None, Some("Bearer secret-token-123"), None, None));
+        assert!(is_authorized_ipc_client(
+            None,
+            Some("Bearer secret-token-123"),
+            None,
+            None
+        ));
 
         std::env::remove_var("CUSTOS_IPC_TOKEN");
 
         // Without CUSTOS_IPC_TOKEN, untrusted origin MUST still be rejected
-        assert!(!is_authorized_ipc_client(Some("http://evil.com"), None, None, None));
+        assert!(!is_authorized_ipc_client(
+            Some("http://evil.com"),
+            None,
+            None,
+            None
+        ));
         // Without CUSTOS_IPC_TOKEN, allowed origin is accepted
-        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, None, None));
+        assert!(is_authorized_ipc_client(
+            Some("http://localhost:1420"),
+            None,
+            None,
+            None
+        ));
     }
 }

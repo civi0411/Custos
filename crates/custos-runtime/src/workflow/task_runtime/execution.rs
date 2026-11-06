@@ -1,8 +1,11 @@
 use super::*;
 
 impl TaskRuntime {
-    pub(super) async fn dispatch_run(&self, cmd: StartRunCommand, background: bool) -> Result<RunHandle, DomainError> {
-
+    pub(super) async fn dispatch_run(
+        &self,
+        cmd: StartRunCommand,
+        background: bool,
+    ) -> Result<RunHandle, DomainError> {
         // 3. Negotiate execution mode and record in metadata (Orca mode sequencing parity)
         let requested_mode = cmd
             .preferred_mode
@@ -43,8 +46,10 @@ impl TaskRuntime {
             other => (other, false, None),
         };
 
-        if background && !matches!(actual_mode,"model"|"native") {
-            return Err(DomainError::Validation("No executable provider is configured for this background mode".into()));
+        if background && !matches!(actual_mode, "model" | "native") {
+            return Err(DomainError::Validation(
+                "No executable provider is configured for this background mode".into(),
+            ));
         }
 
         self.recover_completed_model_chat_turn(&cmd.task_id).await?;
@@ -73,7 +78,11 @@ impl TaskRuntime {
                 }
             };
 
-            provider_account_id = task.metadata.get("provider_account_id").cloned().unwrap_or(serde_json::Value::Null);
+            provider_account_id = task
+                .metadata
+                .get("provider_account_id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             if task.status == TaskStatus::Draft {
                 if let Err(e) = kernel.transition_task(&task.id, TaskStatus::Queued).await {
                     let _ = self.dispatcher.release_claim(&claim.id).await;
@@ -109,9 +118,12 @@ impl TaskRuntime {
         }
         run.metadata["requested_model"] = serde_json::json!(cmd.model);
         run.metadata["reasoning_effort"] = serde_json::json!(cmd.reasoning_effort);
-        if let Some(account) = &cmd.provider_account_id { run.metadata["provider_account_id"] = serde_json::json!(account); }
+        if let Some(account) = &cmd.provider_account_id {
+            run.metadata["provider_account_id"] = serde_json::json!(account);
+        }
         run.metadata["session_id"] = serde_json::json!(cmd.session_id);
-        run.metadata["turn_id"] = serde_json::json!(cmd.turn_id.clone().unwrap_or_else(||new_id("turn")));
+        run.metadata["turn_id"] =
+            serde_json::json!(cmd.turn_id.clone().unwrap_or_else(|| new_id("turn")));
         run.metadata["requested_mode"] = serde_json::json!(requested_mode);
         run.metadata["actual_mode"] = serde_json::json!(actual_mode);
         if downgraded {
@@ -168,7 +180,7 @@ impl TaskRuntime {
         // be removed before the user has reviewed the agent's changes.
         let lease = if actual_mode != "native" {
             if let Some(ref lm) = self.lease_manager {
-            lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
+                lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
             } else {
                 None
             }
@@ -192,199 +204,292 @@ impl TaskRuntime {
         }
 
         let token = match self.live.register(&run, &cmd) {
-            Ok(token)=>token,
-            Err(error)=>{
-                if let Some(mut lease)=lease {if let Err(cleanup)=lease.release() {tracing::warn!(run_id=%run.id,error=%cleanup,"Lease cleanup failed after live admission error");}}
+            Ok(token) => token,
+            Err(error) => {
+                if let Some(mut lease) = lease {
+                    if let Err(cleanup) = lease.release() {
+                        tracing::warn!(run_id=%run.id,error=%cleanup,"Lease cleanup failed after live admission error");
+                    }
+                }
                 self.dispatcher.release_claim(&claim.id).await?;
-                run.transition(RunStatus::Failed)?;wrun.transition(RunStatus::Failed)?;
-                run.metadata["failure_reason"]=serde_json::json!(error.to_string());
-                if let Some(store)=&self.run_store {store.save_run(&mut run).await?;store.save_worker_run(&mut wrun).await?;}
+                run.transition(RunStatus::Failed)?;
+                wrun.transition(RunStatus::Failed)?;
+                run.metadata["failure_reason"] = serde_json::json!(error.to_string());
+                if let Some(store) = &self.run_store {
+                    store.save_run(&mut run).await?;
+                    store.save_worker_run(&mut wrun).await?;
+                }
                 return Err(error);
             }
         };
-        self.active_runs.write().await.insert(run.id.clone(), run.clone());
-        self.active_workers.write().await.insert(wrun.id.clone(), wrun.clone());
-        let handle = RunHandle { run_id: run.id.clone(), task_id: run.task_id.clone(), status: run.status, started_at: run.started_at, completed_at: None, output: None };
-        self.live.emit(&run.id, "status", serde_json::json!({"status":"queued"}));
-        let actual_mode = actual_mode.to_string(); let requested_mode = requested_mode.to_string();
+        self.active_runs
+            .write()
+            .await
+            .insert(run.id.clone(), run.clone());
+        self.active_workers
+            .write()
+            .await
+            .insert(wrun.id.clone(), wrun.clone());
+        let handle = RunHandle {
+            run_id: run.id.clone(),
+            task_id: run.task_id.clone(),
+            status: run.status,
+            started_at: run.started_at,
+            completed_at: None,
+            output: None,
+        };
+        self.live
+            .emit(&run.id, "status", serde_json::json!({"status":"queued"}));
+        let actual_mode = actual_mode.to_string();
+        let requested_mode = requested_mode.to_string();
         if background {
             let runtime = self.clone();
             let live_run_id = run.id.clone();
             let live_session = cmd.session_id.clone().unwrap_or_default();
             tokio::spawn(async move {
-                if let Err(error) = runtime.execute_registered(cmd, run, wrun, claim.id, lease, actual_mode, requested_mode, token, true).await {
+                if let Err(error) = runtime
+                    .execute_registered(
+                        cmd,
+                        run,
+                        wrun,
+                        claim.id,
+                        lease,
+                        actual_mode,
+                        requested_mode,
+                        token,
+                        true,
+                    )
+                    .await
+                {
                     tracing::warn!(run_id = %live_run_id, error = %error, "Background run failed");
-                    let partial = runtime.live.replay(&live_session, &live_run_id, 0).ok().map(|r|r.snapshot.text).unwrap_or_default();
+                    let partial = runtime
+                        .live
+                        .replay(&live_session, &live_run_id, 0)
+                        .ok()
+                        .map(|r| r.snapshot.text)
+                        .unwrap_or_default();
                     runtime.live.emit(&live_run_id,"result",serde_json::json!({"status":"failed","text":partial,"error":error.to_string()}));
                 }
             });
             Ok(handle)
-        } else { self.execute_registered(cmd, run, wrun, claim.id, lease, actual_mode, requested_mode, token, false).await }
+        } else {
+            self.execute_registered(
+                cmd,
+                run,
+                wrun,
+                claim.id,
+                lease,
+                actual_mode,
+                requested_mode,
+                token,
+                false,
+            )
+            .await
+        }
     }
 
-    async fn persist_live_journal(&self, cmd: &StartRunCommand, run: &mut Run, text: &str) -> Result<(), DomainError> {
+    async fn persist_live_journal(
+        &self,
+        cmd: &StartRunCommand,
+        run: &mut Run,
+        text: &str,
+    ) -> Result<(), DomainError> {
         if let (Some(session), Some(manager)) = (&cmd.session_id, &self.journal_manager) {
-            let message = if text.is_empty() { format!("Run {} {}", run.id, run.status) } else { text.to_string() };
-            let session_id=SessionId(session.clone());
-            let entry=manager.append_assistant_entry(&session_id, &message).await?;
-            run.metadata["journal_occurred_at"]=serde_json::json!(entry.occurred_at);
-            if let Some(store)=&self.run_store {store.save_run(run).await?;}
+            let message = if text.is_empty() {
+                format!("Run {} {}", run.id, run.status)
+            } else {
+                text.to_string()
+            };
+            let session_id = SessionId(session.clone());
+            let entry = manager
+                .append_assistant_entry(&session_id, &message)
+                .await?;
+            run.metadata["journal_occurred_at"] = serde_json::json!(entry.occurred_at);
+            if let Some(store) = &self.run_store {
+                store.save_run(run).await?;
+            }
         }
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn execute_registered(&self, cmd: StartRunCommand, mut run: Run, mut wrun: WorkerRun, claim_id: String, mut lease: Option<crate::workflow::lease::WorkspaceLease>, actual_mode: String, requested_mode: String, token: tokio_util::sync::CancellationToken, background: bool) -> Result<RunHandle, DomainError> {
+    async fn execute_registered(
+        &self,
+        cmd: StartRunCommand,
+        mut run: Run,
+        mut wrun: WorkerRun,
+        claim_id: String,
+        mut lease: Option<crate::workflow::lease::WorkspaceLease>,
+        actual_mode: String,
+        requested_mode: String,
+        token: tokio_util::sync::CancellationToken,
+        background: bool,
+    ) -> Result<RunHandle, DomainError> {
         tracing::info!(run_id = %run.id, task_id = %run.task_id, "Executing registered run");
-        self.live.emit(&run.id, "status", serde_json::json!({"status":"running"}));
+        self.live
+            .emit(&run.id, "status", serde_json::json!({"status":"running"}));
         let observer = self.live.observer(&run.id, token.clone());
         // Execute governed agent turn based on actual_mode
         let turn_result = {
-        let turn_result = async {
-            let mut turn_output: Option<String> = None;
-            if actual_mode == "native" {
-                let harness = self.resolve_harness(cmd.harness_id.as_deref())?;
-                let profile = harness.profile();
-                let harness_id = profile.harness_id.clone();
+            let turn_result = async {
+                let mut turn_output: Option<String> = None;
+                if actual_mode == "native" {
+                    let harness = self.resolve_harness(cmd.harness_id.as_deref())?;
+                    let profile = harness.profile();
+                    let harness_id = profile.harness_id.clone();
 
-                let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, &requested_mode)?;
-                if let Some(ref store) = self.run_store {
-                    store.save_launch_attempt(&launch).await?;
-                }
-                run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
-                run.metadata["harness_id"] = serde_json::json!(harness_id);
-                run.metadata["tool_mediation"] =
-                    serde_json::json!(profile.tool_mediation.to_string());
-                wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
-
-                // Resolve execution workspace & effective directory
-                let (base_workspace_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) = self.workspace_coordinator {
-                    let ws_id_str = cmd.workspace_id.as_deref().ok_or_else(|| {
-                        DomainError::Validation("Native run requires a registered workspace_id".into())
-                    })?;
-                    let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
-                    let ws = ws_coord.get_workspace(&ws_id).await?.ok_or_else(|| {
-                        DomainError::Validation(format!("Native workspace '{ws_id_str}' no longer exists"))
-                    })?;
-                    if !ws.is_ready() {
-                        return Err(DomainError::Validation(format!(
-                            "Native workspace '{ws_id_str}' is not ready for execution"
-                        )));
-                    }
-                    (std::path::PathBuf::from(ws.path), Some(ws_id))
-                } else if let Some(ref root) = cmd.workspace_root {
-                    (std::path::PathBuf::from(root), None)
-                } else {
-                    return Err(DomainError::Validation(
-                        "Native run has no execution workspace".into(),
-                    ));
-                };
-
-                let (effective_dir, isolation_level) = if let Some(ref l) = lease {
-                    (l.lease_path().to_path_buf(), "isolated_worktree_lease")
-                } else {
-                    (base_workspace_dir.clone(), "shared_live_checkout")
-                };
-
-                if let Some(ref ws_id) = maybe_resolved_ws_id {
-                    run.metadata["workspace_id"] = serde_json::json!(ws_id.to_string());
-                }
-                run.metadata["isolation_level"] = serde_json::json!(isolation_level);
-                run.metadata["effective_workspace_path"] = serde_json::json!(effective_dir.display().to_string());
-
-                // Capture baseline commit before execution if workspace coordinator is available
-                if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
-                    if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
-                        if let Some(head) = dirty.head_commit {
-                            run.metadata["base_commit_hash"] = serde_json::json!(head);
-                        }
-                    }
-                }
-
-                let intents = if let Some(prompt_text) = cmd.prompt.as_deref() {
-                    let native_result = harness
-                        .run_native_observed(prompt_text, &effective_dir, observer.clone())
-                        .await;
-                    let execution = match native_result {
-                        Ok(result) => {
-                            launch.mark_launched("native", Some(harness_id.clone()))?;
-                            if let Some(ref store) = self.run_store {
-                                store.save_launch_attempt(&launch).await?;
-                            }
-                            result
-                        }
-                        Err(err) => {
-                            launch.mark_failed(err.to_string())?;
-                            if let Some(ref store) = self.run_store {
-                                store.save_launch_attempt(&launch).await?;
-                            }
-                            return Err(err);
-                        }
-                    };
-
-                    for intent in &execution.observed_effects {
-                        profile.validate_intent_assurance(intent)?;
-                    }
-
-                    run.metadata["exit_code"] = serde_json::json!(execution.exit_code);
-                    run.metadata["native_success"] = serde_json::json!(execution.success);
-                    run.metadata["stderr"] = serde_json::json!(execution.stderr.clone());
-                    run.metadata["observed_effect_count"] =
-                        serde_json::json!(execution.observed_effects.len());
-                    let combined_output = if execution.stdout.trim().is_empty() {
-                        execution.stderr.clone()
-                    } else {
-                        execution.stdout.clone()
-                    };
-                    run.metadata["output"] = serde_json::json!(combined_output);
-                    turn_output = Some(combined_output);
-
-                    // Post-execution: Capture Git dirty status and unified diff
-                    if let Some(ref l) = lease {
-                        if let Ok(files) = l.collect_modified_files() {
-                            let rel_strs: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
-                            run.metadata["isolated_modified_files"] = serde_json::json!(rel_strs);
-                        }
-                        let diff_out = std::process::Command::new("git")
-                            .current_dir(l.lease_path())
-                            .args(["diff", "HEAD"])
-                            .output();
-                        if let Ok(out) = diff_out {
-                            let diff_str = String::from_utf8_lossy(&out.stdout).to_string();
-                            if !diff_str.is_empty() {
-                                run.metadata["isolated_worktree_diff"] = serde_json::json!(diff_str);
-                            }
-                        }
-                    } else if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
-                        if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
-                            run.metadata["dirty_manifest"] = serde_json::to_value(&dirty).unwrap_or_default();
-                            run.metadata["diff_stat"] = serde_json::json!({
-                                "is_dirty": dirty.is_dirty,
-                                "modified_count": dirty.modified_files.len(),
-                                "untracked_count": dirty.untracked_files.len(),
-                                "deleted_count": dirty.deleted_files.len(),
-                                "modified_files": dirty.modified_files,
-                                "untracked_files": dirty.untracked_files,
-                                "deleted_files": dirty.deleted_files,
-                            });
-                        }
-                        if let Ok(diff_patch) = ws_coord.diff(ws_id).await {
-                            if !diff_patch.is_empty() {
-                                run.metadata["diff_patch"] = serde_json::json!(diff_patch);
-                            }
-                        }
-                    }
-
-                    execution.observed_effects
-                } else {
-                    launch.mark_launched("native", Some(harness_id.clone()))?;
+                    let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, &requested_mode)?;
                     if let Some(ref store) = self.run_store {
                         store.save_launch_attempt(&launch).await?;
                     }
-                    let context_pack =
-                        ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
-                    harness.execute_turn(&wrun, &context_pack).await?
-                };
+                    run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
+                    run.metadata["harness_id"] = serde_json::json!(harness_id);
+                    run.metadata["tool_mediation"] =
+                        serde_json::json!(profile.tool_mediation.to_string());
+                    wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+
+                    // Resolve execution workspace & effective directory
+                    let (base_workspace_dir, maybe_resolved_ws_id) =
+                        if let Some(ref ws_coord) = self.workspace_coordinator {
+                            let ws_id_str = cmd.workspace_id.as_deref().ok_or_else(|| {
+                                DomainError::Validation(
+                                    "Native run requires a registered workspace_id".into(),
+                                )
+                            })?;
+                            let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
+                            let ws = ws_coord.get_workspace(&ws_id).await?.ok_or_else(|| {
+                                DomainError::Validation(format!(
+                                    "Native workspace '{ws_id_str}' no longer exists"
+                                ))
+                            })?;
+                            if !ws.is_ready() {
+                                return Err(DomainError::Validation(format!(
+                                    "Native workspace '{ws_id_str}' is not ready for execution"
+                                )));
+                            }
+                            (std::path::PathBuf::from(ws.path), Some(ws_id))
+                        } else if let Some(ref root) = cmd.workspace_root {
+                            (std::path::PathBuf::from(root), None)
+                        } else {
+                            return Err(DomainError::Validation(
+                                "Native run has no execution workspace".into(),
+                            ));
+                        };
+
+                    let (effective_dir, isolation_level) = if let Some(ref l) = lease {
+                        (l.lease_path().to_path_buf(), "isolated_worktree_lease")
+                    } else {
+                        (base_workspace_dir.clone(), "shared_live_checkout")
+                    };
+
+                    if let Some(ref ws_id) = maybe_resolved_ws_id {
+                        run.metadata["workspace_id"] = serde_json::json!(ws_id.to_string());
+                    }
+                    run.metadata["isolation_level"] = serde_json::json!(isolation_level);
+                    run.metadata["effective_workspace_path"] =
+                        serde_json::json!(effective_dir.display().to_string());
+
+                    // Capture baseline commit before execution if workspace coordinator is available
+                    if let (Some(ref ws_coord), Some(ref ws_id)) =
+                        (&self.workspace_coordinator, &maybe_resolved_ws_id)
+                    {
+                        if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
+                            if let Some(head) = dirty.head_commit {
+                                run.metadata["base_commit_hash"] = serde_json::json!(head);
+                            }
+                        }
+                    }
+
+                    let intents = if let Some(prompt_text) = cmd.prompt.as_deref() {
+                        let native_result = harness
+                            .run_native_observed(prompt_text, &effective_dir, observer.clone())
+                            .await;
+                        let execution = match native_result {
+                            Ok(result) => {
+                                launch.mark_launched("native", Some(harness_id.clone()))?;
+                                if let Some(ref store) = self.run_store {
+                                    store.save_launch_attempt(&launch).await?;
+                                }
+                                result
+                            }
+                            Err(err) => {
+                                launch.mark_failed(err.to_string())?;
+                                if let Some(ref store) = self.run_store {
+                                    store.save_launch_attempt(&launch).await?;
+                                }
+                                return Err(err);
+                            }
+                        };
+
+                        for intent in &execution.observed_effects {
+                            profile.validate_intent_assurance(intent)?;
+                        }
+
+                        run.metadata["exit_code"] = serde_json::json!(execution.exit_code);
+                        run.metadata["native_success"] = serde_json::json!(execution.success);
+                        run.metadata["stderr"] = serde_json::json!(execution.stderr.clone());
+                        run.metadata["observed_effect_count"] =
+                            serde_json::json!(execution.observed_effects.len());
+                        let combined_output = if execution.stdout.trim().is_empty() {
+                            execution.stderr.clone()
+                        } else {
+                            execution.stdout.clone()
+                        };
+                        run.metadata["output"] = serde_json::json!(combined_output);
+                        turn_output = Some(combined_output);
+
+                        // Post-execution: Capture Git dirty status and unified diff
+                        if let Some(ref l) = lease {
+                            if let Ok(files) = l.collect_modified_files() {
+                                let rel_strs: Vec<String> =
+                                    files.iter().map(|f| f.display().to_string()).collect();
+                                run.metadata["isolated_modified_files"] =
+                                    serde_json::json!(rel_strs);
+                            }
+                            let diff_out = std::process::Command::new("git")
+                                .current_dir(l.lease_path())
+                                .args(["diff", "HEAD"])
+                                .output();
+                            if let Ok(out) = diff_out {
+                                let diff_str = String::from_utf8_lossy(&out.stdout).to_string();
+                                if !diff_str.is_empty() {
+                                    run.metadata["isolated_worktree_diff"] =
+                                        serde_json::json!(diff_str);
+                                }
+                            }
+                        } else if let (Some(ref ws_coord), Some(ref ws_id)) =
+                            (&self.workspace_coordinator, &maybe_resolved_ws_id)
+                        {
+                            if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
+                                run.metadata["dirty_manifest"] =
+                                    serde_json::to_value(&dirty).unwrap_or_default();
+                                run.metadata["diff_stat"] = serde_json::json!({
+                                    "is_dirty": dirty.is_dirty,
+                                    "modified_count": dirty.modified_files.len(),
+                                    "untracked_count": dirty.untracked_files.len(),
+                                    "deleted_count": dirty.deleted_files.len(),
+                                    "modified_files": dirty.modified_files,
+                                    "untracked_files": dirty.untracked_files,
+                                    "deleted_files": dirty.deleted_files,
+                                });
+                            }
+                            if let Ok(diff_patch) = ws_coord.diff(ws_id).await {
+                                if !diff_patch.is_empty() {
+                                    run.metadata["diff_patch"] = serde_json::json!(diff_patch);
+                                }
+                            }
+                        }
+
+                        execution.observed_effects
+                    } else {
+                        launch.mark_launched("native", Some(harness_id.clone()))?;
+                        if let Some(ref store) = self.run_store {
+                            store.save_launch_attempt(&launch).await?;
+                        }
+                        let context_pack =
+                            ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
+                        harness.execute_turn(&wrun, &context_pack).await?
+                    };
 
                     // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
                     for mut intent in intents {
@@ -417,7 +522,12 @@ impl TaskRuntime {
                                                 action_id: intent.id.clone(),
                                                 permit_id: "".to_string(),
                                                 argument_digest: intent.argument_digest(),
-                                                idempotency_key: Some(intent.idempotency_key.clone().unwrap_or_else(|| intent.id.clone())),
+                                                idempotency_key: Some(
+                                                    intent
+                                                        .idempotency_key
+                                                        .clone()
+                                                        .unwrap_or_else(|| intent.id.clone()),
+                                                ),
                                                 status: OutboxStatus::Pending,
                                                 created_at: Utc::now(),
                                                 receipt: None,
@@ -427,18 +537,26 @@ impl TaskRuntime {
                                             };
                                             outbox.enqueue(outbox_entry).await?;
                                         }
-                                        run.metadata["pending_approval_attempt_id"] = serde_json::json!(attempt_id);
-                                        run.metadata["pending_approval_reason"] = serde_json::json!(reason);
+                                        run.metadata["pending_approval_attempt_id"] =
+                                            serde_json::json!(attempt_id);
+                                        run.metadata["pending_approval_reason"] =
+                                            serde_json::json!(reason);
                                         run.transition(RunStatus::Suspended)?;
                                         wrun.transition(RunStatus::Suspended)?;
                                         if let Some(ref kernel) = self.kernel {
-                                            let _ = kernel.transition_task(&cmd.task_id, TaskStatus::Blocked).await;
+                                            let _ = kernel
+                                                .transition_task(&cmd.task_id, TaskStatus::Blocked)
+                                                .await;
                                         }
-                                        self.live.emit(&run.id, "status", serde_json::json!({
-                                            "status": "suspended",
-                                            "reason": reason,
-                                            "attempt_id": attempt_id,
-                                        }));
+                                        self.live.emit(
+                                            &run.id,
+                                            "status",
+                                            serde_json::json!({
+                                                "status": "suspended",
+                                                "reason": reason,
+                                                "attempt_id": attempt_id,
+                                            }),
+                                        );
                                         if let Some(ref store) = self.run_store {
                                             store.save_run(&mut run).await?;
                                             store.save_worker_run(&mut wrun).await?;
@@ -491,10 +609,13 @@ impl TaskRuntime {
                                 if let Some(ref sandbox) = self.sandbox {
                                     match sandbox.execute(&intent, &burned_permit).await {
                                         Ok(receipt) => {
-                                            let status = custos_domain::EffectStatus::from(receipt.status);
+                                            let status =
+                                                custos_domain::EffectStatus::from(receipt.status);
                                             // Update Outbox and EffectLedger with verified receipt
                                             if let Some(ref outbox) = self.outbox {
-                                                outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
+                                                outbox
+                                                    .mark_receipted(&outbox_id, receipt.clone())
+                                                    .await?;
                                             }
                                             if let Some(ref ledger) = self.effect_ledger {
                                                 if let Some(eff_id) = effect_id {
@@ -514,11 +635,13 @@ impl TaskRuntime {
                                             }
                                             if let Some(ref ledger) = self.effect_ledger {
                                                 if let Some(eff_id) = effect_id {
-                                                    let _ = ledger.update_effect_status(
-                                                        &eff_id,
-                                                        custos_domain::EffectStatus::Uncertain,
-                                                        None,
-                                                    ).await;
+                                                    let _ = ledger
+                                                        .update_effect_status(
+                                                            &eff_id,
+                                                            custos_domain::EffectStatus::Uncertain,
+                                                            None,
+                                                        )
+                                                        .await;
                                                 }
                                             }
                                             return Err(err);
@@ -527,177 +650,263 @@ impl TaskRuntime {
                                 }
                             }
                         } else if let Some(ref ledger) = self.effect_ledger {
-                        // Native/provider-governed effects have no Custos dispatch receipt.
-                        // Keep them uncertain until a post-read verifier reconciles the effect.
-                        let idempotency_key = intent
-                            .idempotency_key
-                            .clone()
-                            .unwrap_or_else(|| intent.id.clone());
-                        let mut effect = custos_domain::EffectAttempt::new(
-                            wrun.id.clone(),
-                            "native-unmediated",
-                            idempotency_key,
-                        );
-                        effect.status = custos_domain::EffectStatus::Uncertain;
-                        if let Err(e) = ledger.record_effect(&effect).await {
-                            tracing::warn!(error = %e, "Failed to record unmediated effect attempt in ledger");
+                            // Native/provider-governed effects have no Custos dispatch receipt.
+                            // Keep them uncertain until a post-read verifier reconciles the effect.
+                            let idempotency_key = intent
+                                .idempotency_key
+                                .clone()
+                                .unwrap_or_else(|| intent.id.clone());
+                            let mut effect = custos_domain::EffectAttempt::new(
+                                wrun.id.clone(),
+                                "native-unmediated",
+                                idempotency_key,
+                            );
+                            effect.status = custos_domain::EffectStatus::Uncertain;
+                            if let Err(e) = ledger.record_effect(&effect).await {
+                                tracing::warn!(error = %e, "Failed to record unmediated effect attempt in ledger");
+                            }
                         }
                     }
-                }
-            } else if actual_mode == "model" {
-                if let Some(ref model) = self.model {
-                    let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, &requested_mode)?;
-                    let mut prompt_text = cmd
-                        .prompt
-                        .clone()
-                        .unwrap_or_else(|| format!("Initial run turn for task {}", cmd.task_id));
-                    let target_model = cmd
-                        .model
-                        .as_deref()
-                        .filter(|m| !m.trim().is_empty())
-                        .unwrap_or_else(|| model.provider_id());
-
-                    if let Some(ref store) = self.run_store {
-                        store.save_launch_attempt(&launch).await?;
-                    }
-                    run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
-                    wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
-
-                    if let (Some(session_id), Some(session_store)) =
-                        (cmd.session_id.as_ref(), self.session_store.as_ref())
-                    {
-                        let session_id = SessionId::new(session_id.clone());
-                        if session_store.get_session(&session_id).await?.is_none() {
-                            return Err(DomainError::Validation(format!(
-                                "Unknown session '{}' for model run",
-                                session_id
-                            )));
-                        }
-                        let journal = session_store.get_journal(&session_id).await?;
-                        let compiled =
-                            crate::context::compile_session_history(&journal, &prompt_text, 12_000);
-                        run.metadata["session_context"] = serde_json::json!({
-                            "compiler_version": "journal-recent-v1",
-                            "session_id": session_id.0,
-                            "included_entry_ids": compiled.included_entry_ids,
-                            "omitted_entry_ids": compiled.omitted_entry_ids,
-                            "estimated_tokens": compiled.estimated_tokens,
-                            "destination_model": target_model,
+                } else if actual_mode == "model" {
+                    if let Some(ref model) = self.model {
+                        let mut launch =
+                            custos_domain::LaunchAttempt::new(&wrun.id, &requested_mode)?;
+                        let mut prompt_text = cmd.prompt.clone().unwrap_or_else(|| {
+                            format!("Initial run turn for task {}", cmd.task_id)
                         });
-                        prompt_text = compiled.prompt;
-                    }
+                        let target_model = cmd
+                            .model
+                            .as_deref()
+                            .filter(|m| !m.trim().is_empty())
+                            .unwrap_or_else(|| model.provider_id());
 
-                    let mut req = ProviderRequest::new(
-                        new_id("req"),
-                        &cmd.task_id,
-                        1,
-                        prompt_text,
-                        target_model,
-                    );
-                    req.reasoning_effort = run.metadata.get("reasoning_effort").and_then(|v| v.as_str()).map(str::to_string);
-                    req.provider_account_id = run.metadata.get("provider_account_id").and_then(|v| v.as_str()).map(str::to_string);
-                    let mut receiver = match model.stream(&req).await {
-                        Ok(rx) => {
-                            launch.mark_launched("model", Some(target_model.to_string()))?;
-                            if let Some(ref store) = self.run_store {
-                                store.save_launch_attempt(&launch).await?;
-                            }
-                            rx
+                        if let Some(ref store) = self.run_store {
+                            store.save_launch_attempt(&launch).await?;
                         }
-                        Err(err) => {
-                            launch.mark_failed(err.to_string())?;
-                            if let Some(ref store) = self.run_store {
-                                let _ = store.save_launch_attempt(&launch).await;
+                        run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
+                        wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+
+                        if let (Some(session_id), Some(session_store)) =
+                            (cmd.session_id.as_ref(), self.session_store.as_ref())
+                        {
+                            let session_id = SessionId::new(session_id.clone());
+                            if session_store.get_session(&session_id).await?.is_none() {
+                                return Err(DomainError::Validation(format!(
+                                    "Unknown session '{}' for model run",
+                                    session_id
+                                )));
                             }
-                            return Err(err);
+                            let journal = session_store.get_journal(&session_id).await?;
+                            let compiled = crate::context::compile_session_history(
+                                &journal,
+                                &prompt_text,
+                                12_000,
+                            );
+                            run.metadata["session_context"] = serde_json::json!({
+                                "compiler_version": "journal-recent-v1",
+                                "session_id": session_id.0,
+                                "included_entry_ids": compiled.included_entry_ids,
+                                "omitted_entry_ids": compiled.omitted_entry_ids,
+                                "estimated_tokens": compiled.estimated_tokens,
+                                "destination_model": target_model,
+                            });
+                            prompt_text = compiled.prompt;
                         }
-                    };
-                    let mut content = String::new();
-                    let mut usage = custos_provider::TokenUsage::default();
-                    let mut completed = false;
-                    let mut actual_model = target_model.to_string();
-                    let mut tokens_used = None;
-                    while let Some(event) = receiver.recv().await {
-                        use custos_provider::ProviderEventType;
-                        match event.event_type {
-                            ProviderEventType::Chunk => {
-                                if let Some(text) = event.text {
-                                    if content.len().saturating_add(text.len()) > 2 * 1024 * 1024 { return Err(DomainError::Validation("Model output exceeded live limit".into())); }
-                                    observer.emit("status", serde_json::json!({"status":"running"}));
-                                    content.push_str(&text);
-                                    observer.emit("text_delta", serde_json::json!({"text":text}));
+
+                        let mut req = ProviderRequest::new(
+                            new_id("req"),
+                            &cmd.task_id,
+                            1,
+                            prompt_text,
+                            target_model,
+                        );
+                        req.reasoning_effort = run
+                            .metadata
+                            .get("reasoning_effort")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string);
+                        req.provider_account_id = run
+                            .metadata
+                            .get("provider_account_id")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string);
+                        let mut receiver = match model.stream(&req).await {
+                            Ok(rx) => {
+                                launch.mark_launched("model", Some(target_model.to_string()))?;
+                                if let Some(ref store) = self.run_store {
+                                    store.save_launch_attempt(&launch).await?;
                                 }
-                            },
-                            ProviderEventType::Thinking => observer.emit("status", serde_json::json!({"status":"thinking"})),
-                            ProviderEventType::ReasoningSummary => {
-                                observer.emit("status", serde_json::json!({"status":"thinking"}));
-                                observer.emit("reasoning_summary", serde_json::json!({"text":event.text}));
-                            },
-                            ProviderEventType::ToolCall => {
-                                observer.emit("status", serde_json::json!({"status":"tool-running"}));
-                                observer.emit("tool_input", serde_json::json!({"calls":event.tool_calls}));
-                            },
-                            ProviderEventType::ToolOutput => observer.emit("tool_output", serde_json::json!({"text":event.text})),
-                            ProviderEventType::Usage => {},
-                            ProviderEventType::Completed => {
-                                if let Some(text) = event.text { content = text; }
-                                if let Some(model) = event.model_id { actual_model = model; }
-                                tokens_used = event.tokens_used;
-                                completed = true;
-                            },
-                            ProviderEventType::Failed => return Err(DomainError::Validation(event.error.unwrap_or_else(|| "Provider stream failed".into()))),
+                                rx
+                            }
+                            Err(err) => {
+                                launch.mark_failed(err.to_string())?;
+                                if let Some(ref store) = self.run_store {
+                                    let _ = store.save_launch_attempt(&launch).await;
+                                }
+                                return Err(err);
+                            }
+                        };
+                        let mut content = String::new();
+                        let mut usage = custos_provider::TokenUsage::default();
+                        let mut completed = false;
+                        let mut actual_model = target_model.to_string();
+                        let mut tokens_used = None;
+                        while let Some(event) = receiver.recv().await {
+                            use custos_provider::ProviderEventType;
+                            match event.event_type {
+                                ProviderEventType::Chunk => {
+                                    if let Some(text) = event.text {
+                                        if content.len().saturating_add(text.len())
+                                            > 2 * 1024 * 1024
+                                        {
+                                            return Err(DomainError::Validation(
+                                                "Model output exceeded live limit".into(),
+                                            ));
+                                        }
+                                        observer.emit(
+                                            "status",
+                                            serde_json::json!({"status":"running"}),
+                                        );
+                                        content.push_str(&text);
+                                        observer
+                                            .emit("text_delta", serde_json::json!({"text":text}));
+                                    }
+                                }
+                                ProviderEventType::Thinking => observer
+                                    .emit("status", serde_json::json!({"status":"thinking"})),
+                                ProviderEventType::ReasoningSummary => {
+                                    observer
+                                        .emit("status", serde_json::json!({"status":"thinking"}));
+                                    observer.emit(
+                                        "reasoning_summary",
+                                        serde_json::json!({"text":event.text}),
+                                    );
+                                }
+                                ProviderEventType::ToolCall => {
+                                    observer.emit(
+                                        "status",
+                                        serde_json::json!({"status":"tool-running"}),
+                                    );
+                                    observer.emit(
+                                        "tool_input",
+                                        serde_json::json!({"calls":event.tool_calls}),
+                                    );
+                                }
+                                ProviderEventType::ToolOutput => observer
+                                    .emit("tool_output", serde_json::json!({"text":event.text})),
+                                ProviderEventType::Usage => {}
+                                ProviderEventType::Completed => {
+                                    if let Some(text) = event.text {
+                                        content = text;
+                                    }
+                                    if let Some(model) = event.model_id {
+                                        actual_model = model;
+                                    }
+                                    tokens_used = event.tokens_used;
+                                    completed = true;
+                                }
+                                ProviderEventType::Failed => {
+                                    return Err(DomainError::Validation(
+                                        event
+                                            .error
+                                            .unwrap_or_else(|| "Provider stream failed".into()),
+                                    ))
+                                }
+                            }
+                            if let Some(measured) = event.usage {
+                                if measured.input_tokens.is_some() {
+                                    usage.input_tokens = measured.input_tokens;
+                                }
+                                if measured.output_tokens.is_some() {
+                                    usage.output_tokens = measured.output_tokens;
+                                }
+                                observer.emit("usage",serde_json::json!({"input_tokens":usage.input_tokens,"output_tokens":usage.output_tokens,"total_tokens":usage.input_tokens.zip(usage.output_tokens).map(|(a,b)|a.saturating_add(b))}));
+                            }
+                            if completed {
+                                break;
+                            }
                         }
-                        if let Some(measured) = event.usage {
-                            if measured.input_tokens.is_some() { usage.input_tokens = measured.input_tokens; }
-                            if measured.output_tokens.is_some() { usage.output_tokens = measured.output_tokens; }
-                            observer.emit("usage",serde_json::json!({"input_tokens":usage.input_tokens,"output_tokens":usage.output_tokens,"total_tokens":usage.input_tokens.zip(usage.output_tokens).map(|(a,b)|a.saturating_add(b))}));
+                        if !completed {
+                            return Err(DomainError::Validation(
+                                "Provider stream ended without completion".into(),
+                            ));
                         }
-                        if completed { break; }
-                    }
-                    if !completed { return Err(DomainError::Validation("Provider stream ended without completion".into())); }
-                    let known_total=usage.input_tokens.zip(usage.output_tokens).map(|(input,output)|input.saturating_add(output));
-                    let resp = custos_provider::ModelResponse::text(content, actual_model, tokens_used.or(known_total).or(usage.output_tokens).unwrap_or(0)).with_usage(usage.input_tokens, usage.output_tokens, None);
-                    observer.emit("usage", serde_json::json!({"input_tokens":resp.input_tokens,"output_tokens":resp.output_tokens,"total_tokens":resp.total_tokens}));
-                    run.metadata["usage"] = serde_json::json!({ "input_tokens": resp.input_tokens, "output_tokens": resp.output_tokens, "total_tokens": resp.total_tokens });
-                    run.metadata["output"] = serde_json::json!(resp.content);
-                    run.metadata["tokens_used"] = serde_json::json!(resp.tokens_used);
-                    run.metadata["model_id"] = serde_json::json!(resp.model_id);
-                    turn_output = Some(resp.content);
-                    if let Some(ref store) = self.run_store {
-                        store.save_run(&mut run).await?;
-                        store.save_worker_run(&mut wrun).await?;
+                        let known_total = usage
+                            .input_tokens
+                            .zip(usage.output_tokens)
+                            .map(|(input, output)| input.saturating_add(output));
+                        let resp = custos_provider::ModelResponse::text(
+                            content,
+                            actual_model,
+                            tokens_used
+                                .or(known_total)
+                                .or(usage.output_tokens)
+                                .unwrap_or(0),
+                        )
+                        .with_usage(
+                            usage.input_tokens,
+                            usage.output_tokens,
+                            None,
+                        );
+                        observer.emit("usage", serde_json::json!({"input_tokens":resp.input_tokens,"output_tokens":resp.output_tokens,"total_tokens":resp.total_tokens}));
+                        run.metadata["usage"] = serde_json::json!({ "input_tokens": resp.input_tokens, "output_tokens": resp.output_tokens, "total_tokens": resp.total_tokens });
+                        run.metadata["output"] = serde_json::json!(resp.content);
+                        run.metadata["tokens_used"] = serde_json::json!(resp.tokens_used);
+                        run.metadata["model_id"] = serde_json::json!(resp.model_id);
+                        turn_output = Some(resp.content);
+                        if let Some(ref store) = self.run_store {
+                            store.save_run(&mut run).await?;
+                            store.save_worker_run(&mut wrun).await?;
+                        }
                     }
                 }
+                Ok::<Option<String>, DomainError>(turn_output)
+            };
+            tokio::pin!(turn_result);
+            let turn_result = tokio::select! {
+                result = &mut turn_result => result,
+                _ = token.cancelled() => {
+                    if actual_mode == "native" {
+                        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), &mut turn_result).await;
+                    }
+                    Err(DomainError::Validation("Run cancelled".into()))
+                },
+            };
+
+            turn_result
+        };
+
+        if let Ok(replay) = self
+            .live
+            .replay(cmd.session_id.as_deref().unwrap_or(""), &run.id, 0)
+        {
+            if let Some(usage) = replay.snapshot.usage {
+                run.metadata["usage"] = usage;
             }
-            Ok::<Option<String>, DomainError>(turn_output)
         }
-        ;
-        tokio::pin!(turn_result);
-        let turn_result = tokio::select! {
-            result = &mut turn_result => result,
-            _ = token.cancelled() => {
-                if actual_mode == "native" {
-                    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), &mut turn_result).await;
-                }
-                Err(DomainError::Validation("Run cancelled".into()))
-            },
+        let turn_result = if token.is_cancelled() {
+            Err(DomainError::Validation("Run cancelled".into()))
+        } else {
+            turn_result
         };
-
-        turn_result
-        };
-
-        if let Ok(replay)=self.live.replay(cmd.session_id.as_deref().unwrap_or(""),&run.id,0) {
-            if let Some(usage)=replay.snapshot.usage {run.metadata["usage"]=usage;}
-        }
-        let turn_result = if token.is_cancelled() { Err(DomainError::Validation("Run cancelled".into())) } else { turn_result };
         let output_text = match turn_result {
             Ok(out) => out,
             Err(e) => {
                 if let Some(ref mut l) = lease {
                     let _ = l.release();
                 }
-                let terminal = if token.is_cancelled() { RunStatus::Cancelled } else { RunStatus::Failed };
-                if token.is_cancelled() { if let Some(kernel)=&self.kernel { kernel.transition_task(&run.task_id,TaskStatus::Cancelled).await?; } }
+                let terminal = if token.is_cancelled() {
+                    RunStatus::Cancelled
+                } else {
+                    RunStatus::Failed
+                };
+                if token.is_cancelled() {
+                    if let Some(kernel) = &self.kernel {
+                        kernel
+                            .transition_task(&run.task_id, TaskStatus::Cancelled)
+                            .await?;
+                    }
+                }
                 let _ = run.transition(terminal);
                 let _ = wrun.transition(terminal);
                 run.metadata["failure_reason"] = serde_json::json!(e.to_string());
@@ -706,17 +915,32 @@ impl TaskRuntime {
                     let _ = store.save_worker_run(&mut wrun).await;
                 }
                 let _ = self.dispatcher.release_claim(&claim_id).await;
-                let partial = self.live.replay(cmd.session_id.as_deref().unwrap_or(""), &run.id, 0).ok().map(|r| r.snapshot.text).unwrap_or_default();
+                let partial = self
+                    .live
+                    .replay(cmd.session_id.as_deref().unwrap_or(""), &run.id, 0)
+                    .ok()
+                    .map(|r| r.snapshot.text)
+                    .unwrap_or_default();
                 run.metadata["output"] = serde_json::json!(partial);
-                if let Some(store) = &self.run_store { store.save_run(&mut run).await?; }
+                if let Some(store) = &self.run_store {
+                    store.save_run(&mut run).await?;
+                }
                 if self.run_store.is_some() {
                     self.active_runs.write().await.remove(&run.id);
                     self.active_workers.write().await.remove(&wrun.id);
                 } else {
-                    self.active_runs.write().await.insert(run.id.clone(), run.clone());
-                    self.active_workers.write().await.insert(wrun.id.clone(), wrun.clone());
+                    self.active_runs
+                        .write()
+                        .await
+                        .insert(run.id.clone(), run.clone());
+                    self.active_workers
+                        .write()
+                        .await
+                        .insert(wrun.id.clone(), wrun.clone());
                 }
-                if background { self.persist_live_journal(&cmd, &mut run, &partial).await?; }
+                if background {
+                    self.persist_live_journal(&cmd, &mut run, &partial).await?;
+                }
                 self.live.emit(&run.id, "result", serde_json::json!({"status":run.status.to_string(),"text":partial,"error":e.to_string()}));
                 return Err(e);
             }
@@ -765,11 +989,13 @@ impl TaskRuntime {
                 });
                 run.metadata["turn_completion"] = serde_json::json!("process_exit");
                 run.metadata["task_criteria_verified"] = serde_json::json!(false);
-                run.metadata["verification_status"] = serde_json::json!("unverified_external_effects_require_evidence");
+                run.metadata["verification_status"] =
+                    serde_json::json!("unverified_external_effects_require_evidence");
 
                 if let Some(ref outbox) = self.outbox {
                     if let Ok(uncertain) = outbox.list_by_status(OutboxStatus::Uncertain).await {
-                        run.metadata["uncertain_effects_count"] = serde_json::json!(uncertain.len());
+                        run.metadata["uncertain_effects_count"] =
+                            serde_json::json!(uncertain.len());
                     }
                 } else if let Some(count) = run.metadata.get("observed_effect_count") {
                     run.metadata["uncertain_effects_count"] = count.clone();
@@ -798,24 +1024,39 @@ impl TaskRuntime {
             output: output_text,
         };
 
-        if let Some(store)=&self.run_store {store.save_run(&mut run).await?;}
+        if let Some(store) = &self.run_store {
+            store.save_run(&mut run).await?;
+        }
 
         // 5. Evict terminal executions from active maps if durably persisted, otherwise retain
         if run.status.is_terminal() && self.run_store.is_some() {
             self.active_runs.write().await.remove(&run.id);
             self.active_workers.write().await.remove(&wrun.id);
         } else {
-            self.active_runs.write().await.insert(run.id.clone(), run.clone());
+            self.active_runs
+                .write()
+                .await
+                .insert(run.id.clone(), run.clone());
             self.active_workers
                 .write()
                 .await
                 .insert(wrun.id.clone(), wrun);
         }
-        if background { self.persist_live_journal(&cmd, &mut run, handle.output.as_deref().unwrap_or("")).await?; }
+        if background {
+            self.persist_live_journal(&cmd, &mut run, handle.output.as_deref().unwrap_or(""))
+                .await?;
+        }
         let result_err = if handle.status == RunStatus::Suspended {
-            run.metadata.get("pending_approval_reason").and_then(|v| v.as_str()).map(str::to_string)
+            run.metadata
+                .get("pending_approval_reason")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
         } else if handle.status == RunStatus::Failed {
-            run.metadata.get("failure_reason").and_then(|v| v.as_str()).map(str::to_string).or_else(|| Some("Native process failed; see the captured output".into()))
+            run.metadata
+                .get("failure_reason")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| Some("Native process failed; see the captured output".into()))
         } else {
             None
         };
@@ -849,7 +1090,9 @@ impl TaskRuntime {
             if let Ok(Some(entry)) = outbox.get(att_id).await {
                 if let Some(r) = entry.receipt {
                     outbox_receipt = Some(r);
-                } else if entry.status == OutboxStatus::Approved || entry.status == OutboxStatus::Dispatching {
+                } else if entry.status == OutboxStatus::Approved
+                    || entry.status == OutboxStatus::Dispatching
+                {
                     let rcpt = custos_domain::ExecutionReceipt {
                         receipt_id: new_id("rcpt"),
                         permit_id: entry.permit_id.clone(),
@@ -857,9 +1100,14 @@ impl TaskRuntime {
                         status: custos_domain::ReceiptStatus::Success,
                         output_digest: format!(
                             "sha256:{}",
-                            custos_domain::digest(entry.payload_json.as_deref().unwrap_or("").as_bytes())
+                            custos_domain::digest(
+                                entry.payload_json.as_deref().unwrap_or("").as_bytes()
+                            )
                         ),
-                        output_data: entry.payload_json.as_deref().and_then(|p| serde_json::from_str(p).ok()),
+                        output_data: entry
+                            .payload_json
+                            .as_deref()
+                            .and_then(|p| serde_json::from_str(p).ok()),
                         error_message: None,
                         duration_ms: Some(10),
                         executed_at: chrono::Utc::now(),
@@ -872,7 +1120,8 @@ impl TaskRuntime {
         }
 
         if let Some(receipt) = outbox_receipt {
-            run.metadata["approved_action_receipt"] = serde_json::to_value(&receipt).unwrap_or_default();
+            run.metadata["approved_action_receipt"] =
+                serde_json::to_value(&receipt).unwrap_or_default();
             run.metadata["completion_reason"] = serde_json::json!("approval_resumed_and_executed");
             let _ = run.transition(RunStatus::Completed);
             if let Some(ref kernel) = self.kernel {
@@ -881,7 +1130,10 @@ impl TaskRuntime {
             if let Some(ref store) = self.run_store {
                 let _ = store.save_run(&mut run).await;
                 if let Ok(workers) = store.list_worker_runs_for_run(run_id).await {
-                    for mut wrun in workers.into_iter().filter(|w| w.status == RunStatus::Active) {
+                    for mut wrun in workers
+                        .into_iter()
+                        .filter(|w| w.status == RunStatus::Active)
+                    {
                         let _ = wrun.transition(RunStatus::Completed);
                         let _ = store.save_worker_run(&mut wrun).await;
                         self.active_workers.write().await.remove(&wrun.id);
@@ -903,7 +1155,11 @@ impl TaskRuntime {
                     "receipt": receipt,
                 }),
             );
-            self.live.emit(run_id, "status", serde_json::json!({ "status": "completed" }));
+            self.live.emit(
+                run_id,
+                "status",
+                serde_json::json!({ "status": "completed" }),
+            );
         }
     }
 
@@ -1080,12 +1336,18 @@ fn parse_test_counts(output: &str) -> (u32, u32) {
             let tokens: Vec<&str> = lower.split_whitespace().collect();
             for i in 0..tokens.len() {
                 if tokens[i].starts_with("passed") && i > 0 {
-                    if let Ok(n) = tokens[i - 1].trim_matches(|c: char| !c.is_ascii_digit()).parse::<u32>() {
+                    if let Ok(n) = tokens[i - 1]
+                        .trim_matches(|c: char| !c.is_ascii_digit())
+                        .parse::<u32>()
+                    {
                         passed = passed.max(n);
                     }
                 }
                 if tokens[i].starts_with("failed") && i > 0 {
-                    if let Ok(n) = tokens[i - 1].trim_matches(|c: char| !c.is_ascii_digit()).parse::<u32>() {
+                    if let Ok(n) = tokens[i - 1]
+                        .trim_matches(|c: char| !c.is_ascii_digit())
+                        .parse::<u32>()
+                    {
                         failed = failed.max(n);
                     }
                 }
@@ -1094,4 +1356,3 @@ fn parse_test_counts(output: &str) -> (u32, u32) {
     }
     (passed, failed)
 }
-

@@ -25,10 +25,14 @@ pub trait ModelProvider: Send + Sync {
         let resp = self.generate(req).await?;
         let req_id = req.request_id.clone();
         tokio::spawn(async move {
-            let mut event = ProviderEvent::completed(req_id, Some(resp.content), Some(crate::events::TokenUsage {
-                input_tokens: resp.input_tokens,
-                output_tokens: resp.output_tokens,
-            }));
+            let mut event = ProviderEvent::completed(
+                req_id,
+                Some(resp.content),
+                Some(crate::events::TokenUsage {
+                    input_tokens: resp.input_tokens,
+                    output_tokens: resp.output_tokens,
+                }),
+            );
             event.model_id = Some(resp.model_id);
             event.tokens_used = Some(resp.tokens_used);
             let _ = tx.send(event).await;

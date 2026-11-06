@@ -89,23 +89,21 @@ impl DomainPack for QuantPack {
     }
 
     fn tool_declarations(&self) -> Vec<serde_json::Value> {
-        vec![
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "run_backtest",
-                    "description": "Execute deterministic backtest simulation against tick/candle datasets",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "strategy_id": { "type": "string", "description": "Strategy identifier" },
-                            "start_date": { "type": "string", "description": "ISO date YYYY-MM-DD" },
-                            "end_date": { "type": "string", "description": "ISO date YYYY-MM-DD" }
-                        },
-                        "required": ["strategy_id", "start_date", "end_date"]
-                    }
+        vec![serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "run_backtest",
+                "description": "Execute deterministic backtest simulation against tick/candle datasets",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "strategy_id": { "type": "string", "description": "Strategy identifier" },
+                        "start_date": { "type": "string", "description": "ISO date YYYY-MM-DD" },
+                        "end_date": { "type": "string", "description": "ISO date YYYY-MM-DD" }
+                    },
+                    "required": ["strategy_id", "start_date", "end_date"]
                 }
-            }),
-        ]
+            }
+        })]
     }
 }

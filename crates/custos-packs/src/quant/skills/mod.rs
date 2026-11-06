@@ -92,8 +92,16 @@ impl Skill for QuantDsrCalculateSkill {
             .and_then(|v| v.as_u64())
             .unwrap_or(252) as usize;
 
-        let skewness = ctx.args.get("skewness").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let kurtosis = ctx.args.get("kurtosis").and_then(|v| v.as_f64()).unwrap_or(3.0);
+        let skewness = ctx
+            .args
+            .get("skewness")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let kurtosis = ctx
+            .args
+            .get("kurtosis")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(3.0);
         let variance = ctx
             .args
             .get("variance_of_trials")

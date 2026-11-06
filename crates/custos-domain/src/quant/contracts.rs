@@ -59,10 +59,14 @@ impl OrderIntent {
             return Err(DomainError::Validation("Symbol cannot be empty".into()));
         }
         if quantity <= 0.0 {
-            return Err(DomainError::Validation("Order quantity must be positive".into()));
+            return Err(DomainError::Validation(
+                "Order quantity must be positive".into(),
+            ));
         }
         if client_order_id.trim().is_empty() {
-            return Err(DomainError::Validation("Client order ID cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Client order ID cannot be empty".into(),
+            ));
         }
 
         Ok(Self {
@@ -80,7 +84,9 @@ impl OrderIntent {
 
     pub fn with_limit_price(mut self, price: f64) -> Result<Self, DomainError> {
         if price <= 0.0 {
-            return Err(DomainError::Validation("Limit price must be positive".into()));
+            return Err(DomainError::Validation(
+                "Limit price must be positive".into(),
+            ));
         }
         self.price = Some(price);
         Ok(self)
@@ -109,7 +115,8 @@ pub struct FillSnapshot {
 
 impl FillSnapshot {
     pub fn is_complete(&self, requested_qty: f64) -> bool {
-        self.status == ExecutionStatus::Filled || (self.filled_qty >= requested_qty * 0.999999 && requested_qty > 0.0)
+        self.status == ExecutionStatus::Filled
+            || (self.filled_qty >= requested_qty * 0.999999 && requested_qty > 0.0)
     }
 }
 
@@ -128,7 +135,12 @@ pub trait ExchangeOrderAdapter: Send + Sync {
     fn place_market_order(&self, intent: &OrderIntent) -> Result<FillSnapshot, DomainError>;
     fn place_limit_order(&self, intent: &OrderIntent) -> Result<FillSnapshot, DomainError>;
     fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<(), DomainError>;
-    fn wait_for_fill(&self, intent: &OrderIntent, order_id: &str, timeout_ms: u64) -> Result<FillSnapshot, DomainError>;
+    fn wait_for_fill(
+        &self,
+        intent: &OrderIntent,
+        order_id: &str,
+        timeout_ms: u64,
+    ) -> Result<FillSnapshot, DomainError>;
     fn query_position(&self, symbol: &str) -> Result<Option<PositionSnapshot>, DomainError>;
 }
 
@@ -164,7 +176,9 @@ impl OrderExecutionStrategy for RestingLimitExecutor {
         intent: &OrderIntent,
     ) -> Result<FillSnapshot, DomainError> {
         if intent.price.is_none() || intent.price.unwrap_or(0.0) <= 0.0 {
-            return Err(DomainError::Validation("Limit order requires positive price".into()));
+            return Err(DomainError::Validation(
+                "Limit order requires positive price".into(),
+            ));
         }
         adapter.place_limit_order(intent)
     }
@@ -289,7 +303,12 @@ mod tests {
             Ok(())
         }
 
-        fn wait_for_fill(&self, intent: &OrderIntent, _order_id: &str, _timeout: u64) -> Result<FillSnapshot, DomainError> {
+        fn wait_for_fill(
+            &self,
+            intent: &OrderIntent,
+            _order_id: &str,
+            _timeout: u64,
+        ) -> Result<FillSnapshot, DomainError> {
             let status = if self.mock_limit_fill_qty >= intent.quantity {
                 ExecutionStatus::Filled
             } else if self.mock_limit_fill_qty > 0.0 {

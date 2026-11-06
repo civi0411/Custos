@@ -84,4 +84,3 @@ pub trait SandboxPort: Send + Sync {
         permit: &Permit,
     ) -> Result<ExecutionReceipt, DomainError>;
 }
-

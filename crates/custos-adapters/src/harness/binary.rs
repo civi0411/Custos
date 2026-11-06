@@ -15,12 +15,7 @@ pub fn resolve_binary_path(binary_name: &str) -> Option<PathBuf> {
         if let Ok(path) = which::which(bin) {
             return Some(path);
         }
-        let candidates = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-        ];
+        let candidates = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"];
         for dir in candidates {
             let candidate = Path::new(dir).join(bin);
             if candidate.exists() {
@@ -81,5 +76,7 @@ pub fn resolve_binary_path(binary_name: &str) -> Option<PathBuf> {
 }
 
 pub fn probe_binary_available(binary_name: &str) -> bool {
-    binary_name == "internal" || binary_name.is_empty() || resolve_binary_path(binary_name).is_some()
+    binary_name == "internal"
+        || binary_name.is_empty()
+        || resolve_binary_path(binary_name).is_some()
 }

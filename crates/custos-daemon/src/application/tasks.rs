@@ -6,22 +6,52 @@ impl LocalApiDispatcher {
     pub(crate) async fn handle_tasks(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.tasks.create" => {
-                crate::api::tasks::TaskApiHandler::create_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::create_task(
+                    &self.task_service,
+                    &req.id,
+                    req.params,
+                )
+                .await
             }
             "v1.tasks.get" => {
-                crate::api::tasks::TaskApiHandler::get_task(&self.task_service, &req.id, &req.params).await
+                crate::api::tasks::TaskApiHandler::get_task(
+                    &self.task_service,
+                    &req.id,
+                    &req.params,
+                )
+                .await
             }
             "v1.tasks.cancel" => {
-                crate::api::tasks::TaskApiHandler::cancel_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::cancel_task(
+                    &self.task_service,
+                    &req.id,
+                    req.params,
+                )
+                .await
             }
             "v1.tasks.advance" => {
-                crate::api::tasks::TaskApiHandler::advance_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::advance_task(
+                    &self.task_service,
+                    &req.id,
+                    req.params,
+                )
+                .await
             }
             "v1.tasks.complete" => {
-                crate::api::tasks::TaskApiHandler::complete_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::complete_task(
+                    &self.task_service,
+                    &req.id,
+                    req.params,
+                )
+                .await
             }
             "v1.tasks.list" => {
-                crate::api::tasks::TaskApiHandler::list_tasks(&self.task_service, &req.id, &req.params).await
+                crate::api::tasks::TaskApiHandler::list_tasks(
+                    &self.task_service,
+                    &req.id,
+                    &req.params,
+                )
+                .await
             }
             "v1.tasks.spans" => {
                 let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
@@ -166,9 +196,9 @@ impl LocalApiDispatcher {
                                 format!("Admission gate refused privileged actor override '{trimmed}': caller cannot claim system/kernel authority over Local API transport"),
                             );
                         } else if trimmed.len() > 128
-                            || !trimmed
-                                .chars()
-                                .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '@' || c == '.')
+                            || !trimmed.chars().all(|c| {
+                                c.is_alphanumeric() || c == '_' || c == '-' || c == '@' || c == '.'
+                            })
                         {
                             return ApiResponse::error(
                                 req.id,

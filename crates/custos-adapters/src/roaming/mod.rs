@@ -22,7 +22,6 @@
 //! is driven through the [`AcpStreamServer`] trait, which the integration layer
 //! implements. This keeps the heavy iroh dependency modularized.
 
-pub mod peer_dispatch;
 mod card;
 mod directory;
 mod error;
@@ -30,15 +29,16 @@ mod frame;
 mod handshake;
 mod identity;
 mod node;
+pub mod peer_dispatch;
 mod peerbook;
 mod relay;
 mod trust;
 
 pub use card::ConnectionCard;
-pub use peer_dispatch::*;
 pub use directory::{Direction, Directory, PeerEntry};
 #[doc(inline)]
 pub use iroh::EndpointId;
+pub use peer_dispatch::*;
 
 /// Parse an [`EndpointId`] (a peer's public key) from its string form.
 pub fn parse_endpoint_id(s: &str) -> Result<EndpointId, RoamingError> {

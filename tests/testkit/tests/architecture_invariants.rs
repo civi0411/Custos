@@ -143,4 +143,3 @@ fn test_core_owns_skill_contract() {
         "custos-core must define pub struct SkillRegistry"
     );
 }
-

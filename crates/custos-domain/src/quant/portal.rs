@@ -3,9 +3,9 @@
 //! Provides strict lookahead-free market data slicing, closed-bar invariant enforcement,
 //! and high-performance in-memory slice inspection for algorithmic strategies in Rust.
 
-use serde::{Deserialize, Serialize};
 use super::engine::OhlcvBar;
 use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 /// Standard market bar timeframes with deterministic duration semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -49,7 +49,9 @@ impl BarTimeframe {
             "4h" | "hour4" => Ok(Self::Hour4),
             "1d" | "day1" => Ok(Self::Day1),
             "1w" | "week1" => Ok(Self::Week1),
-            other => Err(DomainError::Validation(format!("Unsupported timeframe: {other}"))),
+            other => Err(DomainError::Validation(format!(
+                "Unsupported timeframe: {other}"
+            ))),
         }
     }
 
@@ -87,7 +89,8 @@ impl<'a> NativeDataPortal<'a> {
         for window in bars.windows(2) {
             if window[0].timestamp > window[1].timestamp {
                 return Err(DomainError::Validation(
-                    "Market bars slice must be sorted in strictly ascending chronological order".to_string(),
+                    "Market bars slice must be sorted in strictly ascending chronological order"
+                        .to_string(),
                 ));
             }
         }
@@ -102,7 +105,9 @@ impl<'a> NativeDataPortal<'a> {
         // A bar is closed only if bar.timestamp + duration <= reference_ts
         // Which is equivalent to bar.timestamp <= reference_ts - duration
         let max_open_ts = reference_ts.saturating_sub(duration);
-        let idx = self.bars.partition_point(|bar| bar.timestamp <= max_open_ts);
+        let idx = self
+            .bars
+            .partition_point(|bar| bar.timestamp <= max_open_ts);
         &self.bars[..idx]
     }
 
@@ -190,20 +195,44 @@ impl<'a> NativeDataPortal<'a> {
     }
 
     /// Calculate Bollinger Bands on the visible closed slice.
-    pub fn calculate_bollinger_bands(&self, reference_ts: i64, period: usize, std_mult: f64) -> Option<BollingerBandsResult> {
+    pub fn calculate_bollinger_bands(
+        &self,
+        reference_ts: i64,
+        period: usize,
+        std_mult: f64,
+    ) -> Option<BollingerBandsResult> {
         let middle = self.calculate_sma(reference_ts, period)?;
         let window = self.history_window(reference_ts, period);
-        let variance: f64 = window.iter().map(|b| (b.close - middle).powi(2)).sum::<f64>() / period as f64;
+        let variance: f64 = window
+            .iter()
+            .map(|b| (b.close - middle).powi(2))
+            .sum::<f64>()
+            / period as f64;
         let std_dev = variance.sqrt();
         let upper = middle + std_mult * std_dev;
         let lower = middle - std_mult * std_dev;
-        let bandwidth = if middle != 0.0 { (upper - lower) / middle } else { 0.0 };
+        let bandwidth = if middle != 0.0 {
+            (upper - lower) / middle
+        } else {
+            0.0
+        };
 
-        Some(BollingerBandsResult { middle, upper, lower, bandwidth })
+        Some(BollingerBandsResult {
+            middle,
+            upper,
+            lower,
+            bandwidth,
+        })
     }
 
     /// Calculate MACD (Moving Average Convergence Divergence) on the visible closed slice.
-    pub fn calculate_macd(&self, reference_ts: i64, fast_period: usize, slow_period: usize, signal_period: usize) -> Option<MacdResult> {
+    pub fn calculate_macd(
+        &self,
+        reference_ts: i64,
+        fast_period: usize,
+        slow_period: usize,
+        signal_period: usize,
+    ) -> Option<MacdResult> {
         if fast_period >= slow_period || signal_period == 0 {
             return None;
         }
@@ -211,15 +240,27 @@ impl<'a> NativeDataPortal<'a> {
         let slow_ema = self.calculate_ema(reference_ts, slow_period)?;
         let macd = fast_ema - slow_ema;
 
-        let prev_fast = self.history_window(reference_ts, 2).first().and_then(|b| self.calculate_ema(b.timestamp, fast_period)).unwrap_or(fast_ema);
-        let prev_slow = self.history_window(reference_ts, 2).first().and_then(|b| self.calculate_ema(b.timestamp, slow_period)).unwrap_or(slow_ema);
+        let prev_fast = self
+            .history_window(reference_ts, 2)
+            .first()
+            .and_then(|b| self.calculate_ema(b.timestamp, fast_period))
+            .unwrap_or(fast_ema);
+        let prev_slow = self
+            .history_window(reference_ts, 2)
+            .first()
+            .and_then(|b| self.calculate_ema(b.timestamp, slow_period))
+            .unwrap_or(slow_ema);
         let prev_macd = prev_fast - prev_slow;
 
         let alpha_sig = 2.0 / (signal_period as f64 + 1.0);
         let signal = alpha_sig * macd + (1.0 - alpha_sig) * prev_macd;
         let histogram = macd - signal;
 
-        Some(MacdResult { macd, signal, histogram })
+        Some(MacdResult {
+            macd,
+            signal,
+            histogram,
+        })
     }
 
     /// Calculate Average True Range (ATR) for volatility and risk-adjusted position sizing.
@@ -284,4 +325,3 @@ pub struct MacdResult {
     pub signal: f64,
     pub histogram: f64,
 }
-

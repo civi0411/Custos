@@ -5,13 +5,13 @@
 //! This eliminates write lock contention, guarantees high throughput, and preserves
 //! the Single Sovereign Writer WAL architecture of Custos.
 
+use crate::connection::DbConnection;
+use custos_domain::{DomainError, OhlcvBar};
+use rusqlite::params;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use custos_domain::{DomainError, OhlcvBar};
-use rusqlite::params;
 use tokio::sync::mpsc;
-use crate::connection::DbConnection;
 
 /// Canonical items that can be micro-batched into the database.
 #[derive(Debug, Clone)]
@@ -61,7 +61,9 @@ pub struct BatchWriterHandle {
 impl BatchWriterHandle {
     /// Submit a write item asynchronously with backpressure.
     pub async fn submit(&self, item: BatchWriteItem) -> Result<(), DomainError> {
-        self.stats.total_items_queued.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .total_items_queued
+            .fetch_add(1, Ordering::Relaxed);
         self.sender
             .send(item)
             .await
@@ -70,7 +72,9 @@ impl BatchWriterHandle {
 
     /// Try submitting a write item without waiting. Fails if the channel is full.
     pub fn try_submit(&self, item: BatchWriteItem) -> Result<(), DomainError> {
-        self.stats.total_items_queued.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .total_items_queued
+            .fetch_add(1, Ordering::Relaxed);
         self.sender
             .try_send(item)
             .map_err(|e| DomainError::Validation(format!("Batch write buffer full: {}", e)))
@@ -167,41 +171,65 @@ fn flush_buffer(db: &DbConnection, buffer: &mut Vec<BatchWriteItem>, stats: &Bat
 
             for item in buffer.drain(..) {
                 match item {
-                    BatchWriteItem::MarketBars { symbol, timeframe, bars } => {
+                    BatchWriteItem::MarketBars {
+                        symbol,
+                        timeframe,
+                        bars,
+                    } => {
                         for bar in bars {
-                            bar_stmt.execute(params![
-                                symbol,
-                                timeframe,
-                                bar.timestamp,
-                                bar.open,
-                                bar.high,
-                                bar.low,
-                                bar.close,
-                                bar.volume,
-                            ]).map_err(|e| DomainError::Validation(e.to_string()))?;
+                            bar_stmt
+                                .execute(params![
+                                    symbol,
+                                    timeframe,
+                                    bar.timestamp,
+                                    bar.open,
+                                    bar.high,
+                                    bar.low,
+                                    bar.close,
+                                    bar.volume,
+                                ])
+                                .map_err(|e| DomainError::Validation(e.to_string()))?;
                             total_records += 1;
                         }
                     }
-                    BatchWriteItem::CommandLedger { command_id, method, payload_digest, result_json, created_at, expires_at } => {
-                        cmd_stmt.execute(params![
-                            command_id,
-                            method,
-                            payload_digest,
-                            result_json,
-                            created_at,
-                            expires_at,
-                        ]).map_err(|e| DomainError::Validation(e.to_string()))?;
+                    BatchWriteItem::CommandLedger {
+                        command_id,
+                        method,
+                        payload_digest,
+                        result_json,
+                        created_at,
+                        expires_at,
+                    } => {
+                        cmd_stmt
+                            .execute(params![
+                                command_id,
+                                method,
+                                payload_digest,
+                                result_json,
+                                created_at,
+                                expires_at,
+                            ])
+                            .map_err(|e| DomainError::Validation(e.to_string()))?;
                         total_records += 1;
                     }
-                    BatchWriteItem::ResearchSource { source_id, source_type, title, authors_json, content_hash, created_at } => {
-                        source_stmt.execute(params![
-                            source_id,
-                            source_type,
-                            title,
-                            authors_json,
-                            content_hash,
-                            created_at,
-                        ]).map_err(|e| DomainError::Validation(e.to_string()))?;
+                    BatchWriteItem::ResearchSource {
+                        source_id,
+                        source_type,
+                        title,
+                        authors_json,
+                        content_hash,
+                        created_at,
+                    } => {
+                        source_stmt
+                            .execute(params![
+                                source_id,
+                                source_type,
+                                title,
+                                authors_json,
+                                content_hash,
+                                created_at,
+                            ])
+                            .map_err(|e| DomainError::Validation(e.to_string()))?;
                         total_records += 1;
                     }
                 }
@@ -214,10 +242,15 @@ fn flush_buffer(db: &DbConnection, buffer: &mut Vec<BatchWriteItem>, stats: &Bat
     })();
 
     if let Err(e) = res {
-        eprintln!("[BatchWriter] Flush failure ({} items dropped): {}", batch_count, e);
+        eprintln!(
+            "[BatchWriter] Flush failure ({} items dropped): {}",
+            batch_count, e
+        );
     } else {
         stats.batches_committed.fetch_add(1, Ordering::Relaxed);
-        stats.total_items_written.fetch_add(total_records, Ordering::Relaxed);
+        stats
+            .total_items_written
+            .fetch_add(total_records, Ordering::Relaxed);
         let now_ms = chrono::Utc::now().timestamp_millis() as u64;
         stats.last_flush_epoch_ms.store(now_ms, Ordering::Relaxed);
     }

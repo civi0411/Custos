@@ -11,14 +11,18 @@
 
 use custos_core::contracts::checkpoint_store::PromotionOutcome;
 use custos_domain::{
-    new_id, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, DomainError, ExecEvent,
-    ExecState, ExecutionAttempt, ExternalJobRef, Invocation, InvocationOutcome, ResourceState,
-    TrainingCheckpointManifest,
+    new_id, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, DomainError,
+    ExecEvent, ExecState, ExecutionAttempt, ExternalJobRef, Invocation, InvocationOutcome,
+    ResourceState, TrainingCheckpointManifest,
 };
 use custos_persistence::SqliteTaskStore;
 use std::sync::Arc;
 
-fn make_valid_manifest(checkpoint_id: &str, step: u64, storage_uri: &str) -> TrainingCheckpointManifest {
+fn make_valid_manifest(
+    checkpoint_id: &str,
+    step: u64,
+    storage_uri: &str,
+) -> TrainingCheckpointManifest {
     let dummy_digest = "a".repeat(64);
     let mut manifest = TrainingCheckpointManifest::new(
         checkpoint_id,
@@ -67,15 +71,16 @@ fn test_g11_normal_path_checkpoint_continuity_and_cross_target_lineage() {
     );
     attempt1.generation = 1;
     attempt1.external_ref = Some(
-        ExternalJobRef::new("runpod_acc_01", "pod_job_9981", "v1.2.0")
-            .expect("Valid external ref"),
+        ExternalJobRef::new("runpod_acc_01", "pod_job_9981", "v1.2.0").expect("Valid external ref"),
     );
 
     // Apply lifecycle events: Planned -> Preflighted -> Submitting -> Submitted -> Running
     attempt1.apply(ExecEvent::PreflightOk).unwrap();
     attempt1.apply(ExecEvent::SubmitStarted).unwrap();
     attempt1
-        .apply(ExecEvent::SubmitAcked(attempt1.external_ref.clone().unwrap()))
+        .apply(ExecEvent::SubmitAcked(
+            attempt1.external_ref.clone().unwrap(),
+        ))
         .unwrap();
     attempt1.apply(ExecEvent::ObservedRunning).unwrap();
     assert_eq!(attempt1.exec_state, ExecState::Running);
@@ -97,7 +102,9 @@ fn test_g11_normal_path_checkpoint_continuity_and_cross_target_lineage() {
         .unwrap();
     assert_eq!(
         promo1,
-        PromotionOutcome::Promoted { canonical_step: 100 },
+        PromotionOutcome::Promoted {
+            canonical_step: 100
+        },
         "Generation 1 checkpoint promotion must succeed"
     );
 
@@ -123,7 +130,9 @@ fn test_g11_normal_path_checkpoint_continuity_and_cross_target_lineage() {
     attempt2.apply(ExecEvent::PreflightOk).unwrap();
     attempt2.apply(ExecEvent::SubmitStarted).unwrap();
     attempt2
-        .apply(ExecEvent::SubmitAcked(attempt2.external_ref.clone().unwrap()))
+        .apply(ExecEvent::SubmitAcked(
+            attempt2.external_ref.clone().unwrap(),
+        ))
         .unwrap();
     attempt2.apply(ExecEvent::ObservedRunning).unwrap();
     store.experiment_attempts().save_attempt(&attempt2).unwrap();
@@ -145,7 +154,9 @@ fn test_g11_normal_path_checkpoint_continuity_and_cross_target_lineage() {
         .unwrap();
     assert_eq!(
         promo2,
-        PromotionOutcome::Promoted { canonical_step: 200 },
+        PromotionOutcome::Promoted {
+            canonical_step: 200
+        },
         "Generation 2 checkpoint promotion must succeed"
     );
 
@@ -178,12 +189,8 @@ fn test_g11_target_death_crash_recovery_and_zombie_writer_fencing() {
     let recipe_id = "recipe_lora_finetune";
 
     // 1. Attempt 1 is Running on Remote Pod at Generation 1
-    let mut attempt1 = ExecutionAttempt::new(
-        experiment_id,
-        recipe_id,
-        ComputeBackendKind::RunPod,
-        None,
-    );
+    let mut attempt1 =
+        ExecutionAttempt::new(experiment_id, recipe_id, ComputeBackendKind::RunPod, None);
     attempt1.generation = 1;
     attempt1.exec_state = ExecState::Running;
     attempt1.resource_state = ResourceState::ReleaseRequested;
@@ -217,12 +224,8 @@ fn test_g11_target_death_crash_recovery_and_zombie_writer_fencing() {
     );
 
     // 3. New Attempt 2 is launched at Generation 2 to take over
-    let attempt2 = ExecutionAttempt::new(
-        experiment_id,
-        recipe_id,
-        ComputeBackendKind::VastAi,
-        None,
-    );
+    let attempt2 =
+        ExecutionAttempt::new(experiment_id, recipe_id, ComputeBackendKind::VastAi, None);
     store.experiment_attempts().save_attempt(&attempt2).unwrap();
 
     // Attempt 2 completes and promotes checkpoint at Generation 2
@@ -232,7 +235,9 @@ fn test_g11_target_death_crash_recovery_and_zombie_writer_fencing() {
         .unwrap();
     assert_eq!(
         promo_att2,
-        PromotionOutcome::Promoted { canonical_step: 150 }
+        PromotionOutcome::Promoted {
+            canonical_step: 150
+        }
     );
 
     // 4. ZOMBIE WRITER FENCING (G11 Invariant):
@@ -244,7 +249,9 @@ fn test_g11_target_death_crash_recovery_and_zombie_writer_fencing() {
 
     assert_eq!(
         stale_promo,
-        PromotionOutcome::StaleGeneration { actual_generation: 2 },
+        PromotionOutcome::StaleGeneration {
+            actual_generation: 2
+        },
         "Stale writer promotion must be fenced and rejected with StaleGeneration"
     );
 }
@@ -383,12 +390,8 @@ fn test_g11_incomplete_or_uncommitted_checkpoint_blocks_unsafe_resume() {
 fn test_g11_idempotent_invocation_recording_fences_duplicate_ops() {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
 
-    let attempt = ExecutionAttempt::new(
-        "exp_idemp",
-        "recipe_sft",
-        ComputeBackendKind::RunPod,
-        None,
-    );
+    let attempt =
+        ExecutionAttempt::new("exp_idemp", "recipe_sft", ComputeBackendKind::RunPod, None);
     store.experiment_attempts().save_attempt(&attempt).unwrap();
 
     let inv = Invocation {

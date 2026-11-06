@@ -3,9 +3,9 @@
 //! Provides typed, zero-copy broadcast distribution of domain pipeline events
 //! across the 4 Custos workbenches (Quant, Engineering, Research, Copilot).
 
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::broadcast;
 
@@ -76,7 +76,6 @@ impl PipelineEvent {
         }
     }
 }
-
 
 /// Thread-safe in-process broadcast event bus for sovereign pipeline notifications
 #[derive(Debug, Clone)]

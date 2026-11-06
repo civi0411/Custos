@@ -38,7 +38,12 @@ impl ProcessOutput {
         }
         let total_chars = self.stderr.chars().count();
         let skip_chars = total_chars.saturating_sub(n);
-        let byte_offset = self.stderr.char_indices().nth(skip_chars).map(|(idx, _)| idx).unwrap_or(self.stderr.len());
+        let byte_offset = self
+            .stderr
+            .char_indices()
+            .nth(skip_chars)
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.stderr.len());
         &self.stderr[byte_offset..]
     }
 
@@ -50,7 +55,12 @@ impl ProcessOutput {
         }
         let total_chars = self.stdout.chars().count();
         let skip_chars = total_chars.saturating_sub(n);
-        let byte_offset = self.stdout.char_indices().nth(skip_chars).map(|(idx, _)| idx).unwrap_or(self.stdout.len());
+        let byte_offset = self
+            .stdout
+            .char_indices()
+            .nth(skip_chars)
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.stdout.len());
         &self.stdout[byte_offset..]
     }
 

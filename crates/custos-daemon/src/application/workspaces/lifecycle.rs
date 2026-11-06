@@ -5,10 +5,7 @@ use custos_domain::WorkspaceId;
 use custos_runtime::workspace::CreateWorkspaceRequest;
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_workspaces_lifecycle(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_workspaces_lifecycle(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_WORKSPACES_CREATE => {
                 let coordinator = match self.workspace.as_ref() {

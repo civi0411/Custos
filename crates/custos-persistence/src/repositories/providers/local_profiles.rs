@@ -82,11 +82,8 @@ impl ProviderRepository {
 
     pub fn delete_local_folder(&self, id: &str) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        conn.execute(
-            "DELETE FROM local_model_folders WHERE id = ?1",
-            params![id],
-        )
-        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        conn.execute("DELETE FROM local_model_folders WHERE id = ?1", params![id])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 

@@ -106,7 +106,9 @@ impl CommandLedgerRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
         if changed != 1 {
-            return Err(DomainError::Conflict(format!("Command '{command_id}' is not pending")));
+            return Err(DomainError::Conflict(format!(
+                "Command '{command_id}' is not pending"
+            )));
         }
         Ok(())
     }
@@ -121,10 +123,15 @@ impl CommandLedgerRepository {
         Ok(())
     }
 
-    pub fn reconcile_orphaned_inflight_commands(&self, max_age_hours: u32) -> Result<usize, DomainError> {
+    pub fn reconcile_orphaned_inflight_commands(
+        &self,
+        max_age_hours: u32,
+    ) -> Result<usize, DomainError> {
         let conn = self.db.lock()?;
-        let cutoff_dt = (chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64)).to_rfc3339();
-        let cutoff_ms = chrono::Utc::now().timestamp_millis() - (max_age_hours as i64 * 3600 * 1000);
+        let cutoff_dt =
+            (chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64)).to_rfc3339();
+        let cutoff_ms =
+            chrono::Utc::now().timestamp_millis() - (max_age_hours as i64 * 3600 * 1000);
         let deleted = conn.execute(
             "DELETE FROM command_ledger WHERE state = 'pending' AND ((expires_at_ms IS NOT NULL AND expires_at_ms <= ?1) OR created_at <= ?2)",
             params![cutoff_ms, cutoff_dt],
@@ -133,7 +140,10 @@ impl CommandLedgerRepository {
         Ok(deleted)
     }
 
-    fn read_command(conn: &Connection, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError> {
+    fn read_command(
+        conn: &Connection,
+        command_id: &str,
+    ) -> Result<Option<CommandLedgerEntry>, DomainError> {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let mut stmt = conn
             .prepare(
@@ -154,11 +164,23 @@ impl CommandLedgerRepository {
 
                 let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e)))?;
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            4,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?;
 
                 let expires_at = chrono::DateTime::parse_from_rfc3339(&expires_at_str)
                     .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(e)))?;
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            5,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?;
 
                 Ok(CommandLedgerEntry {
                     command_id: cid,
@@ -257,15 +279,35 @@ mod tests {
         let ttl = 60_000i64; // 60s
 
         // 1. Admit new command
-        let res = repo.admit("cmd-1", "v1.tasks.create", "hash-a", Some("task"), t0, ttl).unwrap();
+        let res = repo
+            .admit("cmd-1", "v1.tasks.create", "hash-a", Some("task"), t0, ttl)
+            .unwrap();
         assert_eq!(res, CommandAdmission::New);
 
         // 2. Re-admit identical while in-flight -> InFlight
-        let res2 = repo.admit("cmd-1", "v1.tasks.create", "hash-a", Some("task"), t0 + 1000, ttl).unwrap();
+        let res2 = repo
+            .admit(
+                "cmd-1",
+                "v1.tasks.create",
+                "hash-a",
+                Some("task"),
+                t0 + 1000,
+                ttl,
+            )
+            .unwrap();
         assert_eq!(res2, CommandAdmission::InFlight);
 
         // 3. Re-admit with conflicting payload or method -> Conflict
-        let res_conf = repo.admit("cmd-1", "v1.tasks.create", "hash-diff", None, t0 + 2000, ttl).unwrap();
+        let res_conf = repo
+            .admit(
+                "cmd-1",
+                "v1.tasks.create",
+                "hash-diff",
+                None,
+                t0 + 2000,
+                ttl,
+            )
+            .unwrap();
         match res_conf {
             CommandAdmission::Conflict(_) => {}
             other => panic!("Expected Conflict, got {:?}", other),
@@ -273,22 +315,40 @@ mod tests {
 
         // 4. Complete command -> subsequent admit returns Replay
         repo.complete("cmd-1", r#"{"task_id":"task-xyz"}"#).unwrap();
-        let res_replay = repo.admit("cmd-1", "v1.tasks.create", "hash-a", None, t0 + 3000, ttl).unwrap();
-        assert_eq!(res_replay, CommandAdmission::Replay(r#"{"task_id":"task-xyz"}"#.to_string()));
+        let res_replay = repo
+            .admit("cmd-1", "v1.tasks.create", "hash-a", None, t0 + 3000, ttl)
+            .unwrap();
+        assert_eq!(
+            res_replay,
+            CommandAdmission::Replay(r#"{"task_id":"task-xyz"}"#.to_string())
+        );
 
         // 5. Expiration check
-        let res_expired = repo.admit("cmd-1", "v1.tasks.create", "hash-a", None, t0 + ttl + 1, ttl).unwrap();
+        let res_expired = repo
+            .admit(
+                "cmd-1",
+                "v1.tasks.create",
+                "hash-a",
+                None,
+                t0 + ttl + 1,
+                ttl,
+            )
+            .unwrap();
         match res_expired {
             CommandAdmission::Conflict(msg) => assert!(msg.contains("expired")),
             other => panic!("Expected Conflict with expired msg, got {:?}", other),
         }
 
         // 6. Abandon lifecycle
-        let res_abandon = repo.admit("cmd-2", "v1.tasks.cancel", "hash-b", None, t0, ttl).unwrap();
+        let res_abandon = repo
+            .admit("cmd-2", "v1.tasks.cancel", "hash-b", None, t0, ttl)
+            .unwrap();
         assert_eq!(res_abandon, CommandAdmission::New);
         repo.abandon("cmd-2").unwrap();
         // After abandon, cmd-2 can be admitted again as New
-        let res_re_admit = repo.admit("cmd-2", "v1.tasks.cancel", "hash-b", None, t0 + 500, ttl).unwrap();
+        let res_re_admit = repo
+            .admit("cmd-2", "v1.tasks.cancel", "hash-b", None, t0 + 500, ttl)
+            .unwrap();
         assert_eq!(res_re_admit, CommandAdmission::New);
     }
 
@@ -300,13 +360,22 @@ mod tests {
         let t0 = 1_700_000_000_000i64;
         let ttl = 60_000i64;
 
-        repo.admit("cmd-orphaned", "v1.tasks.create", "hash-o", None, t0, ttl).unwrap();
+        repo.admit("cmd-orphaned", "v1.tasks.create", "hash-o", None, t0, ttl)
+            .unwrap();
 
         let reconciled = repo.reconcile_orphaned_inflight_commands(0).unwrap();
         assert_eq!(reconciled, 1);
 
-        let res = repo.admit("cmd-orphaned", "v1.tasks.create", "hash-o", None, t0 + 1000, ttl).unwrap();
+        let res = repo
+            .admit(
+                "cmd-orphaned",
+                "v1.tasks.create",
+                "hash-o",
+                None,
+                t0 + 1000,
+                ttl,
+            )
+            .unwrap();
         assert_eq!(res, CommandAdmission::New);
     }
 }
-

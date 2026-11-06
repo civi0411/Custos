@@ -313,7 +313,9 @@ impl OutboxPort for OutboxRepository {
             params![id],
         ).map_err(|e| DomainError::Validation(e.to_string()))?;
         if rows != 1 {
-            return Err(DomainError::Conflict(format!("Outbox entry '{id}' is not pending approval")));
+            return Err(DomainError::Conflict(format!(
+                "Outbox entry '{id}' is not pending approval"
+            )));
         }
         Ok(())
     }
@@ -602,7 +604,10 @@ mod tests {
 
         assert!(repo.mark_dispatching(entry_id).await.is_err());
         repo.mark_approved(entry_id).await.unwrap();
-        assert_eq!(repo.get(entry_id).await.unwrap().unwrap().status, OutboxStatus::Approved);
+        assert_eq!(
+            repo.get(entry_id).await.unwrap().unwrap().status,
+            OutboxStatus::Approved
+        );
         assert!(repo.mark_approved(entry_id).await.is_err());
         // 1. Approved -> Dispatching CAS succeeds
         repo.mark_dispatching(entry_id)
@@ -674,17 +679,36 @@ mod tests {
         repo.enqueue(entry).await.expect("enqueue succeeds");
 
         // Test get
-        let retrieved = repo.get(entry_id).await.expect("get succeeds").expect("entry found");
-        assert_eq!(retrieved.recipient.as_deref(), Some("mcp://test-server/tool"));
-        assert_eq!(retrieved.payload_json.as_deref(), Some("{\"param\":\"val\"}"));
+        let retrieved = repo
+            .get(entry_id)
+            .await
+            .expect("get succeeds")
+            .expect("entry found");
+        assert_eq!(
+            retrieved.recipient.as_deref(),
+            Some("mcp://test-server/tool")
+        );
+        assert_eq!(
+            retrieved.payload_json.as_deref(),
+            Some("{\"param\":\"val\"}")
+        );
         assert_eq!(retrieved.status, OutboxStatus::Pending);
 
         // Mark failed
-        repo.mark_failed(entry_id, "connection timeout").await.expect("mark_failed succeeds");
+        repo.mark_failed(entry_id, "connection timeout")
+            .await
+            .expect("mark_failed succeeds");
 
-        let failed_entry = repo.get(entry_id).await.expect("get succeeds").expect("entry found");
+        let failed_entry = repo
+            .get(entry_id)
+            .await
+            .expect("get succeeds")
+            .expect("entry found");
         assert_eq!(failed_entry.status, OutboxStatus::Failed);
-        assert_eq!(failed_entry.error_message.as_deref(), Some("connection timeout"));
+        assert_eq!(
+            failed_entry.error_message.as_deref(),
+            Some("connection timeout")
+        );
     }
 
     #[tokio::test]
@@ -705,6 +729,9 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(dispatching_count, 0, "No entries may remain dispatching without approval");
+        assert_eq!(
+            dispatching_count, 0,
+            "No entries may remain dispatching without approval"
+        );
     }
 }

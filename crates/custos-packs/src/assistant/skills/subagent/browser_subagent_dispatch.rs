@@ -130,7 +130,10 @@ mod tests {
         let output = res.result;
         assert_eq!(output["status"], "plan_constructed");
         let plan = &output["plan"];
-        assert_eq!(plan["objective"], "Verify user can log in and view dashboard");
+        assert_eq!(
+            plan["objective"],
+            "Verify user can log in and view dashboard"
+        );
         assert_eq!(plan["target_url"], "http://localhost:5173/login");
     }
 }

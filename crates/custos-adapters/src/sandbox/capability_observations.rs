@@ -105,7 +105,10 @@ impl CapabilityObservationsAdapter {
         }
 
         let bytes = tokio::fs::read(&resolved_path).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to read file {}: {e}", resolved_path.display()))
+            DomainError::Validation(format!(
+                "Failed to read file {}: {e}",
+                resolved_path.display()
+            ))
         })?;
 
         let digest_val = format!("sha256:{}", digest(&bytes));
@@ -314,7 +317,9 @@ mod tests {
         let temp_dir = std::env::temp_dir().join(format!("custos_obs_test_{}", new_id("test")));
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
         let file_path = temp_dir.join("sample.txt");
-        tokio::fs::write(&file_path, "Hello Observations!").await.unwrap();
+        tokio::fs::write(&file_path, "Hello Observations!")
+            .await
+            .unwrap();
 
         let adapter = CapabilityObservationsAdapter::new(&temp_dir);
 

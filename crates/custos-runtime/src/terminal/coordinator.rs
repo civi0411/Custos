@@ -129,7 +129,9 @@ impl TerminalPort for TerminalCoordinator {
                 let is_eof = instance.buffer.lock().map(|b| b.is_eof()).unwrap_or(false);
                 if !matches!(session.status, TerminalSessionStatus::Active)
                     && is_eof
-                    && oldest.as_ref().is_none_or(|(_, created)| session.created_at < *created)
+                    && oldest
+                        .as_ref()
+                        .is_none_or(|(_, created)| session.created_at < *created)
                 {
                     oldest = Some((id.clone(), session.created_at));
                 }
@@ -138,7 +140,8 @@ impl TerminalPort for TerminalCoordinator {
                 sessions.remove(&id);
             } else {
                 return Err(DomainError::Conflict(
-                    "Terminal limit reached. Stop an unused terminal before starting another.".into(),
+                    "Terminal limit reached. Stop an unused terminal before starting another."
+                        .into(),
                 ));
             }
         }

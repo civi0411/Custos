@@ -3,9 +3,9 @@
 //! Provides automated heuristic detection for messy tabular feeds (CSV, TSV, DSV),
 //! column type inference, header row identification, and schema quality verification.
 
-use serde::{Deserialize, Serialize};
-use crate::error::DomainError;
 use super::DataInvariant;
+use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InferredDataType {
@@ -40,7 +40,11 @@ impl TabularStructureDetector {
     /// Detect optimal delimiter among comma, tab, semicolon, and pipe.
     pub fn detect_delimiter(sample: &str) -> char {
         let candidates = [',', '\t', ';', '|'];
-        let lines: Vec<&str> = sample.lines().filter(|l| !l.trim().is_empty()).take(10).collect();
+        let lines: Vec<&str> = sample
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .take(10)
+            .collect();
         if lines.is_empty() {
             return ',';
         }
@@ -90,7 +94,10 @@ impl TabularStructureDetector {
             }
 
             // Headers are typically non-numeric text strings
-            let text_count = row.iter().filter(|c| !c.is_empty() && c.parse::<f64>().is_err()).count();
+            let text_count = row
+                .iter()
+                .filter(|c| !c.is_empty() && c.parse::<f64>().is_err())
+                .count();
             if text_count as f64 / filled_count.max(1) as f64 >= 0.7 {
                 return idx;
             }
@@ -110,7 +117,13 @@ impl TabularStructureDetector {
         let headers: Vec<String> = rows[header_idx]
             .iter()
             .enumerate()
-            .map(|(i, col)| if col.is_empty() { format!("column_{i}") } else { col.clone() })
+            .map(|(i, col)| {
+                if col.is_empty() {
+                    format!("column_{i}")
+                } else {
+                    col.clone()
+                }
+            })
             .collect();
 
         let data_rows = &rows[(header_idx + 1)..];
@@ -133,7 +146,10 @@ impl TabularStructureDetector {
                 total_cells += 1;
                 if let Some(val) = r.get(col_idx) {
                     let trimmed = val.trim();
-                    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") || trimmed.eq_ignore_ascii_case("nan") {
+                    if trimmed.is_empty()
+                        || trimmed.eq_ignore_ascii_case("null")
+                        || trimmed.eq_ignore_ascii_case("nan")
+                    {
                         null_count += 1;
                     } else {
                         valid_cells += 1;
@@ -142,9 +158,14 @@ impl TabularStructureDetector {
                             int_count += 1;
                         } else if trimmed.parse::<f64>().is_ok() {
                             float_count += 1;
-                        } else if trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("false") {
+                        } else if trimmed.eq_ignore_ascii_case("true")
+                            || trimmed.eq_ignore_ascii_case("false")
+                        {
                             bool_count += 1;
-                        } else if trimmed.contains('-') || trimmed.contains('/') || trimmed.contains(':') {
+                        } else if trimmed.contains('-')
+                            || trimmed.contains('/')
+                            || trimmed.contains(':')
+                        {
                             dt_count += 1;
                         }
                     }
@@ -205,7 +226,11 @@ pub struct TabularContractInvariant {
 }
 
 impl TabularContractInvariant {
-    pub fn new(required_columns: Vec<String>, min_quality_score: f64, detected: DetectedStructure) -> Self {
+    pub fn new(
+        required_columns: Vec<String>,
+        min_quality_score: f64,
+        detected: DetectedStructure,
+    ) -> Self {
         Self {
             required_columns,
             min_quality_score,
@@ -224,7 +249,11 @@ impl DataInvariant for TabularContractInvariant {
         }
 
         for req in &self.required_columns {
-            let found = self.detected.headers.iter().any(|h| h.eq_ignore_ascii_case(req));
+            let found = self
+                .detected
+                .headers
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(req));
             if !found {
                 return Err(DomainError::Validation(format!(
                     "Missing mandatory column '{}' in tabular contract",
@@ -245,10 +274,14 @@ mod tests {
     fn test_structure_detector_and_type_inference() {
         let csv_data = "REPORT TITLE: LAB RESULTS OCTOBER\nPID,Test_Value,Is_Active,Received_Date\nP1001,15.5,true,2026-10-01 08:30:00\nP1002,18.2,false,2026-10-01 09:15:00\nP1003,12.0,true,2026-10-01 10:00:00";
 
-        let detected = TabularStructureDetector::detect(csv_data).expect("Detection should succeed");
+        let detected =
+            TabularStructureDetector::detect(csv_data).expect("Detection should succeed");
         assert_eq!(detected.delimiter, ',');
         assert_eq!(detected.header_row_index, 1);
-        assert_eq!(detected.headers, vec!["PID", "Test_Value", "Is_Active", "Received_Date"]);
+        assert_eq!(
+            detected.headers,
+            vec!["PID", "Test_Value", "Is_Active", "Received_Date"]
+        );
         assert_eq!(detected.columns[0].data_type, InferredDataType::Text);
         assert_eq!(detected.columns[1].data_type, InferredDataType::Float);
         assert_eq!(detected.columns[2].data_type, InferredDataType::Boolean);

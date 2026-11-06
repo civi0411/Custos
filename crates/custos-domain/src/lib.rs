@@ -129,6 +129,10 @@ pub use evidence::{
     EvidenceStatus, OutcomeStatus, TaskOutcome, VerificationClaim,
 };
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
+pub use experiment::{
+    FrozenTrainingRecipe, ModelEvaluationReport, ModelEvaluationSpec, TrainingExecutionReceipt,
+    TrainingStepTelemetry,
+};
 pub use experiment_attempt::{
     classify, protection_status, Check, CheckGroup, CheckStatus, ExecEvent, ExecState,
     ExecutionAttempt, ExternalJobRef, Invocation, InvocationOutcome, ProgressTriplet,
@@ -136,9 +140,7 @@ pub use experiment_attempt::{
     VerificationReport,
 };
 pub use fact::Fact;
-pub use ids::{
-    canonical_json, digest, new_id, HarnessId, JobId, PaneId, TaskId, WorkflowNodeId,
-};
+pub use ids::{canonical_json, digest, new_id, HarnessId, JobId, PaneId, TaskId, WorkflowNodeId};
 pub use memory::{
     FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt,
     ProposalStatus, RecallQuery, WorkerRunId,
@@ -149,19 +151,15 @@ pub use notebook::{
     NotebookCellType, NotebookDocument, NotebookKernelBinding, NotebookKernelState,
 };
 pub use packet::ContinuationPacket as PacketContinuation;
+pub use pipeline::{
+    AstSyntaxInvariant, ClosedBarInvariant, DataInvariant, DataModality,
+    EvidenceGroundingInvariant, GovernedOutboxInvariant, PipelineRecord, PipelineStage,
+};
 pub use provider_config::{
     ClientApiKeyRecord, LoadedModelInstance, LocalHardwareProfile, LocalModelDescriptor,
     LocalModelFolder, LocalModelLoadProfile, LocalModelLoadRequest, LocalModelPreflightRequest,
     LocalModelPreflightResponse, ModelCatalogOption, ModelCatalogResult, ModelCompatibility,
     ModelPricing, OAuthTokenRecord, ProbedModel, ProviderConfig,
-};
-pub use experiment::{
-    FrozenTrainingRecipe, ModelEvaluationReport, ModelEvaluationSpec, TrainingExecutionReceipt,
-    TrainingStepTelemetry,
-};
-pub use pipeline::{
-    AstSyntaxInvariant, ClosedBarInvariant, DataInvariant, DataModality, EvidenceGroundingInvariant,
-    GovernedOutboxInvariant, PipelineRecord, PipelineStage,
 };
 pub use quant::{
     AlphaFactor, BacktestTearsheet, MonthlyReturn, OhlcvBar, OrderDirection, OrderTicket,
@@ -199,6 +197,7 @@ pub use task::{
 pub use terminal::{
     TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
 };
+pub use types::{truncate_str_to_char_boundary, truncate_to_char_boundary};
 pub use workflow::{
     CandidateExecutionReport, CandidateRaceResult, CandidateRaceSpec, ModelCandidateConfig,
     RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
@@ -211,4 +210,3 @@ pub use workspace_files::{
     WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
 };
-pub use types::{truncate_str_to_char_boundary, truncate_to_char_boundary};

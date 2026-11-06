@@ -265,7 +265,9 @@ impl StepExecutor for WorkerExecutor {
                         if let Some(ref ledger) = self.effect_ledger {
                             if let Some(ref eff_id) = effect_id {
                                 let effect_status = EffectStatus::from(r.status);
-                                ledger.update_effect_status(eff_id, effect_status, Some(&r)).await?;
+                                ledger
+                                    .update_effect_status(eff_id, effect_status, Some(&r))
+                                    .await?;
                             }
                         }
                         r
@@ -276,7 +278,9 @@ impl StepExecutor for WorkerExecutor {
                         }
                         if let Some(ref ledger) = self.effect_ledger {
                             if let Some(ref eff_id) = effect_id {
-                                let _ = ledger.update_effect_status(eff_id, EffectStatus::Uncertain, None).await;
+                                let _ = ledger
+                                    .update_effect_status(eff_id, EffectStatus::Uncertain, None)
+                                    .await;
                             }
                         }
                         return Err(e);
@@ -701,7 +705,13 @@ mod tests {
             &self,
             key: &str,
         ) -> Result<Option<EffectAttempt>, DomainError> {
-            Ok(self.effects.lock().unwrap().iter().find(|e| e.idempotency_key == key).cloned())
+            Ok(self
+                .effects
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|e| e.idempotency_key == key)
+                .cloned())
         }
         async fn reconcile_on_startup(&self) -> Result<usize, DomainError> {
             Ok(0)
@@ -715,7 +725,13 @@ mod tests {
             Ok(())
         }
         async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
-            Ok(self.outbox.lock().unwrap().iter().find(|e| e.id == id).cloned())
+            Ok(self
+                .outbox
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|e| e.id == id)
+                .cloned())
         }
         async fn mark_approved(&self, id: &str) -> Result<(), DomainError> {
             let mut list = self.outbox.lock().unwrap();
@@ -731,7 +747,11 @@ mod tests {
             }
             Ok(())
         }
-        async fn mark_receipted(&self, id: &str, receipt: custos_domain::ExecutionReceipt) -> Result<(), DomainError> {
+        async fn mark_receipted(
+            &self,
+            id: &str,
+            receipt: custos_domain::ExecutionReceipt,
+        ) -> Result<(), DomainError> {
             let mut list = self.outbox.lock().unwrap();
             if let Some(e) = list.iter_mut().find(|e| e.id == id) {
                 e.status = OutboxStatus::Receipted;
@@ -753,23 +773,46 @@ mod tests {
             }
             Ok(())
         }
-        async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
-            Ok(self.outbox.lock().unwrap().iter().filter(|e| e.status == status).cloned().collect())
+        async fn list_by_status(
+            &self,
+            status: OutboxStatus,
+        ) -> Result<Vec<OutboxEntry>, DomainError> {
+            Ok(self
+                .outbox
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|e| e.status == status)
+                .cloned()
+                .collect())
         }
         async fn list_by_task_and_status(
             &self,
             task_id: &str,
             status: OutboxStatus,
         ) -> Result<Vec<OutboxEntry>, DomainError> {
-            Ok(self.outbox.lock().unwrap().iter().filter(|e| e.task_id == task_id && e.status == status).cloned().collect())
+            Ok(self
+                .outbox
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|e| e.task_id == task_id && e.status == status)
+                .cloned()
+                .collect())
         }
     }
 
     struct WorkerTestSandbox;
     #[async_trait]
     impl SandboxPort for WorkerTestSandbox {
-        fn driver_id(&self) -> &str { "test" }
-        async fn execute(&self, action: &ActionIntent, permit: &custos_domain::Permit) -> Result<custos_domain::ExecutionReceipt, DomainError> {
+        fn driver_id(&self) -> &str {
+            "test"
+        }
+        async fn execute(
+            &self,
+            action: &ActionIntent,
+            permit: &custos_domain::Permit,
+        ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
             Ok(custos_domain::ExecutionReceipt {
                 receipt_id: "rcpt_test".into(),
                 permit_id: permit.id.clone(),
@@ -788,11 +831,32 @@ mod tests {
     struct WorkerTestKernel;
     #[async_trait]
     impl KernelPort for WorkerTestKernel {
-        async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-        async fn create_task_with_contract(&self, _: String, _: custos_domain::TaskContract) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-        async fn get_task(&self, _: &str) -> Result<Option<custos_domain::Task>, DomainError> { unreachable!() }
-        async fn transition_task(&self, _: &str, _: custos_domain::TaskStatus) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-        async fn request_permit(&self, task_id: &str, intent: &ActionIntent, _: &str) -> Result<custos_domain::Permit, DomainError> {
+        async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> {
+            unreachable!()
+        }
+        async fn create_task_with_contract(
+            &self,
+            _: String,
+            _: custos_domain::TaskContract,
+        ) -> Result<custos_domain::Task, DomainError> {
+            unreachable!()
+        }
+        async fn get_task(&self, _: &str) -> Result<Option<custos_domain::Task>, DomainError> {
+            unreachable!()
+        }
+        async fn transition_task(
+            &self,
+            _: &str,
+            _: custos_domain::TaskStatus,
+        ) -> Result<custos_domain::Task, DomainError> {
+            unreachable!()
+        }
+        async fn request_permit(
+            &self,
+            task_id: &str,
+            intent: &ActionIntent,
+            _: &str,
+        ) -> Result<custos_domain::Permit, DomainError> {
             Ok(custos_domain::Permit::new(
                 task_id.into(),
                 intent.id.clone(),
@@ -802,9 +866,16 @@ mod tests {
                 60,
             ))
         }
-        async fn consume_permit(&self, permit_id: &str, intent: &ActionIntent) -> Result<custos_domain::Permit, DomainError> {
+        async fn consume_permit(
+            &self,
+            permit_id: &str,
+            intent: &ActionIntent,
+        ) -> Result<custos_domain::Permit, DomainError> {
             let mut p = custos_domain::Permit::new(
-                intent.task_id.clone().unwrap_or_else(|| "task_default".into()),
+                intent
+                    .task_id
+                    .clone()
+                    .unwrap_or_else(|| "task_default".into()),
                 intent.id.clone(),
                 "sandbox".into(),
                 None,
@@ -814,10 +885,35 @@ mod tests {
             p.id = permit_id.to_string();
             Ok(p)
         }
-        async fn verify_evidence(&self, _: &custos_core::evidence::EvidenceBundle) -> Result<custos_domain::VerificationClaim, DomainError> { unreachable!() }
-        async fn grant_capability(&self, _: &str, _: &str, _: &str) -> Result<custos_domain::Grant, DomainError> { unreachable!() }
-        async fn find_active_grant(&self, _: &str, _: &str) -> Result<Option<custos_domain::Grant>, DomainError> { Ok(None) }
-        async fn complete_task(&self, _: &str, _: String, _: Vec<custos_domain::VerificationClaim>) -> Result<custos_domain::Task, DomainError> { unreachable!() }
+        async fn verify_evidence(
+            &self,
+            _: &custos_core::evidence::EvidenceBundle,
+        ) -> Result<custos_domain::VerificationClaim, DomainError> {
+            unreachable!()
+        }
+        async fn grant_capability(
+            &self,
+            _: &str,
+            _: &str,
+            _: &str,
+        ) -> Result<custos_domain::Grant, DomainError> {
+            unreachable!()
+        }
+        async fn find_active_grant(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<Option<custos_domain::Grant>, DomainError> {
+            Ok(None)
+        }
+        async fn complete_task(
+            &self,
+            _: &str,
+            _: String,
+            _: Vec<custos_domain::VerificationClaim>,
+        ) -> Result<custos_domain::Task, DomainError> {
+            unreachable!()
+        }
     }
 
     #[tokio::test]
@@ -864,18 +960,72 @@ mod tests {
         struct ConflictKernel;
         #[async_trait]
         impl KernelPort for ConflictKernel {
-            async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-            async fn create_task_with_contract(&self, _: String, _: custos_domain::TaskContract) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-            async fn get_task(&self, _: &str) -> Result<Option<custos_domain::Task>, DomainError> { unreachable!() }
-            async fn transition_task(&self, _: &str, _: custos_domain::TaskStatus) -> Result<custos_domain::Task, DomainError> { unreachable!() }
-            async fn request_permit(&self, _: &str, _: &ActionIntent, _: &str) -> Result<custos_domain::Permit, DomainError> {
-                Err(DomainError::Conflict("Approval required for high-risk write".into()))
+            async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> {
+                unreachable!()
             }
-            async fn consume_permit(&self, _: &str, _: &ActionIntent) -> Result<custos_domain::Permit, DomainError> { unreachable!() }
-            async fn verify_evidence(&self, _: &custos_core::evidence::EvidenceBundle) -> Result<custos_domain::VerificationClaim, DomainError> { unreachable!() }
-            async fn grant_capability(&self, _: &str, _: &str, _: &str) -> Result<custos_domain::Grant, DomainError> { unreachable!() }
-            async fn find_active_grant(&self, _: &str, _: &str) -> Result<Option<custos_domain::Grant>, DomainError> { unreachable!() }
-            async fn complete_task(&self, _: &str, _: String, _: Vec<custos_domain::VerificationClaim>) -> Result<custos_domain::Task, DomainError> { unreachable!() }
+            async fn create_task_with_contract(
+                &self,
+                _: String,
+                _: custos_domain::TaskContract,
+            ) -> Result<custos_domain::Task, DomainError> {
+                unreachable!()
+            }
+            async fn get_task(&self, _: &str) -> Result<Option<custos_domain::Task>, DomainError> {
+                unreachable!()
+            }
+            async fn transition_task(
+                &self,
+                _: &str,
+                _: custos_domain::TaskStatus,
+            ) -> Result<custos_domain::Task, DomainError> {
+                unreachable!()
+            }
+            async fn request_permit(
+                &self,
+                _: &str,
+                _: &ActionIntent,
+                _: &str,
+            ) -> Result<custos_domain::Permit, DomainError> {
+                Err(DomainError::Conflict(
+                    "Approval required for high-risk write".into(),
+                ))
+            }
+            async fn consume_permit(
+                &self,
+                _: &str,
+                _: &ActionIntent,
+            ) -> Result<custos_domain::Permit, DomainError> {
+                unreachable!()
+            }
+            async fn verify_evidence(
+                &self,
+                _: &custos_core::evidence::EvidenceBundle,
+            ) -> Result<custos_domain::VerificationClaim, DomainError> {
+                unreachable!()
+            }
+            async fn grant_capability(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> Result<custos_domain::Grant, DomainError> {
+                unreachable!()
+            }
+            async fn find_active_grant(
+                &self,
+                _: &str,
+                _: &str,
+            ) -> Result<Option<custos_domain::Grant>, DomainError> {
+                unreachable!()
+            }
+            async fn complete_task(
+                &self,
+                _: &str,
+                _: String,
+                _: Vec<custos_domain::VerificationClaim>,
+            ) -> Result<custos_domain::Task, DomainError> {
+                unreachable!()
+            }
         }
 
         let store = Arc::new(MockLedgerAndOutbox::new());
@@ -884,7 +1034,12 @@ mod tests {
             .with_sandbox(Arc::new(WorkerTestSandbox))
             .with_outbox(store.clone());
 
-        let ctx = ExecutionContext::new("task_conflict_01", "run_conflict_01", "node_conflict", "worker_1");
+        let ctx = ExecutionContext::new(
+            "task_conflict_01",
+            "run_conflict_01",
+            "node_conflict",
+            "worker_1",
+        );
         let inputs = serde_json::json!({
             "tool": "delete_all",
             "parameters": { "path": "/" }
@@ -906,6 +1061,9 @@ mod tests {
         let outbox = store.outbox.lock().unwrap();
         assert_eq!(outbox.len(), 1);
         assert_eq!(outbox[0].status, OutboxStatus::Pending);
-        assert_eq!(outbox[0].error_message.as_deref(), Some("Approval required for high-risk write"));
+        assert_eq!(
+            outbox[0].error_message.as_deref(),
+            Some("Approval required for high-risk write")
+        );
     }
 }

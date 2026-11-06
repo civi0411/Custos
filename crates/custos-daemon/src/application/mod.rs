@@ -61,9 +61,8 @@ impl LocalApiDispatcher {
             "packs" | "packages" => self.handle_packs(req).await,
 
             // Group: System & Diagnostic — System settings, diagnostic capabilities, ping & health, pipeline status
-            "settings" | "system" | "capabilities" | "resources" | "ping" | "health" | "pipeline" => {
-                self.handle_system(req).await
-            }
+            "settings" | "system" | "capabilities" | "resources" | "ping" | "health"
+            | "pipeline" => self.handle_system(req).await,
             _ => ApiResponse::error(req.id.clone(), format!("Unknown method: {}", req.method)),
         }
     }

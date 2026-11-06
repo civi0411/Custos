@@ -3,10 +3,10 @@
 //! Zero I/O. Defines frozen reproducible training specs, step telemetry,
 //! execution receipts, and model evaluation reports.
 
+use crate::evidence::experiment_attempt::ExecState;
+use crate::ids::new_id;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use crate::ids::new_id;
-use crate::evidence::experiment_attempt::ExecState;
 
 /// Frozen, immutable training launch specification
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -109,10 +109,7 @@ pub struct ModelEvaluationSpec {
 }
 
 impl ModelEvaluationSpec {
-    pub fn new(
-        candidate_checkpoint_id: impl Into<String>,
-        dataset_uri: impl Into<String>,
-    ) -> Self {
+    pub fn new(candidate_checkpoint_id: impl Into<String>, dataset_uri: impl Into<String>) -> Self {
         Self {
             eval_id: new_id("eval"),
             candidate_checkpoint_id: candidate_checkpoint_id.into(),

@@ -1,6 +1,6 @@
+use crate::pack::WorkbenchJob;
 use custos_domain::oi::ExecutionTopology;
 use custos_domain::session::WorkbenchLens;
-use crate::pack::WorkbenchJob;
 
 pub fn quant_jobs() -> Vec<WorkbenchJob> {
     vec![

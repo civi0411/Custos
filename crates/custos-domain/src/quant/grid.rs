@@ -3,9 +3,9 @@
 //! Models arithmetic and geometric grid level generation, cell pairing,
 //! resting limit order placement, and realized volatility-harvesting PnL in Rust.
 
-use serde::{Deserialize, Serialize};
-use crate::error::DomainError;
 use super::order::OrderDirection;
+use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,7 +48,9 @@ impl GridConfig {
     ) -> Result<Self, DomainError> {
         let symbol = symbol.into();
         if symbol.trim().is_empty() {
-            return Err(DomainError::Validation("Grid symbol cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Grid symbol cannot be empty".into(),
+            ));
         }
         if lower_price <= 0.0 || upper_price <= lower_price {
             return Err(DomainError::Validation(format!(
@@ -154,7 +156,9 @@ impl NativeGridEngine {
         mode: GridMode,
     ) -> Result<Vec<f64>, DomainError> {
         if count < 2 {
-            return Err(DomainError::Validation("Grid count must be at least 2".into()));
+            return Err(DomainError::Validation(
+                "Grid count must be at least 2".into(),
+            ));
         }
         if lower <= 0.0 || upper <= lower {
             return Err(DomainError::Validation(

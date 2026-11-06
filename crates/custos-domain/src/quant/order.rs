@@ -136,7 +136,9 @@ impl OrderTicket {
     }
 
     pub fn approve_with_permit(&mut self, permit_id: String) -> Result<(), DomainError> {
-        if self.status != OrderTicketStatus::Draft && self.status != OrderTicketStatus::AwaitingPermit {
+        if self.status != OrderTicketStatus::Draft
+            && self.status != OrderTicketStatus::AwaitingPermit
+        {
             return Err(DomainError::Validation(format!(
                 "Cannot approve order {} from status {:?}",
                 self.id, self.status
@@ -233,7 +235,12 @@ impl OrderTicket {
             recipient: format!("BrokerVenue({})", self.strategy_id),
             payload_summary: format!(
                 "Ticket {}: {} {} units of {} (Type: {:?}, Slippage: {:.1} bps)",
-                self.id, self.direction, self.quantity, self.symbol, self.order_type, self.estimated_slippage_bps
+                self.id,
+                self.direction,
+                self.quantity,
+                self.symbol,
+                self.order_type,
+                self.estimated_slippage_bps
             ),
             payload_digest,
             status: if self.approved_by_human {

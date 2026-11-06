@@ -76,9 +76,13 @@ fn test_g13_legacy_database_migration_preserves_all_historical_data() {
 
         // Execute early schemas
         let schema_01 = include_str!("../../../crates/custos-persistence/migrations/0001_core.sql");
-        let schema_02 = include_str!("../../../crates/custos-persistence/migrations/0002_runtime.sql");
-        let schema_03 = include_str!("../../../crates/custos-persistence/migrations/0003_authority.sql");
-        let schema_06 = include_str!("../../../crates/custos-persistence/migrations/0006_session_and_bridge.sql");
+        let schema_02 =
+            include_str!("../../../crates/custos-persistence/migrations/0002_runtime.sql");
+        let schema_03 =
+            include_str!("../../../crates/custos-persistence/migrations/0003_authority.sql");
+        let schema_06 = include_str!(
+            "../../../crates/custos-persistence/migrations/0006_session_and_bridge.sql"
+        );
 
         conn.execute_batch(schema_01).expect("schema 01");
         conn.execute_batch(schema_02).expect("schema 02");
@@ -136,8 +140,10 @@ fn test_g13_legacy_database_migration_preserves_all_historical_data() {
         .expect("query session")
         .expect("session exists");
     assert_eq!(session.id, SessionId::new("session_legacy_001"));
-    assert_eq!(session.current_goal.as_deref(), Some("Legacy Conversation Goal"));
-
+    assert_eq!(
+        session.current_goal.as_deref(),
+        Some("Legacy Conversation Goal")
+    );
 
     // 4. Verify modern schema extensions are functional without data loss
     let notebook_cells_count: i64 = store
@@ -182,25 +188,37 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         "backend": "runpod",
         "external_job_ref": "pod-runpod-xyz-123"
     });
-    store.runs().save_run(&mut remote_run).expect("save remote run");
+    store
+        .runs()
+        .save_run(&mut remote_run)
+        .expect("save remote run");
 
     let mut remote_wrun = WorkerRun::new(task_id.to_string(), "worker_remote".to_string(), 1);
     remote_wrun.id = "wrun_remote_active".into();
     remote_wrun.run_id = Some("run_remote_active".into());
     remote_wrun.status = RunStatus::Active;
-    store.runs().save_worker_run(&mut remote_wrun).expect("save remote worker run");
+    store
+        .runs()
+        .save_worker_run(&mut remote_wrun)
+        .expect("save remote worker run");
 
     // B. Local Run and Local Worker Run in 'active' status (fail-closed target)
     let mut local_run = Run::new(task_id.to_string(), 1);
     local_run.id = "run_local_active".into();
     local_run.status = RunStatus::Active;
-    store.runs().save_run(&mut local_run).expect("save local run");
+    store
+        .runs()
+        .save_run(&mut local_run)
+        .expect("save local run");
 
     let mut local_wrun = WorkerRun::new(task_id.to_string(), "worker_local".to_string(), 1);
     local_wrun.id = "wrun_local_active".into();
     local_wrun.run_id = Some("run_local_active".into());
     local_wrun.status = RunStatus::Active;
-    store.runs().save_worker_run(&mut local_wrun).expect("save local worker run");
+    store
+        .runs()
+        .save_worker_run(&mut local_wrun)
+        .expect("save local worker run");
 
     // C. Outbox entry left in 'dispatching' status
     let outbox_entry = OutboxEntry::new(
@@ -213,7 +231,10 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         OutboxStatus::Dispatching,
         now,
     );
-    store.enqueue(outbox_entry).await.expect("insert outbox entry");
+    store
+        .enqueue(outbox_entry)
+        .await
+        .expect("insert outbox entry");
 
     // D. In-flight experiment attempt in 'running' state
     let mut attempt = custos_domain::evidence::ExecutionAttempt::new(
@@ -225,7 +246,10 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
     attempt.id = "attempt_crash_001".into();
     attempt.exec_state = custos_domain::evidence::ExecState::Running;
     attempt.resource_state = custos_domain::evidence::ResourceState::Held;
-    store.experiment_attempts().save_attempt(&attempt).expect("save experiment attempt");
+    store
+        .experiment_attempts()
+        .save_attempt(&attempt)
+        .expect("save experiment attempt");
 
     // E. Prepared launch attempt in 'prepared' state
     let launch_att = LaunchAttempt {
@@ -239,7 +263,10 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         prepared_at: now,
         resolved_at: None,
     };
-    store.runs().save_launch_attempt(&launch_att).expect("save launch attempt");
+    store
+        .runs()
+        .save_launch_attempt(&launch_att)
+        .expect("save launch attempt");
 
     // F. Orphan dispatch claim with empty node
     let claim = DispatchClaim {
@@ -263,8 +290,14 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
 
     // G13 Assertions:
     assert!(summary.runs_reconciled >= 1, "Must reconcile active runs");
-    assert!(summary.outbox_reconciled >= 1, "Must reconcile dispatching outbox entries");
-    assert!(summary.attempts_reconciled >= 1, "Must reconcile in-flight experiment attempts");
+    assert!(
+        summary.outbox_reconciled >= 1,
+        "Must reconcile dispatching outbox entries"
+    );
+    assert!(
+        summary.attempts_reconciled >= 1,
+        "Must reconcile in-flight experiment attempts"
+    );
 
     // A. Remote Run & Worker Run are preserved as 'Uncertain' (preventing duplicate pod launch and keeping job ref)
     let reconciled_remote = store
@@ -312,7 +345,10 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         .get_attempt("attempt_crash_001")
         .expect("get attempt")
         .expect("attempt exists");
-    assert_eq!(reconciled_att.exec_state, custos_domain::evidence::ExecState::Uncertain);
+    assert_eq!(
+        reconciled_att.exec_state,
+        custos_domain::evidence::ExecState::Uncertain
+    );
 
     // E. Prepared launch attempt transitioned to 'unknown'
     let reconciled_launch = store
@@ -372,7 +408,10 @@ fn test_g13_active_jobs_and_history_discoverable_without_data_loss() {
     );
 
     // 2. Discoverable via list_runs_for_task()
-    let task_runs = store.runs().list_runs_for_task(task_id).expect("list task runs");
+    let task_runs = store
+        .runs()
+        .list_runs_for_task(task_id)
+        .expect("list task runs");
     assert_eq!(task_runs.len(), 1);
     assert_eq!(task_runs[0].id, "run_disc_01");
     assert_eq!(task_runs[0].status, RunStatus::Uncertain);
@@ -389,7 +428,8 @@ fn test_g13_active_jobs_and_history_discoverable_without_data_loss() {
 async fn test_g13_workspace_recovery_and_dirty_protection_without_destructive_cleanup() {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let provider = Arc::new(LocalWorkspaceProvider::new());
-    let coordinator = WorkspaceCoordinator::new(Arc::new(store.workspaces().clone()), provider.clone());
+    let coordinator =
+        WorkspaceCoordinator::new(Arc::new(store.workspaces().clone()), provider.clone());
 
     let dir = tempdir().expect("tempdir");
 
@@ -406,7 +446,10 @@ async fn test_g13_workspace_recovery_and_dirty_protection_without_destructive_cl
         healthy_path.to_string_lossy().to_string(),
     );
     healthy_ws.status = WorkspaceStatus::Initializing;
-    store.workspaces().save_workspace(&healthy_ws).expect("save healthy ws");
+    store
+        .workspaces()
+        .save_workspace(&healthy_ws)
+        .expect("save healthy ws");
 
     let recovered_healthy = coordinator
         .recover_workspace(&healthy_ws.id)
@@ -428,7 +471,10 @@ async fn test_g13_workspace_recovery_and_dirty_protection_without_destructive_cl
         missing_path.to_string_lossy().to_string(),
     );
     missing_ws.status = WorkspaceStatus::Initializing;
-    store.workspaces().save_workspace(&missing_ws).expect("save missing ws");
+    store
+        .workspaces()
+        .save_workspace(&missing_ws)
+        .expect("save missing ws");
 
     let recovered_missing = coordinator
         .recover_workspace(&missing_ws.id)
@@ -482,7 +528,8 @@ async fn test_g13_workspace_recovery_and_dirty_protection_without_destructive_cl
         .expect("git commit");
 
     // Modify file to make worktree dirty
-    std::fs::write(git_repo_path.join("file.txt"), "uncommitted dirty bytes\n").expect("dirty write");
+    std::fs::write(git_repo_path.join("file.txt"), "uncommitted dirty bytes\n")
+        .expect("dirty write");
 
     let dirty_ws = ExecutionWorkspace::new(
         WorkspaceId::new("ws_dirty_01"),
@@ -494,13 +541,19 @@ async fn test_g13_workspace_recovery_and_dirty_protection_without_destructive_cl
         },
         git_repo_path.to_string_lossy().to_string(),
     );
-    store.workspaces().save_workspace(&dirty_ws).expect("save dirty ws");
+    store
+        .workspaces()
+        .save_workspace(&dirty_ws)
+        .expect("save dirty ws");
 
     // Attempting to delete physical workspace without force MUST return Conflict
     let archive_res = coordinator
         .archive_workspace_with_force(&dirty_ws.id, true, false)
         .await;
-    assert!(archive_res.is_err(), "Must block destructive archive of dirty workspace");
+    assert!(
+        archive_res.is_err(),
+        "Must block destructive archive of dirty workspace"
+    );
     match archive_res.unwrap_err() {
         DomainError::Conflict(msg) => {
             assert!(msg.contains("uncommitted changes"));

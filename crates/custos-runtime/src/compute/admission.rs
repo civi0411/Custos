@@ -3,10 +3,10 @@
 //! Enforces hardware resource arbitration, device inventory discovery,
 //! and exclusive mutual exclusion (preventing dual launch on exclusive accelerators).
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use custos_core::contracts::compute::WorkloadAdmissionPort;
@@ -155,7 +155,9 @@ impl WorkloadAdmissionPort for WorkloadAdmissionCoordinator {
         &self,
         request: &WorkloadAdmissionRequest,
     ) -> Result<WorkloadAdmissionVerdict, DomainError> {
-        let target_device_id = self.resolve_device_id(request.preferred_device_id.as_deref()).await?;
+        let target_device_id = self
+            .resolve_device_id(request.preferred_device_id.as_deref())
+            .await?;
         let mut devs = self.devices.write().await;
         let mut leases = self.leases.write().await;
 
@@ -221,7 +223,8 @@ impl WorkloadAdmissionPort for WorkloadAdmissionCoordinator {
         if request.require_exclusive {
             slot.active_exclusive_lease = Some(lease.clone());
         } else {
-            slot.active_shared_leases.insert(lease_id.clone(), lease.clone());
+            slot.active_shared_leases
+                .insert(lease_id.clone(), lease.clone());
         }
 
         leases.insert(lease_id, lease.clone());
@@ -314,7 +317,10 @@ mod tests {
         };
         let verdict2 = coord.admit_workload(&req_training_2).await.unwrap();
         match verdict2 {
-            WorkloadAdmissionVerdict::Queued { queue_position, reason } => {
+            WorkloadAdmissionVerdict::Queued {
+                queue_position,
+                reason,
+            } => {
                 assert_eq!(queue_position, 1);
                 assert!(reason.contains("exclusively held"));
             }

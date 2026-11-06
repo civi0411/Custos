@@ -1,14 +1,13 @@
 //! Research reviews, recipes, synthesis proposals, and coding handoff use cases.
 
 use crate::api::*;
-use custos_domain::{
-    ClaimGroundingLevel, ClaimHandoffSummary, HandoffToCodingParams,
-    HandoffToCodingResult, Recipe, RecipeHandoffSummary, RecordReviewParams,
-    ResearchClaim, ResearchSynthesisProposal, ReviewStatus,
-    ReviewerRecord, SaveSynthesisProposalParams,
-};
 #[cfg(test)]
 use custos_domain::EnvironmentSpec;
+use custos_domain::{
+    ClaimGroundingLevel, ClaimHandoffSummary, HandoffToCodingParams, HandoffToCodingResult, Recipe,
+    RecipeHandoffSummary, RecordReviewParams, ResearchClaim, ResearchSynthesisProposal,
+    ReviewStatus, ReviewerRecord, SaveSynthesisProposalParams,
+};
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_research_reviews(&self, req: ApiRequest) -> ApiResponse {
@@ -604,7 +603,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown research reviews method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown research reviews method: {unknown}"),
+            ),
         }
     }
 }

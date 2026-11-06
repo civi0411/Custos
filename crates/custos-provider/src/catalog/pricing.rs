@@ -417,4 +417,3 @@ mod tests {
         assert!((cost - 0.465).abs() < 1e-6);
     }
 }
-

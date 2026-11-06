@@ -30,15 +30,27 @@ fn get_macos_free_ram() -> Option<u64> {
     for line in text.lines() {
         if line.starts_with("Pages free:") {
             if let Some(num_str) = line.split(':').nth(1) {
-                pages_free = num_str.trim().trim_end_matches('.').parse::<u64>().unwrap_or(0);
+                pages_free = num_str
+                    .trim()
+                    .trim_end_matches('.')
+                    .parse::<u64>()
+                    .unwrap_or(0);
             }
         } else if line.starts_with("Pages speculative:") {
             if let Some(num_str) = line.split(':').nth(1) {
-                pages_speculative = num_str.trim().trim_end_matches('.').parse::<u64>().unwrap_or(0);
+                pages_speculative = num_str
+                    .trim()
+                    .trim_end_matches('.')
+                    .parse::<u64>()
+                    .unwrap_or(0);
             }
         } else if line.starts_with("Pages inactive:") {
             if let Some(num_str) = line.split(':').nth(1) {
-                pages_inactive = num_str.trim().trim_end_matches('.').parse::<u64>().unwrap_or(0);
+                pages_inactive = num_str
+                    .trim()
+                    .trim_end_matches('.')
+                    .parse::<u64>()
+                    .unwrap_or(0);
             }
         }
     }

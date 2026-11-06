@@ -7,9 +7,9 @@ pub use custos_sdk::local_api as custos_local_api;
 
 pub mod api;
 pub mod application;
-pub mod credentials;
 #[cfg(test)]
 mod credential_tests;
+pub mod credentials;
 pub mod http_server;
 pub mod oauth_callback_server;
 pub mod profile;

@@ -31,11 +31,7 @@ impl TaskStore for MockStore {
         }
         Ok(())
     }
-    async fn commit_task_event(
-        &self,
-        _event: &TaskEvent,
-        task: &Task,
-    ) -> Result<(), DomainError> {
+    async fn commit_task_event(&self, _event: &TaskEvent, task: &Task) -> Result<(), DomainError> {
         self.save_task(task).await
     }
     async fn get_task_events(&self, _task_id: &str) -> Result<Vec<TaskEvent>, DomainError> {

@@ -1117,4 +1117,3 @@ pub struct SaveNoteParams {
     pub task_id: Option<String>,
     pub tags: Option<Vec<String>>,
 }
-

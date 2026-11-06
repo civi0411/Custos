@@ -74,8 +74,9 @@ fn mask_oauth_token(token: &str) -> String {
 
 impl OAuthCallbackServer {
     pub fn new(store: Arc<SqliteTaskStore>) -> Self {
-        let repo=Arc::new(store.providers().clone());
-        #[cfg(test)] let credentials=crate::credential_tests::fake_credentials(repo);
+        let repo = Arc::new(store.providers().clone());
+        #[cfg(test)]
+        let credentials = crate::credential_tests::fake_credentials(repo);
         #[cfg(not(test))]
         let credentials = {
             let vault: Arc<dyn custos_core::contracts::credentials::CredentialVault> =
@@ -129,7 +130,10 @@ impl OAuthCallbackServer {
                         created_at: token.created_at,
                         updated_at: token.updated_at,
                     };
-                    match credentials.save_oauth_connection(&token, Some(&config)).await {
+                    match credentials
+                        .save_oauth_connection(&token, Some(&config))
+                        .await
+                    {
                         Ok(_) => {
                             let _ = status.send(CallbackServerStatus::Completed {
                                 provider_id: account_id.clone(),
@@ -416,7 +420,6 @@ impl OAuthCallbackServer {
                                 .await
                             {
                                 Ok((tokens, identity)) => {
-
                                     let now = chrono::Utc::now().timestamp_millis();
                                     let provider_config = ProviderConfig {
                                         id: context.provider_id.clone(),
@@ -441,8 +444,9 @@ impl OAuthCallbackServer {
                                         created_at: now,
                                         updated_at: now,
                                     };
-                                    if let Err(err) =
-                                        credentials.save_oauth_connection(&tokens, Some(&provider_config)).await
+                                    if let Err(err) = credentials
+                                        .save_oauth_connection(&tokens, Some(&provider_config))
+                                        .await
                                     {
                                         tracing::error!(
                                             "Failed to persist OAuth provider config: {err}"

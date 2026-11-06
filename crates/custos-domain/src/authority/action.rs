@@ -231,9 +231,8 @@ impl From<crate::authority::ReceiptStatus> for EffectStatus {
     fn from(status: crate::authority::ReceiptStatus) -> Self {
         match status {
             crate::authority::ReceiptStatus::Success => EffectStatus::Succeeded,
-            crate::authority::ReceiptStatus::Failure | crate::authority::ReceiptStatus::Rejected => {
-                EffectStatus::Failed
-            }
+            crate::authority::ReceiptStatus::Failure
+            | crate::authority::ReceiptStatus::Rejected => EffectStatus::Failed,
             crate::authority::ReceiptStatus::Timeout => EffectStatus::Uncertain,
         }
     }

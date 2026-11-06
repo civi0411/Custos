@@ -71,7 +71,10 @@ mod tests {
         assert_eq!(classify_method("v1.tasks.create"), MethodKind::Mutation);
         assert_eq!(classify_method("v1.tasks.cancel"), MethodKind::Mutation);
         assert_eq!(classify_method("v1.terminal.spawn"), MethodKind::Mutation);
-        assert_eq!(classify_method("v1.workspace.files.write"), MethodKind::Mutation);
+        assert_eq!(
+            classify_method("v1.workspace.files.write"),
+            MethodKind::Mutation
+        );
     }
 
     #[test]

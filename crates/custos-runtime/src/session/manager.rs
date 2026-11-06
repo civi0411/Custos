@@ -162,11 +162,15 @@ impl SessionManager {
         id: &SessionId,
         message: &str,
     ) -> Result<(), DomainError> {
-        self.append_assistant_entry(id,message).await.map(|_|())
+        self.append_assistant_entry(id, message).await.map(|_| ())
     }
 
     /// Append an assistant response and return its exact persisted identity.
-    pub async fn append_assistant_entry(&self,id:&SessionId,message:&str)->Result<SessionJournalEntry,DomainError> {
+    pub async fn append_assistant_entry(
+        &self,
+        id: &SessionId,
+        message: &str,
+    ) -> Result<SessionJournalEntry, DomainError> {
         self.ensure_session_loaded(id).await?;
 
         let entry = {

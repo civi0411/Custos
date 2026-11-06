@@ -72,7 +72,10 @@ impl McpFederationHub {
                 prefix
             )));
         }
-        if !prefix.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        if !prefix
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             return Err(DomainError::Validation(format!(
                 "MCP prefix '{}' contains invalid characters; only alphanumeric, underscore, and dash are allowed",
                 prefix
@@ -127,7 +130,9 @@ impl McpFederationHub {
         let mut federated_resources = Vec::new();
 
         for (prefix, client) in guard.iter() {
-            if let Ok(Ok(resources)) = tokio::time::timeout(Duration::from_secs(10), client.list_resources(None)).await {
+            if let Ok(Ok(resources)) =
+                tokio::time::timeout(Duration::from_secs(10), client.list_resources(None)).await
+            {
                 for mut res in resources {
                     if let Some(obj) = res.as_object_mut() {
                         obj.insert("server_prefix".into(), Value::String(prefix.clone()));
@@ -141,14 +146,24 @@ impl McpFederationHub {
     }
 
     /// Read a resource from a specific federated server prefix.
-    pub async fn read_federated_resource(&self, prefix: &str, uri: &str) -> Result<Value, DomainError> {
+    pub async fn read_federated_resource(
+        &self,
+        prefix: &str,
+        uri: &str,
+    ) -> Result<Value, DomainError> {
         let guard = self.servers.read().await;
-        let client = guard.get(prefix).cloned().ok_or_else(|| DomainError::NotFound {
-            kind: "McpServer".into(),
-            id: prefix.to_string(),
-        })?;
+        let client = guard
+            .get(prefix)
+            .cloned()
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "McpServer".into(),
+                id: prefix.to_string(),
+            })?;
 
-        client.read_resource(uri).await.map_err(|e| DomainError::Validation(format!("Failed to read resource '{uri}': {e}")))
+        client
+            .read_resource(uri)
+            .await
+            .map_err(|e| DomainError::Validation(format!("Failed to read resource '{uri}': {e}")))
     }
 
     /// Dispatch a namespaced tool call (`prefix__tool_name`) to the correct MCP server
@@ -216,7 +231,9 @@ mod tests {
             _ctx: &ToolCallContext,
         ) -> Result<(), DomainError> {
             if namespaced_tool.contains("forbidden") {
-                return Err(DomainError::Unauthorized("Access denied by ToolGate".into()));
+                return Err(DomainError::Unauthorized(
+                    "Access denied by ToolGate".into(),
+                ));
             }
             Ok(())
         }
@@ -233,9 +250,13 @@ mod tests {
         let ctx = ToolCallContext::new("sess-gate", "req-gate");
 
         // Forbidden tool must be rejected by gate before any dispatch
-        let denied = hub.dispatch_call("secure__forbidden_tool", None, &ctx).await;
+        let denied = hub
+            .dispatch_call("secure__forbidden_tool", None, &ctx)
+            .await;
         assert!(denied.is_err());
-        assert!(matches!(denied.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("ToolGate")));
+        assert!(
+            matches!(denied.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("ToolGate"))
+        );
 
         // Allowed tool passes gate
         let allowed = hub.dispatch_call("secure__allowed_tool", None, &ctx).await;
@@ -248,12 +269,20 @@ mod tests {
         let client1 = Arc::new(CustosMcpClient::new("server-alpha"));
         let client2 = Arc::new(CustosMcpClient::new("server-beta"));
 
-        hub.register_server("alpha", client1).await.expect("alpha registered");
-        hub.register_server("beta", client2).await.expect("beta registered");
+        hub.register_server("alpha", client1)
+            .await
+            .expect("alpha registered");
+        hub.register_server("beta", client2)
+            .await
+            .expect("beta registered");
 
         let ctx = ToolCallContext::new("sess-fed", "req-fed");
         let res = hub
-            .dispatch_call("alpha__echo", Some(serde_json::json!({"msg": "hello"})), &ctx)
+            .dispatch_call(
+                "alpha__echo",
+                Some(serde_json::json!({"msg": "hello"})),
+                &ctx,
+            )
             .await
             .expect("dispatch succeeds");
 
@@ -269,9 +298,18 @@ mod tests {
         let client = Arc::new(CustosMcpClient::new("server-x"));
 
         assert!(hub.register_server("", client.clone()).await.is_err());
-        assert!(hub.register_server("invalid__prefix", client.clone()).await.is_err());
-        assert!(hub.register_server("invalid prefix with spaces", client.clone()).await.is_err());
-        assert!(hub.register_server("valid_prefix-123", client.clone()).await.is_ok());
+        assert!(hub
+            .register_server("invalid__prefix", client.clone())
+            .await
+            .is_err());
+        assert!(hub
+            .register_server("invalid prefix with spaces", client.clone())
+            .await
+            .is_err());
+        assert!(hub
+            .register_server("valid_prefix-123", client.clone())
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
@@ -284,12 +322,14 @@ mod tests {
             "name": "z_tool",
             "description": "z description",
             "inputSchema": {}
-        })).unwrap();
+        }))
+        .unwrap();
         let tool_a: rmcp::model::Tool = serde_json::from_value(serde_json::json!({
             "name": "a_tool",
             "description": "a description",
             "inputSchema": {}
-        })).unwrap();
+        }))
+        .unwrap();
 
         client_z.register_mock_tool(tool_z).await;
         client_a.register_mock_tool(tool_a).await;

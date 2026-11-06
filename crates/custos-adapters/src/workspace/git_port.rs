@@ -17,9 +17,17 @@ impl RepositoryGitPort for LocalRepositoryGitAdapter {
     fn add_worktree(&self, repo_dir: &Path, worktree_path: &Path) -> Result<(), DomainError> {
         let output = std::process::Command::new("git")
             .current_dir(repo_dir)
-            .args(["worktree", "add", "--detach", &worktree_path.to_string_lossy(), "HEAD"])
+            .args([
+                "worktree",
+                "add",
+                "--detach",
+                &worktree_path.to_string_lossy(),
+                "HEAD",
+            ])
             .output()
-            .map_err(|e| DomainError::Validation(format!("Failed to start Git worktree provisioning: {e}")))?;
+            .map_err(|e| {
+                DomainError::Validation(format!("Failed to start Git worktree provisioning: {e}"))
+            })?;
         if !output.status.success() {
             return Err(DomainError::Validation(format!(
                 "Git worktree provisioning failed: {}",

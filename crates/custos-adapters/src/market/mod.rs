@@ -4,6 +4,4 @@
 
 pub mod stream;
 
-pub use stream::{
-    MarketStreamCoordinator, MarketStreamError, StreamState, SubscriptionKey,
-};
+pub use stream::{MarketStreamCoordinator, MarketStreamError, StreamState, SubscriptionKey};

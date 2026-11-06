@@ -268,28 +268,34 @@ impl PythonKernelCoordinator {
 
         let (epoch, execution_count, worker_session) = {
             let mut kernels = self.kernels.write().await;
-            let kernel = kernels
-                .entry(key.clone())
-                .or_insert_with(|| ActiveKernel {
-                    epoch: 1,
-                    execution_counter: 0,
-                    status: KernelStatus::Idle,
-                    python_path: python_path.clone(),
-                    worker: None,
-                    work_dir: None,
-                    recent_requests: HashMap::new(),
-                    active_lease_id: None,
-                });
+            let kernel = kernels.entry(key.clone()).or_insert_with(|| ActiveKernel {
+                epoch: 1,
+                execution_counter: 0,
+                status: KernelStatus::Idle,
+                python_path: python_path.clone(),
+                worker: None,
+                work_dir: None,
+                recent_requests: HashMap::new(),
+                active_lease_id: None,
+            });
 
             if let Some(lease_id) = acquired_lease {
                 kernel.active_lease_id = Some(lease_id);
             }
 
             if kernel.status == KernelStatus::Busy {
-                return Err(DomainError::Validation("A cell is already running in this session".into()));
+                return Err(DomainError::Validation(
+                    "A cell is already running in this session".into(),
+                ));
             }
-            if kernel.work_dir.as_ref().is_some_and(|previous| previous != &work_dir) {
-                return Err(DomainError::Validation("Reset this session's Python worker before changing execution workspace".into()));
+            if kernel
+                .work_dir
+                .as_ref()
+                .is_some_and(|previous| previous != &work_dir)
+            {
+                return Err(DomainError::Validation(
+                    "Reset this session's Python worker before changing execution workspace".into(),
+                ));
             }
 
             let session = match &kernel.worker {
@@ -321,7 +327,9 @@ impl PythonKernelCoordinator {
             let mut kernels = self.kernels.write().await;
             if let Some(k) = kernels.get_mut(&key) {
                 if k.epoch != epoch {
-                    return Err(DomainError::Validation("Execution was interrupted or reset; its output is stale".into()));
+                    return Err(DomainError::Validation(
+                        "Execution was interrupted or reset; its output is stale".into(),
+                    ));
                 }
                 k.status = KernelStatus::Idle;
             }
@@ -363,7 +371,8 @@ impl PythonKernelCoordinator {
             if let Ok(meta) = tokio::fs::metadata(&possible_plot).await {
                 if meta.len() <= 8 * 1024 * 1024 {
                     if let Ok(bytes) = tokio::fs::read(&possible_plot).await {
-                        output_image = Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
+                        output_image =
+                            Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
                     }
                 } else {
                     tracing::warn!(path = %possible_plot.display(), "Plot image exceeds 8MB limit; omitted from inline response");
@@ -380,8 +389,11 @@ impl PythonKernelCoordinator {
                 session_id: params.session_id.clone(),
                 cell_type: NotebookCellType::Code,
                 source: params.code.clone(),
-                cell_index: cells.iter()
-                    .find(|saved| saved.id == params.cell_id).map(|saved| saved.cell_index).unwrap_or(0),
+                cell_index: cells
+                    .iter()
+                    .find(|saved| saved.id == params.cell_id)
+                    .map(|saved| saved.cell_index)
+                    .unwrap_or(0),
                 execution_count: Some(execution_count),
                 status,
                 stdout: Some(stdout.clone()),
@@ -489,18 +501,16 @@ impl PythonKernelCoordinator {
         let py = Self::discover_python_path();
         let ver = Self::get_python_version(&py);
         let mut kernels = self.kernels.write().await;
-        let entry = kernels
-            .entry(key)
-            .or_insert_with(|| ActiveKernel {
-                epoch: 1,
-                execution_counter: 0,
-                status: KernelStatus::Idle,
-                python_path: py.clone(),
-                worker: None,
-                work_dir: None,
-                recent_requests: HashMap::new(),
-                active_lease_id: None,
-            });
+        let entry = kernels.entry(key).or_insert_with(|| ActiveKernel {
+            epoch: 1,
+            execution_counter: 0,
+            status: KernelStatus::Idle,
+            python_path: py.clone(),
+            worker: None,
+            work_dir: None,
+            recent_requests: HashMap::new(),
+            active_lease_id: None,
+        });
 
         let lease_to_release = entry.active_lease_id.take();
 
@@ -546,7 +556,9 @@ impl PythonKernelCoordinator {
         &self,
         python_path: Option<&PathBuf>,
     ) -> Result<String, DomainError> {
-        let py = python_path.cloned().unwrap_or_else(Self::discover_python_path);
+        let py = python_path
+            .cloned()
+            .unwrap_or_else(Self::discover_python_path);
         let check_script = "import sys; \
 try:\n    import torch\n    print(f'torch:{torch.__version__},cuda:{torch.cuda.is_available()},mps:{hasattr(torch.backends, \"mps\") and torch.backends.mps.is_available()}')\n\
 except Exception as e:\n    print(f'error:{e}')";
@@ -564,7 +576,9 @@ except Exception as e:\n    print(f'error:{e}')";
             Err(e) => return Ok(format!("python_probe_failed: {e}")),
         };
 
-        match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait_with_output()).await {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait_with_output())
+            .await
+        {
             Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -619,35 +633,81 @@ mod tests {
     async fn restarting_coordinator_advances_persisted_worker_epoch() {
         let store = custos_persistence::SqliteTaskStore::new_in_memory().unwrap();
         let repository = store.research();
-        repository.save_notebook_kernel_state(&NotebookKernelState { session_id: "restart".into(), epoch: 4,
-            status: KernelStatus::Busy, python_version: "Python".into(), execution_counter: 7,
-            created_at: 0, updated_at: 0, ..Default::default() }).unwrap();
+        repository
+            .save_notebook_kernel_state(&NotebookKernelState {
+                session_id: "restart".into(),
+                epoch: 4,
+                status: KernelStatus::Busy,
+                python_version: "Python".into(),
+                execution_counter: 7,
+                created_at: 0,
+                updated_at: 0,
+                ..Default::default()
+            })
+            .unwrap();
         let coordinator = test_coordinator();
-        let status = coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap();
+        let status = coordinator
+            .get_status("restart", Some(repository as &dyn NotebookStoragePort))
+            .await
+            .unwrap();
         assert_eq!(status.epoch, 5);
         assert_eq!(status.status, KernelStatus::Idle);
         assert_eq!(status.execution_counter, 0);
-        assert_eq!(coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap().epoch, 5);
+        assert_eq!(
+            coordinator
+                .get_status("restart", Some(repository as &dyn NotebookStoragePort))
+                .await
+                .unwrap()
+                .epoch,
+            5
+        );
     }
 
     #[tokio::test]
     async fn interrupt_releases_busy_worker_and_rejects_stale_result() {
         let coordinator = test_coordinator();
         let temp = tempfile::tempdir().unwrap();
-        let params = ExecuteCellParams { session_id: "interrupt-session".into(), cell_id: "cell".into(),
-            code: "import time; time.sleep(30)".into(), workspace_id: None,
-            cwd: Some(temp.path().to_string_lossy().into()), task_id: None, ..Default::default() };
-        let running = { let coordinator = coordinator.clone(); let params = params.clone();
-            tokio::spawn(async move { coordinator.execute_cell(params, None).await }) };
+        let params = ExecuteCellParams {
+            session_id: "interrupt-session".into(),
+            cell_id: "cell".into(),
+            code: "import time; time.sleep(30)".into(),
+            workspace_id: None,
+            cwd: Some(temp.path().to_string_lossy().into()),
+            task_id: None,
+            ..Default::default()
+        };
+        let running = {
+            let coordinator = coordinator.clone();
+            let params = params.clone();
+            tokio::spawn(async move { coordinator.execute_cell(params, None).await })
+        };
         for _ in 0..100 {
-            if coordinator.kernels.read().await.get("interrupt-session").is_some_and(|kernel| kernel.status == KernelStatus::Busy) { break; }
+            if coordinator
+                .kernels
+                .read()
+                .await
+                .get("interrupt-session")
+                .is_some_and(|kernel| kernel.status == KernelStatus::Busy)
+            {
+                break;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-        assert!(coordinator.execute_cell(params.clone(), None).await.is_err(), "concurrent writer must not queue another execution");
+        assert!(
+            coordinator
+                .execute_cell(params.clone(), None)
+                .await
+                .is_err(),
+            "concurrent writer must not queue another execution"
+        );
         assert!(coordinator.interrupt("interrupt-session").await.unwrap());
-        let result = tokio::time::timeout(std::time::Duration::from_secs(3), running).await.unwrap().unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(3), running)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(result.is_err());
-        let mut next = params; next.code = "print(42)".into();
+        let mut next = params;
+        next.code = "print(42)".into();
         let output = coordinator.execute_cell(next, None).await.unwrap();
         assert_eq!(output.stdout.trim(), "42");
         assert_eq!(output.epoch, 2);
@@ -739,18 +799,33 @@ mod tests {
     async fn test_multiple_notebooks_in_same_session_are_isolated() {
         let coordinator = test_coordinator();
 
-        let s1 = coordinator.get_status_scoped("sess-1", Some("nb-a"), None).await.unwrap();
+        let s1 = coordinator
+            .get_status_scoped("sess-1", Some("nb-a"), None)
+            .await
+            .unwrap();
         assert_eq!(s1.notebook_id.as_deref(), Some("nb-a"));
         assert_eq!(s1.execution_counter, 0);
 
-        let s2 = coordinator.get_status_scoped("sess-1", Some("nb-b"), None).await.unwrap();
+        let s2 = coordinator
+            .get_status_scoped("sess-1", Some("nb-b"), None)
+            .await
+            .unwrap();
         assert_eq!(s2.notebook_id.as_deref(), Some("nb-b"));
         assert_eq!(s2.execution_counter, 0);
 
         // Reset nb-a does not affect nb-b
-        coordinator.reset_scoped("sess-1", Some("nb-a"), None).await.unwrap();
-        let s1_after = coordinator.get_status_scoped("sess-1", Some("nb-a"), None).await.unwrap();
-        let s2_after = coordinator.get_status_scoped("sess-1", Some("nb-b"), None).await.unwrap();
+        coordinator
+            .reset_scoped("sess-1", Some("nb-a"), None)
+            .await
+            .unwrap();
+        let s1_after = coordinator
+            .get_status_scoped("sess-1", Some("nb-a"), None)
+            .await
+            .unwrap();
+        let s2_after = coordinator
+            .get_status_scoped("sess-1", Some("nb-b"), None)
+            .await
+            .unwrap();
         assert_eq!(s1_after.epoch, 2);
         assert_eq!(s2_after.epoch, 1);
     }
@@ -766,7 +841,10 @@ mod tests {
             ..Default::default()
         };
 
-        let res1 = coordinator.execute_cell(params.clone(), None).await.unwrap();
+        let res1 = coordinator
+            .execute_cell(params.clone(), None)
+            .await
+            .unwrap();
         assert_eq!(res1.execution_count, 1);
         assert!(res1.stdout.contains("computed_value"));
 

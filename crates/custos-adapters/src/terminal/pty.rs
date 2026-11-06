@@ -326,9 +326,10 @@ impl TerminalProcessHandle for PtyHandle {
         #[cfg(windows)]
         {
             use std::io::Write;
-            let mut lock = self.stdin.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "failed to lock child stdin")
-            })?;
+            let mut lock = self
+                .stdin
+                .lock()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "failed to lock child stdin"))?;
             lock.write_all(data)?;
             lock.flush()?;
             Ok(data.len())
@@ -499,7 +500,14 @@ mod tests {
             exited: Arc::new(AtomicBool::new(false)),
         });
 
-        let pty = PtyHandle::spawn(temp.path(), Some("echo hello_pty"), 80, 24, consumer.clone()).unwrap();
+        let pty = PtyHandle::spawn(
+            temp.path(),
+            Some("echo hello_pty"),
+            80,
+            24,
+            consumer.clone(),
+        )
+        .unwrap();
 
         assert!(pty.pid() > 0);
         assert!(pty.resize(100, 30).is_ok());
@@ -514,6 +522,9 @@ mod tests {
 
         let out = consumer.output.lock().unwrap();
         let s = String::from_utf8_lossy(&out);
-        assert!(s.contains("hello_pty"), "PTY output did not contain expected text; got: {s}");
+        assert!(
+            s.contains("hello_pty"),
+            "PTY output did not contain expected text; got: {s}"
+        );
     }
 }

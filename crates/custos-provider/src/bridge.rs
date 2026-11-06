@@ -1,11 +1,11 @@
 //! Bidirectional bridge between the canonical hexagonal `ModelPort` (`ModelProvider`)
 //! and the compatibility `Provider` (Goose/MCP conversation provider) surface.
 
-use std::sync::Arc;
 use async_trait::async_trait;
-use futures::StreamExt;
-use tokio::sync::mpsc;
 use custos_domain::DomainError;
+use futures::StreamExt;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use crate::base::{MessageStream, Provider};
 use crate::conversation::message::Message;
@@ -53,21 +53,16 @@ impl ModelProvider for ProviderToModelPort {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let input_tokens = usage
-            .usage
-            .input_tokens
-            .unwrap_or(0)
-            .max(0) as usize;
-        let output_tokens = usage
-            .usage
-            .output_tokens
-            .unwrap_or(0)
-            .max(0) as usize;
+        let input_tokens = usage.usage.input_tokens.unwrap_or(0).max(0) as usize;
+        let output_tokens = usage.usage.output_tokens.unwrap_or(0).max(0) as usize;
         let total_tokens = input_tokens.saturating_add(output_tokens);
 
         Ok(
-            ModelResponse::text(content, &req.model, total_tokens)
-                .with_usage(Some(input_tokens), Some(output_tokens), Some(total_tokens))
+            ModelResponse::text(content, &req.model, total_tokens).with_usage(
+                Some(input_tokens),
+                Some(output_tokens),
+                Some(total_tokens),
+            ),
         )
     }
 
@@ -103,9 +98,7 @@ impl ModelProvider for ProviderToModelPort {
                             .join("");
                         if !text.is_empty() {
                             accumulated_text.push_str(&text);
-                            let _ = tx
-                                .send(ProviderEvent::chunk(req_id.clone(), text))
-                                .await;
+                            let _ = tx.send(ProviderEvent::chunk(req_id.clone(), text)).await;
                         }
                         if let Some(u) = usage {
                             if let Some(in_tok) = u.usage.input_tokens {
@@ -162,7 +155,10 @@ impl ModelProvider for ProviderToModelPort {
 
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            match inner.stream(&model_config, "", &req.structured_messages, &[]).await {
+            match inner
+                .stream(&model_config, "", &req.structured_messages, &[])
+                .await
+            {
                 Ok(mut stream) => {
                     let mut seq: u64 = 1;
                     let mut total_output_tokens: u64 = 0;
@@ -178,16 +174,18 @@ impl ModelProvider for ProviderToModelPort {
                                     .collect::<Vec<_>>()
                                     .join("");
                                 if !text.is_empty() {
-                                    let _ = tx.send(crate::turn::ModelTurnEvent {
-                                        attempt_id,
-                                        sequence: seq,
-                                        actual_provider: Some(provider_id.clone()),
-                                        actual_model: Some(requested_model.clone()),
-                                        actual_transport: Some("provider_bridge".to_string()),
-                                        delta: crate::turn::TurnDelta::Text { text },
-                                        usage_certainty: Some("exact".to_string()),
-                                        provider_response_id: None,
-                                    }).await;
+                                    let _ = tx
+                                        .send(crate::turn::ModelTurnEvent {
+                                            attempt_id,
+                                            sequence: seq,
+                                            actual_provider: Some(provider_id.clone()),
+                                            actual_model: Some(requested_model.clone()),
+                                            actual_transport: Some("provider_bridge".to_string()),
+                                            delta: crate::turn::TurnDelta::Text { text },
+                                            usage_certainty: Some("exact".to_string()),
+                                            provider_response_id: None,
+                                        })
+                                        .await;
                                     seq += 1;
                                 }
                                 if let Some(u) = usage {
@@ -210,70 +208,78 @@ impl ModelProvider for ProviderToModelPort {
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.send(crate::turn::ModelTurnEvent {
-                                    attempt_id,
-                                    sequence: seq,
-                                    actual_provider: Some(provider_id.clone()),
-                                    actual_model: Some(requested_model.clone()),
-                                    actual_transport: None,
-                                    delta: crate::turn::TurnDelta::Failed {
-                                        error_class: "provider_error".to_string(),
-                                        message: e.to_string(),
-                                    },
-                                    usage_certainty: None,
-                                    provider_response_id: None,
-                                }).await;
+                                let _ = tx
+                                    .send(crate::turn::ModelTurnEvent {
+                                        attempt_id,
+                                        sequence: seq,
+                                        actual_provider: Some(provider_id.clone()),
+                                        actual_model: Some(requested_model.clone()),
+                                        actual_transport: None,
+                                        delta: crate::turn::TurnDelta::Failed {
+                                            error_class: "provider_error".to_string(),
+                                            message: e.to_string(),
+                                        },
+                                        usage_certainty: None,
+                                        provider_response_id: None,
+                                    })
+                                    .await;
                                 return;
                             }
                         }
                     }
 
                     // Send usage delta
-                    let _ = tx.send(crate::turn::ModelTurnEvent {
-                        attempt_id,
-                        sequence: seq,
-                        actual_provider: Some(provider_id.clone()),
-                        actual_model: None,
-                        actual_transport: None,
-                        delta: crate::turn::TurnDelta::Usage {
-                            input_tokens: total_input_tokens,
-                            output_tokens: total_output_tokens,
-                            cache_read_tokens: None,
-                            cache_write_tokens: None,
-                        },
-                        usage_certainty: Some("exact".to_string()),
-                        provider_response_id: None,
-                    }).await;
+                    let _ = tx
+                        .send(crate::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: seq,
+                            actual_provider: Some(provider_id.clone()),
+                            actual_model: None,
+                            actual_transport: None,
+                            delta: crate::turn::TurnDelta::Usage {
+                                input_tokens: total_input_tokens,
+                                output_tokens: total_output_tokens,
+                                cache_read_tokens: None,
+                                cache_write_tokens: None,
+                            },
+                            usage_certainty: Some("exact".to_string()),
+                            provider_response_id: None,
+                        })
+                        .await;
                     seq += 1;
 
                     // Send completed delta
-                    let _ = tx.send(crate::turn::ModelTurnEvent {
-                        attempt_id,
-                        sequence: seq,
-                        actual_provider: None,
-                        actual_model: None,
-                        actual_transport: None,
-                        delta: crate::turn::TurnDelta::Completed {
-                            finish_reason: Some("stop".to_string()),
-                        },
-                        usage_certainty: None,
-                        provider_response_id: None,
-                    }).await;
+                    let _ = tx
+                        .send(crate::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: seq,
+                            actual_provider: None,
+                            actual_model: None,
+                            actual_transport: None,
+                            delta: crate::turn::TurnDelta::Completed {
+                                finish_reason: Some("stop".to_string()),
+                            },
+                            usage_certainty: None,
+                            provider_response_id: None,
+                        })
+                        .await;
                 }
                 Err(e) => {
-                    let _ = tx.send(crate::turn::ModelTurnEvent {
-                        attempt_id,
-                        sequence: 1,
-                        actual_provider: Some(provider_id),
-                        actual_model: Some(requested_model),
-                        actual_transport: None,
-                        delta: crate::turn::TurnDelta::Failed {
-                            error_class: "provider_error".to_string(),
-                            message: e.to_string(),
-                        },
-                        usage_certainty: None,
-                        provider_response_id: None,
-                    }).await;
+                    let _ = tx
+                        .send(crate::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: 1,
+                            actual_provider: Some(provider_id),
+                            actual_model: Some(requested_model),
+                            actual_transport: None,
+                            delta: crate::turn::TurnDelta::Failed {
+                                error_class: "provider_error".to_string(),
+                                message: e.to_string(),
+                            },
+                            usage_certainty: None,
+                            provider_response_id: None,
+                        })
+                        .await;
                 }
             }
         });
@@ -367,11 +373,7 @@ impl Provider for ModelPortToProvider {
         let out_tok = resp.output_tokens.unwrap_or(0);
         let usage = ProviderUsage::new(
             model_config.model_name.clone(),
-            Usage::new(
-                Some(in_tok as i32),
-                Some(out_tok as i32),
-                None,
-            ),
+            Usage::new(Some(in_tok as i32), Some(out_tok as i32), None),
         );
         Ok((msg, usage))
     }
@@ -460,7 +462,10 @@ mod tests {
             _tools: &[rmcp::model::Tool],
         ) -> Result<(Message, ProviderUsage), ProviderError> {
             let msg = Message::assistant().with_text("mocked response");
-            let usage = ProviderUsage::new("mock-model".to_string(), Usage::new(Some(10), Some(20), None));
+            let usage = ProviderUsage::new(
+                "mock-model".to_string(),
+                Usage::new(Some(10), Some(20), None),
+            );
             Ok((msg, usage))
         }
 
@@ -491,8 +496,13 @@ mod tests {
         }
 
         async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
-            Ok(ModelResponse::text(format!("echo: {}", req.prompt), &req.model, 30)
-                .with_usage(Some(10), Some(20), Some(30)))
+            Ok(
+                ModelResponse::text(format!("echo: {}", req.prompt), &req.model, 30).with_usage(
+                    Some(10),
+                    Some(20),
+                    Some(30),
+                ),
+            )
         }
 
         async fn stream(
@@ -502,8 +512,16 @@ mod tests {
             let (tx, rx) = mpsc::channel(4);
             let req_id = req.request_id.clone();
             tokio::spawn(async move {
-                let _ = tx.send(ProviderEvent::chunk(req_id.clone(), "chunk1")).await;
-                let _ = tx.send(ProviderEvent::completed(req_id, Some("chunk1".to_string()), None)).await;
+                let _ = tx
+                    .send(ProviderEvent::chunk(req_id.clone(), "chunk1"))
+                    .await;
+                let _ = tx
+                    .send(ProviderEvent::completed(
+                        req_id,
+                        Some("chunk1".to_string()),
+                        None,
+                    ))
+                    .await;
             });
             Ok(rx)
         }
@@ -532,7 +550,10 @@ mod tests {
 
         let config = ModelConfig::new("test-model");
         let messages = vec![Message::user().with_text("ping")];
-        let (msg, usage) = provider.complete(&config, "system prompt", &messages, &[]).await.unwrap();
+        let (msg, usage) = provider
+            .complete(&config, "system prompt", &messages, &[])
+            .await
+            .unwrap();
 
         let text = msg.content[0].as_text().unwrap();
         assert!(text.contains("echo: System: system prompt"));
@@ -541,4 +562,3 @@ mod tests {
         assert_eq!(usage.usage.output_tokens, Some(20));
     }
 }
-

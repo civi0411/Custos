@@ -60,7 +60,9 @@ impl Skill for FileReadSkill {
             .unwrap_or_else(|_| scope.root.clone());
 
         if !canonical.starts_with(&canonical_scope) {
-            return Err(SkillError::OutOfScope(canonical.to_string_lossy().to_string()));
+            return Err(SkillError::OutOfScope(
+                canonical.to_string_lossy().to_string(),
+            ));
         }
 
         let offset = ctx.args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -150,7 +152,8 @@ mod tests {
         let mut tmp = NamedTempFile::new().unwrap();
         writeln!(tmp, "Secret outside scope").unwrap();
 
-        let isolated_dir = std::env::temp_dir().join(format!("custos_scope_test_{}", uuid::Uuid::new_v4()));
+        let isolated_dir =
+            std::env::temp_dir().join(format!("custos_scope_test_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&isolated_dir).unwrap();
 
         let skill = FileReadSkill;
@@ -165,7 +168,10 @@ mod tests {
             scope_root: Some(WorkspaceScope::new(isolated_dir.clone())),
         };
 
-        let err = skill.run(&ctx).await.expect_err("Should reject reading file outside scope root");
+        let err = skill
+            .run(&ctx)
+            .await
+            .expect_err("Should reject reading file outside scope root");
         assert!(matches!(err, SkillError::OutOfScope(_)));
 
         let _ = std::fs::remove_dir_all(&isolated_dir);
@@ -177,7 +183,9 @@ mod tests {
         let mut tmp = NamedTempFile::new().unwrap();
         // Create a 10 MB sparse file with known content at start and end
         tmp.as_file_mut().write_all(b"START_HEADER_DATA").unwrap();
-        tmp.as_file_mut().seek(SeekFrom::Start(10 * 1024 * 1024)).unwrap();
+        tmp.as_file_mut()
+            .seek(SeekFrom::Start(10 * 1024 * 1024))
+            .unwrap();
         tmp.as_file_mut().write_all(b"END_FOOTER_DATA").unwrap();
 
         let parent_dir = tmp.path().parent().unwrap().to_path_buf();

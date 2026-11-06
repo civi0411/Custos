@@ -176,11 +176,10 @@ mod tests {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let task_service = Arc::new(TaskService::new(store));
         let runtime = Arc::new(
-            custos_runtime::workflow::TaskRuntime::new()
-                .with_harness(Arc::new(NonSteeringHarness)),
+            custos_runtime::workflow::TaskRuntime::new().with_harness(Arc::new(NonSteeringHarness)),
         );
-        let bridge = BridgeService::new(session_manager.clone(), task_service)
-            .with_task_runtime(runtime);
+        let bridge =
+            BridgeService::new(session_manager.clone(), task_service).with_task_runtime(runtime);
 
         let session = session_manager.create_session(SessionMode::Bare).await;
         let res = bridge

@@ -173,4 +173,3 @@ pub trait PackLifecycle: Send + Sync {
 }
 
 impl<T: DomainPack + ?Sized> PackLifecycle for T {}
-

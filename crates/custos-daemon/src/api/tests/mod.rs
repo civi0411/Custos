@@ -1,8 +1,8 @@
-pub mod harness;
-mod tasks;
-mod sessions;
-mod workspaces;
-mod providers;
-mod research;
 mod assistant;
+pub mod harness;
+mod providers;
 mod quant;
+mod research;
+mod sessions;
+mod tasks;
+mod workspaces;

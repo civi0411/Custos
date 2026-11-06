@@ -1,9 +1,9 @@
 use super::super::*;
-use std::sync::Arc;
-use custos_core::TaskService;
-use custos_runtime::session::SessionManager;
 use custos_bridge::BridgeService;
 use custos_core::CreateTask;
+use custos_core::TaskService;
+use custos_runtime::session::SessionManager;
+use std::sync::Arc;
 
 async fn setup_quant_env() -> (LocalApiDispatcher, String) {
     let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
@@ -97,7 +97,10 @@ async fn test_quant_backtest_lookahead_bias_rejection() {
     };
 
     let resp = dispatcher.handle_request(req).await;
-    assert!(!resp.is_success(), "Must reject formulas with lookahead bias");
+    assert!(
+        !resp.is_success(),
+        "Must reject formulas with lookahead bias"
+    );
     assert!(resp.error.unwrap().contains("Lookahead bias check failed"));
 }
 
@@ -153,7 +156,10 @@ async fn test_quant_orders_lifecycle_and_outbox_governance() {
 
     let list_resp = dispatcher.handle_request(list_req).await;
     assert!(list_resp.is_success(), "{:?}", list_resp.error);
-    let list_arr = list_resp.result.unwrap()["orders"].as_array().unwrap().clone();
+    let list_arr = list_resp.result.unwrap()["orders"]
+        .as_array()
+        .unwrap()
+        .clone();
     assert_eq!(list_arr.len(), 2);
 
     // 3. Human-in-the-Loop Operator signs permit and approves order
@@ -185,8 +191,14 @@ async fn test_quant_orders_lifecycle_and_outbox_governance() {
     let outbox_resp = dispatcher.handle_request(outbox_req).await;
     assert!(outbox_resp.is_success(), "{:?}", outbox_resp.error);
     let outbox_items = outbox_resp.result.unwrap().as_array().unwrap().clone();
-    assert!(!outbox_items.is_empty(), "Approved order must be bridged to Outbox entries");
-    let quant_item = outbox_items.iter().find(|item| item["action_type"] == "quant_order_execution").unwrap();
+    assert!(
+        !outbox_items.is_empty(),
+        "Approved order must be bridged to Outbox entries"
+    );
+    let quant_item = outbox_items
+        .iter()
+        .find(|item| item["action_type"] == "quant_order_execution")
+        .unwrap();
     assert_eq!(quant_item["permit_id"], "permit_risk_audit_passed_2026");
     assert_eq!(quant_item["status"], "approved");
 }
@@ -275,7 +287,10 @@ async fn test_pipeline_status_rpc() {
     assert_eq!(status["stages"]["bronze"]["status"], "ingesting");
     assert_eq!(status["stages"]["silver"]["status"], "verified");
     assert_eq!(status["stages"]["gold"]["status"], "point_in_time");
-    assert_eq!(status["modalities"]["market"]["lookahead_prevention"], "closed_bar_invariant");
+    assert_eq!(
+        status["modalities"]["market"]["lookahead_prevention"],
+        "closed_bar_invariant"
+    );
 }
 
 #[tokio::test]
@@ -327,7 +342,12 @@ async fn test_quant_indicators_compute_rpc() {
     let indicators = &result["indicators"];
     assert!(indicators["sma_20"].as_f64().unwrap() > 0.0);
     assert!(indicators["rsi_14"].as_f64().unwrap() > 0.0);
-    assert!(indicators["bollinger_bands_20_2"]["middle"].as_f64().unwrap() > 0.0);
+    assert!(
+        indicators["bollinger_bands_20_2"]["middle"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
     assert!(indicators["macd_12_26_9"]["macd"].is_number());
     assert!(indicators["atr_14"].as_f64().unwrap() > 0.0);
     assert!(indicators["vwap"].as_f64().unwrap() > 0.0);
@@ -441,7 +461,10 @@ async fn test_quant_gate_evaluate_rpc() {
     let breach_res = breach_resp.result.unwrap();
     assert_eq!(breach_res["is_allowed"], false);
     assert_eq!(breach_res["outcome"]["status"], "Reject");
-    assert_eq!(breach_res["outcome"]["details"]["breach_type"], "MaxOrderNotionalExceeded");
+    assert_eq!(
+        breach_res["outcome"]["details"]["breach_type"],
+        "MaxOrderNotionalExceeded"
+    );
 }
 
 #[tokio::test]
@@ -567,8 +590,8 @@ async fn test_quant_pbo_compute_rpc() {
     assert_eq!(res["available"], true);
     assert_eq!(res["samples"], 20);
     let prob = res["probability"].as_f64().unwrap();
-    assert!(prob >= 0.0 && prob <= 1.0);
-    assert!(res["logits"].as_array().unwrap().len() > 0);
+    assert!((0.0..=1.0).contains(&prob));
+    assert!(!res["logits"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -615,7 +638,3 @@ async fn test_quant_pack_dynamic_admission_after_disable_and_enable() {
     let resp3 = dispatcher.handle_request(backtest_req).await;
     assert!(resp3.is_success(), "{:?}", resp3.error);
 }
-
-
-
-

@@ -173,7 +173,12 @@ pub fn calculate_pbo_cscv(
         median_logit: (median_logit * 10000.0).round() / 10000.0,
         logits: logits.into_iter().take(200).collect(),
         is_overfitted,
-        status: if is_overfitted { "overfitted" } else { "robust" }.into(),
+        status: if is_overfitted {
+            "overfitted"
+        } else {
+            "robust"
+        }
+        .into(),
     })
 }
 
@@ -198,10 +203,10 @@ mod tests {
     fn test_pbo_cscv_calculation() {
         // 4 strategy candidates across 6 sub-periods
         let matrix = vec![
-            vec![1.5, 2.0, 1.8, 1.2, 0.9, 1.4], // Robust performer
+            vec![1.5, 2.0, 1.8, 1.2, 0.9, 1.4],    // Robust performer
             vec![2.5, 2.2, 2.9, -1.0, -0.5, -0.8], // Overfitted: good first half, bad second
-            vec![0.5, 0.6, 0.4, 0.5, 0.7, 0.6], // Consistent low performer
-            vec![1.2, 1.1, 1.3, 1.4, 1.2, 1.3], // Steady benchmark
+            vec![0.5, 0.6, 0.4, 0.5, 0.7, 0.6],    // Consistent low performer
+            vec![1.2, 1.1, 1.3, 1.4, 1.2, 1.3],    // Steady benchmark
         ];
 
         let result = calculate_pbo_cscv(&matrix, 500).expect("pbo calculated");

@@ -129,7 +129,10 @@ pub fn calculate_dual_beta(portfolio_returns: &[f64], benchmark_returns: &[f64])
 }
 
 /// Calculate Up/Down Capture Ratios relative to benchmark returns
-pub fn calculate_capture_ratios(portfolio_returns: &[f64], benchmark_returns: &[f64]) -> (f64, f64) {
+pub fn calculate_capture_ratios(
+    portfolio_returns: &[f64],
+    benchmark_returns: &[f64],
+) -> (f64, f64) {
     let n = portfolio_returns.len().min(benchmark_returns.len());
     if n < 5 {
         return (1.0, 1.0);

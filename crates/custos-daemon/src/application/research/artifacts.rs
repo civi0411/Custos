@@ -2,15 +2,10 @@
 
 use crate::api::*;
 use base64::Engine;
-use custos_domain::{
-    AnnotationStatus, AnnotationTarget, ArtifactLineageNode, NoteRecord,
-};
+use custos_domain::{AnnotationStatus, AnnotationTarget, ArtifactLineageNode, NoteRecord};
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_research_artifacts(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_research_artifacts(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.research.annotations.list" => {
                 let research = match self.research.as_ref() {
@@ -469,7 +464,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown research artifacts method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown research artifacts method: {unknown}"),
+            ),
         }
     }
 }

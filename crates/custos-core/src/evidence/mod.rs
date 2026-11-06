@@ -204,8 +204,14 @@ mod tests {
                 ]
             }),
         );
-        let claim_unconfigured = unconfigured_pipeline.verify_bundle(&fake_inline_bundle).await.unwrap();
-        assert!(!claim_unconfigured.passed, "Inline fake content must not pass without trusted acquisition");
+        let claim_unconfigured = unconfigured_pipeline
+            .verify_bundle(&fake_inline_bundle)
+            .await
+            .unwrap();
+        assert!(
+            !claim_unconfigured.passed,
+            "Inline fake content must not pass without trusted acquisition"
+        );
 
         // Case 4: Inline content contradicting acquired source is rejected
         let fake_content_bundle = EvidenceBundle::new(
@@ -224,7 +230,10 @@ mod tests {
             }),
         );
         let claim_content_mismatch = pipeline.verify_bundle(&fake_content_bundle).await.unwrap();
-        assert!(!claim_content_mismatch.passed, "Contradictory inline content must be rejected");
+        assert!(
+            !claim_content_mismatch.passed,
+            "Contradictory inline content must be rejected"
+        );
 
         // Case 5: Source revision mismatch (stale citation) is rejected
         let stale_bundle = EvidenceBundle::new(

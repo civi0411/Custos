@@ -25,7 +25,6 @@ pub struct HarnessEntry {
 
 pub use super::binary::{probe_binary_available, resolve_binary_path};
 
-
 #[derive(Clone, Default)]
 pub struct HarnessRegistry {
     harnesses: HashMap<String, Arc<HarnessEntry>>,
@@ -61,7 +60,6 @@ impl HarnessRegistry {
         registry.set_default("claude-code");
         registry
     }
-
 
     pub fn register(
         &mut self,
@@ -249,4 +247,3 @@ mod tests {
         assert_eq!(desc.name, "OpenCode");
     }
 }
-

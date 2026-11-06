@@ -2,9 +2,9 @@
 //! Reference: Bailey, Borwein, López de Prado, Zhu (2016)
 //! "The Probability of Backtest Overfitting"
 
+use crate::verifier::{PackVerifier, VerificationContext, VerificationResult};
 use async_trait::async_trait;
 use custos_domain::quant::calculate_pbo_cscv;
-use crate::verifier::{PackVerifier, VerificationContext, VerificationResult};
 
 pub struct PboOverfittingVerifier;
 
@@ -30,7 +30,10 @@ impl PackVerifier for PboOverfittingVerifier {
             }
             if prob <= 0.50 {
                 return VerificationResult::Pass {
-                    detail: format!("CSCV PBO passed: probability={:.2}% <= 50.0% (robust)", prob * 100.0),
+                    detail: format!(
+                        "CSCV PBO passed: probability={:.2}% <= 50.0% (robust)",
+                        prob * 100.0
+                    ),
                 };
             } else {
                 return VerificationResult::Fail {
@@ -43,7 +46,11 @@ impl PackVerifier for PboOverfittingVerifier {
         }
 
         // 2. Compute from matrix of subperiod returns if provided
-        if let Some(matrix_val) = ctx.metadata.get("matrix").or_else(|| ctx.metadata.get("subperiod_returns")) {
+        if let Some(matrix_val) = ctx
+            .metadata
+            .get("matrix")
+            .or_else(|| ctx.metadata.get("subperiod_returns"))
+        {
             if let Some(rows) = matrix_val.as_array() {
                 let mut matrix: Vec<Vec<f64>> = Vec::new();
                 for r in rows {

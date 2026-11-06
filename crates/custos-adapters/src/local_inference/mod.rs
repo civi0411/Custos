@@ -1,15 +1,15 @@
 pub mod config_resolver;
 #[cfg(feature = "hf-hub")]
 pub use custos_download_manager as download_manager;
+pub mod adapter;
+pub mod folder_scanner;
+pub mod gguf_inspector;
 #[cfg(feature = "hf-hub")]
 pub mod huggingface_auth;
+pub mod metal_probe;
 pub mod paths;
 pub mod prompt_template;
 pub mod provider_utils;
-pub mod metal_probe;
-pub mod gguf_inspector;
-pub mod folder_scanner;
-pub mod adapter;
 pub use adapter::NativeLocalModelAdapter;
 pub mod sidecar;
 pub use sidecar::{
@@ -151,7 +151,8 @@ impl InferenceRuntime {
         let mut backends: HashMap<&'static str, Arc<dyn LocalInferenceBackend>> = HashMap::new();
         #[cfg(feature = "local-inference-native")]
         {
-            let llamacpp_backend: Arc<dyn LocalInferenceBackend> = Arc::new(LlamaCppBackend::new()?);
+            let llamacpp_backend: Arc<dyn LocalInferenceBackend> =
+                Arc::new(LlamaCppBackend::new()?);
             backends.insert(LLAMACPP_BACKEND_ID, llamacpp_backend);
         }
         let mlx_backend: Arc<dyn LocalInferenceBackend> = Arc::new(MlxBackend::new());
@@ -177,7 +178,10 @@ impl InferenceRuntime {
     pub fn get_admission_coordinator(
         &self,
     ) -> Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>> {
-        self.admission.lock().expect("admission lock poisoned").clone()
+        self.admission
+            .lock()
+            .expect("admission lock poisoned")
+            .clone()
     }
 
     fn default_backend(&self) -> &dyn LocalInferenceBackend {
@@ -288,7 +292,9 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
     };
 
     for slot in slots {
-        let in_flight = slot.active_requests.load(std::sync::atomic::Ordering::SeqCst);
+        let in_flight = slot
+            .active_requests
+            .load(std::sync::atomic::Ordering::SeqCst);
         if in_flight > 0 {
             return Err(ProviderError::ExecutionError(format!(
                 "Cannot evict model '{}': {} inference request(s) currently in-flight",
@@ -314,7 +320,8 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
     Ok(evicted)
 }
 
-pub async fn list_loaded_instances() -> Result<Vec<custos_domain::LoadedModelInstance>, ProviderError> {
+pub async fn list_loaded_instances(
+) -> Result<Vec<custos_domain::LoadedModelInstance>, ProviderError> {
     let mut instances = Vec::new();
     if let Some(sidecar_inst) = sidecar::get_loaded_sidecar_instance().await {
         instances.push(sidecar_inst);
@@ -332,11 +339,24 @@ pub async fn list_loaded_instances() -> Result<Vec<custos_domain::LoadedModelIns
 
     for (model_id, backend_id, slot) in slots {
         if let Ok(state) = slot.state.try_lock() {
-            if let ModelSlotState::Loaded { resolved, loaded_at, profile_revision, effective_gpu_layers, .. } = &*state {
-                let instance_id = format!("inst_{}", &custos_domain::digest(model_id.as_bytes())[..12]);
+            if let ModelSlotState::Loaded {
+                resolved,
+                loaded_at,
+                profile_revision,
+                effective_gpu_layers,
+                ..
+            } = &*state
+            {
+                let instance_id =
+                    format!("inst_{}", &custos_domain::digest(model_id.as_bytes())[..12]);
                 instances.push(custos_domain::LoadedModelInstance {
                     instance_id,
-                    model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(&model_id).to_string(),
+                    model_name: resolved
+                        .model_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(&model_id)
+                        .to_string(),
                     model_path: resolved.model_path.to_string_lossy().to_string(),
                     backend_id: backend_id.to_string(),
                     context_limit: resolved.context_limit as u64,
@@ -358,10 +378,18 @@ pub async fn preload_model(
     gpu_layers: Option<u32>,
 ) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
     let profile = custos_domain::LocalModelLoadProfile {
-        model_path: model_name.strip_prefix("native:").unwrap_or(model_name).to_string(),
+        model_path: model_name
+            .strip_prefix("native:")
+            .unwrap_or(model_name)
+            .to_string(),
         revision: 0,
         context_size: context_size.unwrap_or(8192) as u64,
-        gpu_mode: if gpu_layers == Some(0) { "off" } else { "manual" }.to_string(),
+        gpu_mode: if gpu_layers == Some(0) {
+            "off"
+        } else {
+            "manual"
+        }
+        .to_string(),
         gpu_layers,
         eval_batch_size: None,
         cpu_threads: None,
@@ -385,9 +413,13 @@ pub async fn preload_model_with_profile(
     let mut resolved = resolve_model_path(clean_model)
         .await
         .map_err(|e| ProviderError::ExecutionError(e.to_string()))?
-        .ok_or_else(|| ProviderError::ExecutionError(format!("Model path not found: {clean_model}")))?;
+        .ok_or_else(|| {
+            ProviderError::ExecutionError(format!("Model path not found: {clean_model}"))
+        })?;
 
-    let context_size = usize::try_from(profile.context_size).map_err(|_| ProviderError::ExecutionError("Local model context size exceeds this platform".to_string()))?;
+    let context_size = usize::try_from(profile.context_size).map_err(|_| {
+        ProviderError::ExecutionError("Local model context size exceeds this platform".to_string())
+    })?;
     resolved.context_limit = context_size;
     resolved.settings.context_size = Some(profile.context_size.min(u32::MAX as u64) as u32);
     resolved.settings.n_gpu_layers = match profile.gpu_mode.as_str() {
@@ -395,10 +427,16 @@ pub async fn preload_model_with_profile(
         "manual" => profile.gpu_layers,
         "auto" => None,
         "max" => Some(u32::MAX),
-        other => return Err(ProviderError::ExecutionError(format!("Unsupported GPU mode: {other}"))),
+        other => {
+            return Err(ProviderError::ExecutionError(format!(
+                "Unsupported GPU mode: {other}"
+            )))
+        }
     };
     resolved.settings.n_batch = profile.eval_batch_size;
-    resolved.settings.n_threads = profile.cpu_threads.map(|value| value.min(i32::MAX as u32) as i32);
+    resolved.settings.n_threads = profile
+        .cpu_threads
+        .map(|value| value.min(i32::MAX as u32) as i32);
     resolved.settings.flash_attention = profile.flash_attention;
     resolved.settings.use_mlock = profile.mlock;
     resolved.settings.use_mmap = profile.mmap;
@@ -413,12 +451,27 @@ pub async fn preload_model_with_profile(
 
     let cold_load_guard = runtime.cold_load_lock.lock().await;
     let mut state = model_slot.state.lock().await;
-    if let ModelSlotState::Loaded { resolved: loaded_resolved, loaded_at, profile_revision, effective_gpu_layers, .. } = &*state {
+    if let ModelSlotState::Loaded {
+        resolved: loaded_resolved,
+        loaded_at,
+        profile_revision,
+        effective_gpu_layers,
+        ..
+    } = &*state
+    {
         if *profile_revision == profile.revision {
-            let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
+            let instance_id = format!(
+                "inst_{}",
+                &custos_domain::digest(clean_model.as_bytes())[..12]
+            );
             return Ok(custos_domain::LoadedModelInstance {
                 instance_id,
-                model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
+                model_name: resolved
+                    .model_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(clean_model)
+                    .to_string(),
                 model_path: resolved.model_path.to_string_lossy().to_string(),
                 backend_id: backend.id().to_string(),
                 context_limit: loaded_resolved.context_limit as u64,
@@ -440,7 +493,9 @@ pub async fn preload_model_with_profile(
             require_exclusive: false,
             required_memory_mb: Some(4096),
         };
-        let verdict = admission.admit_workload(&admission_req).await
+        let verdict = admission
+            .admit_workload(&admission_req)
+            .await
             .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
         match verdict {
             custos_domain::WorkloadAdmissionVerdict::Admitted { lease } => {
@@ -474,7 +529,9 @@ pub async fn preload_model_with_profile(
         for slot in other_slots {
             let mut other = slot.state.lock().await;
             if matches!(*other, ModelSlotState::Loaded { .. }) {
-                tracing::info!("Evicting previous model to free memory for {clean_model} (single-model mode)");
+                tracing::info!(
+                    "Evicting previous model to free memory for {clean_model} (single-model mode)"
+                );
                 *other = ModelSlotState::Empty;
             }
         }
@@ -487,7 +544,9 @@ pub async fn preload_model_with_profile(
 
     let loaded = match tokio::task::spawn_blocking(move || {
         backend_clone.load_model(&model_id_clone, &resolved_clone, &settings_clone)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(loaded)) => loaded,
         Ok(Err(err)) => {
             if sidecar::find_llama_server_binary().is_some() {
@@ -544,22 +603,38 @@ pub async fn preload_model_with_profile(
         resolved: Box::new(resolved.clone()),
         loaded_at,
         profile_revision: profile.revision,
-        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") { resolved.settings.n_gpu_layers } else { None },
+        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") {
+            resolved.settings.n_gpu_layers
+        } else {
+            None
+        },
     };
     model_slot.notify.notify_waiters();
     drop(cold_load_guard);
 
-    let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
+    let instance_id = format!(
+        "inst_{}",
+        &custos_domain::digest(clean_model.as_bytes())[..12]
+    );
     Ok(custos_domain::LoadedModelInstance {
         instance_id,
-        model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
+        model_name: resolved
+            .model_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(clean_model)
+            .to_string(),
         model_path: resolved.model_path.to_string_lossy().to_string(),
         backend_id: backend.id().to_string(),
         context_limit: resolved.context_limit as u64,
         memory_used_bytes: 0,
         loaded_at,
         profile_revision: profile.revision,
-        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") { resolved.settings.n_gpu_layers } else { None },
+        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") {
+            resolved.settings.n_gpu_layers
+        } else {
+            None
+        },
         generation_verified: false,
     })
 }
@@ -1207,7 +1282,9 @@ impl Provider for LocalInferenceProvider {
                             temperature,
                             max_tokens,
                             tx.clone(),
-                        ).await {
+                        )
+                        .await
+                        {
                             let _ = log.error(&e);
                             let _ = tx.send(Err(e)).await;
                         }
@@ -1258,7 +1335,10 @@ impl Provider for LocalInferenceProvider {
                                     let mut l_guard = model_slot.lease_id.lock().unwrap();
                                     *l_guard = Some(lease.lease_id);
                                 }
-                                Ok(custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. }) => {
+                                Ok(custos_domain::WorkloadAdmissionVerdict::Queued {
+                                    reason,
+                                    ..
+                                }) => {
                                     drop(cold_load_guard);
                                     let err = ProviderError::ExecutionError(format!(
                                         "Local inference queued: accelerator busy with exclusive workload - {reason}"
@@ -1267,7 +1347,9 @@ impl Provider for LocalInferenceProvider {
                                     let _ = tx.send(Err(err)).await;
                                     return;
                                 }
-                                Ok(custos_domain::WorkloadAdmissionVerdict::Rejected { reason }) => {
+                                Ok(custos_domain::WorkloadAdmissionVerdict::Rejected {
+                                    reason,
+                                }) => {
                                     drop(cold_load_guard);
                                     let err = ProviderError::ExecutionError(format!(
                                         "Local inference rejected: {reason}"
@@ -1327,11 +1409,7 @@ impl Provider for LocalInferenceProvider {
                         let backend_arg = backend_for_load.clone();
 
                         let loaded = match tokio::task::spawn_blocking(move || {
-                            backend_arg.load_model(
-                                &model_id_arg,
-                                &resolved_arg,
-                                &settings_arg,
-                            )
+                            backend_arg.load_model(&model_id_arg, &resolved_arg, &settings_arg)
                         })
                         .await
                         {
@@ -1344,20 +1422,48 @@ impl Provider for LocalInferenceProvider {
                                         "In-process load failed ({err}), falling back to modern llama-server sidecar..."
                                     );
                                     let sidecar_profile = custos_domain::LocalModelLoadProfile {
-                                        model_path: resolved_for_load.model_path.to_string_lossy().to_string(),
+                                        model_path: resolved_for_load
+                                            .model_path
+                                            .to_string_lossy()
+                                            .to_string(),
                                         revision: 0,
                                         context_size: resolved_for_load.context_limit as u64,
-                                        gpu_mode: if resolved_for_load.settings.n_gpu_layers == Some(0) { "off" } else if resolved_for_load.settings.n_gpu_layers == Some(u32::MAX) { "max" } else if resolved_for_load.settings.n_gpu_layers.is_some() { "manual" } else { "auto" }.to_string(),
-                                        gpu_layers: resolved_for_load.settings.n_gpu_layers.filter(|layers| *layers != u32::MAX),
+                                        gpu_mode: if resolved_for_load.settings.n_gpu_layers
+                                            == Some(0)
+                                        {
+                                            "off"
+                                        } else if resolved_for_load.settings.n_gpu_layers
+                                            == Some(u32::MAX)
+                                        {
+                                            "max"
+                                        } else if resolved_for_load.settings.n_gpu_layers.is_some()
+                                        {
+                                            "manual"
+                                        } else {
+                                            "auto"
+                                        }
+                                        .to_string(),
+                                        gpu_layers: resolved_for_load
+                                            .settings
+                                            .n_gpu_layers
+                                            .filter(|layers| *layers != u32::MAX),
                                         eval_batch_size: resolved_for_load.settings.n_batch,
-                                        cpu_threads: resolved_for_load.settings.n_threads.and_then(|value| u32::try_from(value).ok()),
+                                        cpu_threads: resolved_for_load
+                                            .settings
+                                            .n_threads
+                                            .and_then(|value| u32::try_from(value).ok()),
                                         flash_attention: resolved_for_load.settings.flash_attention,
                                         mmap: resolved_for_load.settings.use_mmap,
                                         mlock: resolved_for_load.settings.use_mlock,
                                         idle_timeout_seconds: None,
                                         updated_at: 0,
                                     };
-                                    match sidecar::start_sidecar(&resolved_for_load.model_path, &sidecar_profile).await {
+                                    match sidecar::start_sidecar(
+                                        &resolved_for_load.model_path,
+                                        &sidecar_profile,
+                                    )
+                                    .await
+                                    {
                                         Ok(instance) => {
                                             let mut state = model_slot.state.lock().await;
                                             *state = ModelSlotState::Empty;
@@ -1369,14 +1475,18 @@ impl Provider for LocalInferenceProvider {
                                                 temperature,
                                                 max_tokens,
                                                 tx.clone(),
-                                            ).await {
+                                            )
+                                            .await
+                                            {
                                                 let _ = log.error(&e);
                                                 let _ = tx.send(Err(e)).await;
                                             }
                                             return;
                                         }
                                         Err(sidecar_err) => {
-                                            tracing::error!("Sidecar fallback also failed: {sidecar_err}");
+                                            tracing::error!(
+                                                "Sidecar fallback also failed: {sidecar_err}"
+                                            );
                                         }
                                     }
                                 }

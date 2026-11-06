@@ -28,13 +28,19 @@ impl DecisionContext {
     ) -> Result<Self, DomainError> {
         let symbol = symbol.into();
         if symbol.trim().is_empty() {
-            return Err(DomainError::Validation("DecisionContext symbol cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "DecisionContext symbol cannot be empty".into(),
+            ));
         }
         if quantity <= 0.0 {
-            return Err(DomainError::Validation("DecisionContext quantity must be positive".into()));
+            return Err(DomainError::Validation(
+                "DecisionContext quantity must be positive".into(),
+            ));
         }
         if estimated_price <= 0.0 {
-            return Err(DomainError::Validation("DecisionContext estimated_price must be positive".into()));
+            return Err(DomainError::Validation(
+                "DecisionContext estimated_price must be positive".into(),
+            ));
         }
 
         Ok(Self {
@@ -71,20 +77,10 @@ impl DecisionContext {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status", content = "details")]
 pub enum GateOutcome {
-    Pass {
-        reason: String,
-        order_notional: f64,
-    },
-    Reject {
-        breach_type: String,
-        reason: String,
-    },
-    BypassExitImmunity {
-        reason: String,
-    },
-    FailOpen {
-        reason: String,
-    },
+    Pass { reason: String, order_notional: f64 },
+    Reject { breach_type: String, reason: String },
+    BypassExitImmunity { reason: String },
+    FailOpen { reason: String },
 }
 
 impl GateOutcome {
@@ -245,7 +241,9 @@ mod tests {
         let ctx = DecisionContext::new("BTCUSDT", OrderDirection::Buy, 0.1, 60000.0).unwrap();
         let outcome = gate.evaluate(&ctx);
         assert!(!outcome.is_allowed());
-        assert!(matches!(outcome, GateOutcome::Reject { breach_type, .. } if breach_type == "EmergencyKillActive"));
+        assert!(
+            matches!(outcome, GateOutcome::Reject { breach_type, .. } if breach_type == "EmergencyKillActive")
+        );
     }
 
     #[test]
@@ -256,7 +254,9 @@ mod tests {
         let ctx = DecisionContext::new("BTCUSDT", OrderDirection::Buy, 0.5, 30_000.0).unwrap();
         let outcome = gate.evaluate(&ctx);
         assert!(!outcome.is_allowed());
-        assert!(matches!(outcome, GateOutcome::Reject { breach_type, .. } if breach_type == "MaxOrderNotionalExceeded"));
+        assert!(
+            matches!(outcome, GateOutcome::Reject { breach_type, .. } if breach_type == "MaxOrderNotionalExceeded")
+        );
     }
 
     #[test]

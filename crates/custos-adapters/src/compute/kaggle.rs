@@ -4,19 +4,19 @@
 //! Enforces pinned version references (never 'latest'), status reconciliation,
 //! artifact collection, and automatic compute teardown verification.
 
-use std::path::PathBuf;
-use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use custos_core::contracts::experiment::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
 use custos_domain::{
-    DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef,
-    ProgressTriplet, ResourceState,
+    DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef, ProgressTriplet,
+    ResourceState,
 };
 
 #[derive(Clone)]
@@ -115,7 +115,11 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
             let has_env_creds = (self.username.is_some() && self.api_key.is_some())
                 || std::env::var("KAGGLE_API_TOKEN").is_ok();
             let token_path = dirs::home_dir().map(|h| h.join(".kaggle").join("access_token"));
-            let has_file_creds = self.credentials_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+            let has_file_creds = self
+                .credentials_path
+                .as_ref()
+                .map(|p| p.exists())
+                .unwrap_or(false)
                 || token_path.map(|p| p.exists()).unwrap_or(false);
 
             if !has_env_creds && !has_file_creds {
@@ -125,9 +129,15 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
             if which::which(&self.kaggle_bin).is_err() {
                 // If not in PATH, check if uv or python module exists
                 if which::which("uv").is_err() && which::which("python3").is_err() {
-                    blockers.push("Kaggle CLI not installed and no Python runtime found to run it".to_string());
+                    blockers.push(
+                        "Kaggle CLI not installed and no Python runtime found to run it"
+                            .to_string(),
+                    );
                 } else {
-                    warnings.push("Kaggle CLI not found in PATH; will use Python module invocation".to_string());
+                    warnings.push(
+                        "Kaggle CLI not found in PATH; will use Python module invocation"
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -153,7 +163,10 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         _idempotency_key: &str,
     ) -> Result<ExternalJobRef, DomainError> {
         let username = self.resolve_username()?;
-        let slug = format!("custos-{}", attempt.experiment_id.replace('_', "-").to_lowercase());
+        let slug = format!(
+            "custos-{}",
+            attempt.experiment_id.replace('_', "-").to_lowercase()
+        );
 
         let attempt_dir = self.work_dir.join("kaggle").join(&attempt.id);
         tokio::fs::create_dir_all(&attempt_dir).await.map_err(|e| {
@@ -177,15 +190,22 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
             serde_json::to_string_pretty(&metadata).unwrap_or_default(),
         )
         .await
-        .map_err(|e| DomainError::Validation(format!("Failed to write kernel-metadata.json: {e}")))?;
+        .map_err(|e| {
+            DomainError::Validation(format!("Failed to write kernel-metadata.json: {e}"))
+        })?;
 
         // Ensure entrypoint exists
         let entrypoint = attempt_dir.join("main.py");
         if !entrypoint.exists() {
             if self.mock_mode {
-                tokio::fs::write(&entrypoint, "# Custos supervised kernel entrypoint\nprint('Starting Kaggle job')\n")
-                    .await
-                    .map_err(|e| DomainError::Validation(format!("Failed to write entrypoint script: {e}")))?;
+                tokio::fs::write(
+                    &entrypoint,
+                    "# Custos supervised kernel entrypoint\nprint('Starting Kaggle job')\n",
+                )
+                .await
+                .map_err(|e| {
+                    DomainError::Validation(format!("Failed to write entrypoint script: {e}"))
+                })?;
             } else {
                 return Err(DomainError::Validation(format!(
                     "Kaggle execution entrypoint '{}' does not exist; stage your script before submitting",
@@ -234,15 +254,19 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         ExternalJobRef::new(username, slug, version)
     }
 
-    async fn observe(&self, external_ref: &ExternalJobRef) -> Result<AttemptObservation, DomainError> {
+    async fn observe(
+        &self,
+        external_ref: &ExternalJobRef,
+    ) -> Result<AttemptObservation, DomainError> {
         let (raw_status, exit_code) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
             (guard.clone(), None)
         } else {
             let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
-            cmd.arg("kernels")
-                .arg("status")
-                .arg(format!("{}/{}", external_ref.account_ref, external_ref.job_id));
+            cmd.arg("kernels").arg("status").arg(format!(
+                "{}/{}",
+                external_ref.account_ref, external_ref.job_id
+            ));
 
             if let (Some(ref u), Some(ref k)) = (&self.username, &self.api_key) {
                 cmd.env("KAGGLE_USERNAME", u);
@@ -295,7 +319,10 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
         cmd.arg("kernels")
             .arg("delete")
-            .arg(format!("{}/{}", external_ref.account_ref, external_ref.job_id))
+            .arg(format!(
+                "{}/{}",
+                external_ref.account_ref, external_ref.job_id
+            ))
             .arg("-y");
 
         if let (Some(ref u), Some(ref k)) = (&self.username, &self.api_key) {
@@ -330,7 +357,10 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
             let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
             cmd.arg("kernels")
                 .arg("output")
-                .arg(format!("{}/{}", external_ref.account_ref, external_ref.job_id))
+                .arg(format!(
+                    "{}/{}",
+                    external_ref.account_ref, external_ref.job_id
+                ))
                 .arg("-p")
                 .arg(&dest);
 
@@ -347,9 +377,9 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         }
 
         let mut artifacts = Vec::new();
-        let mut entries = tokio::fs::read_dir(&dest).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to read output dir: {e}"))
-        })?;
+        let mut entries = tokio::fs::read_dir(&dest)
+            .await
+            .map_err(|e| DomainError::Validation(format!("Failed to read output dir: {e}")))?;
 
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
@@ -441,19 +471,36 @@ mod tests {
     async fn kaggle_submit_fails_without_credentials_in_live_mode() {
         let tmp = tempfile::tempdir().unwrap();
         let adapter = KaggleTargetAdapter::new(tmp.path());
-        let attempt = ExecutionAttempt::new("exp_kaggle_cred_fail", "default", ComputeBackendKind::Kaggle, None);
+        let attempt = ExecutionAttempt::new(
+            "exp_kaggle_cred_fail",
+            "default",
+            ComputeBackendKind::Kaggle,
+            None,
+        );
         let res = adapter.submit(&attempt, "idem").await;
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("Kaggle username could not be determined"));
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("Kaggle username could not be determined"));
     }
 
     #[tokio::test]
     async fn kaggle_submit_fails_without_entrypoint_in_live_mode() {
         let tmp = tempfile::tempdir().unwrap();
-        let adapter = KaggleTargetAdapter::new(tmp.path()).with_credentials("test_user", "test_key");
-        let attempt = ExecutionAttempt::new("exp_kaggle_fail", "default", ComputeBackendKind::Kaggle, None);
+        let adapter =
+            KaggleTargetAdapter::new(tmp.path()).with_credentials("test_user", "test_key");
+        let attempt = ExecutionAttempt::new(
+            "exp_kaggle_fail",
+            "default",
+            ComputeBackendKind::Kaggle,
+            None,
+        );
         let res = adapter.submit(&attempt, "idem").await;
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("does not exist; stage your script"));
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("does not exist; stage your script"));
     }
 }

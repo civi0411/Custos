@@ -130,8 +130,15 @@ impl PackVerifier for CitationCoverageOracle {
                                 || s.eq_ignore_ascii_case("passed")
                         })
                         .unwrap_or(false);
-                    let is_stale = rec.get("is_stale").and_then(Value::as_bool).unwrap_or(false)
-                        || rec.get("is_fresh").and_then(Value::as_bool).map(|fresh| !fresh).unwrap_or(false);
+                    let is_stale = rec
+                        .get("is_stale")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                        || rec
+                            .get("is_fresh")
+                            .and_then(Value::as_bool)
+                            .map(|fresh| !fresh)
+                            .unwrap_or(false);
 
                     let version_matches = match claim_source_version {
                         Some(expected_ver) => {
@@ -383,7 +390,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_citation_coverage_rejects_forged_metadata_when_assessment_records_missing_or_failed() {
+    async fn test_citation_coverage_rejects_forged_metadata_when_assessment_records_missing_or_failed(
+    ) {
         let oracle = CitationCoverageOracle::new();
         // Claim falsely asserts verified: true, but assessment_records says rejected
         let ctx = VerificationContext::new("task_res_7").with_metadata(json!({
@@ -469,7 +477,10 @@ mod tests {
                 { "claim_id": "c1", "status": "verified", "source_version": "v1" }
             ]
         }));
-        assert!(matches!(oracle.verify(&ctx_mismatch).await, VerificationResult::Fail { .. }));
+        assert!(matches!(
+            oracle.verify(&ctx_mismatch).await,
+            VerificationResult::Fail { .. }
+        ));
 
         // 2. Matching version must pass
         let ctx_match = VerificationContext::new("task_ver_match").with_metadata(json!({

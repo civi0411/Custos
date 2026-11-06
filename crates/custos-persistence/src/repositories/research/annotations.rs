@@ -1,15 +1,15 @@
 use super::ResearchRepository;
 use chrono::{DateTime, Utc};
-use custos_domain::{
-    AnnotationRecord, AnnotationStatus, AnnotationTarget, DomainError,
-};
+use custos_domain::{AnnotationRecord, AnnotationStatus, AnnotationTarget, DomainError};
 use rusqlite::params;
 
 impl ResearchRepository {
     // Annotations
     pub fn save_annotation(&self, ann: &AnnotationRecord) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
         let target_json = serde_json::to_string(&ann.target)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         let status_str = match ann.status {
@@ -19,8 +19,9 @@ impl ResearchRepository {
             AnnotationStatus::Dismissed => "dismissed",
         };
 
-        let affected = tx.execute(
-            "INSERT INTO research_annotations (
+        let affected = tx
+            .execute(
+                "INSERT INTO research_annotations (
                 id, artifact_path, artifact_version, target_json, note, actor,
                 status, side_chat_session_id, submitted_turn_id, created_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
@@ -32,20 +33,20 @@ impl ResearchRepository {
                 submitted_turn_id = excluded.submitted_turn_id
             WHERE research_annotations.artifact_path = excluded.artifact_path
                 AND research_annotations.artifact_version = excluded.artifact_version",
-            params![
-                ann.id,
-                ann.artifact_path,
-                ann.artifact_version,
-                target_json,
-                ann.note,
-                ann.actor,
-                status_str,
-                ann.side_chat_session_id,
-                ann.submitted_turn_id,
-                ann.created_at.timestamp(),
-            ],
-        )
-        .map_err(|e| DomainError::Validation(e.to_string()))?;
+                params![
+                    ann.id,
+                    ann.artifact_path,
+                    ann.artifact_version,
+                    target_json,
+                    ann.note,
+                    ann.actor,
+                    status_str,
+                    ann.side_chat_session_id,
+                    ann.submitted_turn_id,
+                    ann.created_at.timestamp(),
+                ],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         if affected == 0 {
             return Err(DomainError::Validation(
@@ -62,7 +63,8 @@ impl ResearchRepository {
             ],
         )
         .map_err(|error| DomainError::Validation(error.to_string()))?;
-        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit()
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(())
     }
 
@@ -148,7 +150,9 @@ impl ResearchRepository {
         Ok(())
     }
 
-    pub(crate) fn map_annotation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnnotationRecord> {
+    pub(crate) fn map_annotation_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<AnnotationRecord> {
         let target_json: String = row.get(3)?;
         let target: AnnotationTarget =
             serde_json::from_str(&target_json).unwrap_or(AnnotationTarget::Text {

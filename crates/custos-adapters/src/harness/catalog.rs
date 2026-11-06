@@ -1,6 +1,6 @@
 //! Static harness catalog defining all standard native and discovered CLI agents.
 
-use super::spec::{HeadlessArgs, HarnessSpec, StreamProtocol};
+use super::spec::{HarnessSpec, HeadlessArgs, StreamProtocol};
 use custos_core::contracts::harness::{CostVisibility, HarnessMaturity, ToolMediationLevel};
 
 pub static SPECS: &[HarnessSpec] = &[
@@ -53,7 +53,6 @@ pub static SPECS: &[HarnessSpec] = &[
         cost: CostVisibility::Estimated,
         maturity: HarnessMaturity::VerifiedNative,
     },
-
     // 2. Discovered CLI agents catalog (41 agents)
     HarnessSpec {
         id: "claude-agent-teams",
@@ -559,7 +558,11 @@ mod tests {
 
     #[test]
     fn test_catalog_specs_completeness() {
-        assert_eq!(SPECS.len(), 45, "Catalog must contain exactly 45 standard harnesses");
+        assert_eq!(
+            SPECS.len(),
+            45,
+            "Catalog must contain exactly 45 standard harnesses"
+        );
         assert!(find_spec("claude-code").is_some());
         assert!(find_spec("codex").is_some());
         assert!(find_spec("goose").is_some());
@@ -573,7 +576,14 @@ mod tests {
         let instr = "fix the bug";
         assert_eq!(
             find_spec("claude-code").unwrap().headless.build_args(instr),
-            vec!["--print", "fix the bug", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+            vec![
+                "--print",
+                "fix the bug",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--include-partial-messages"
+            ]
         );
         assert_eq!(
             find_spec("codex").unwrap().headless.build_args(instr),

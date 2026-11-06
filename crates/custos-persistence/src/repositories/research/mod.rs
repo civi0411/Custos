@@ -46,11 +46,11 @@ mod tests {
     use crate::connection::DbConnection;
     use custos_domain::{
         AnnotationRecord, AnnotationStatus, ArtifactLineageNode, CellExecutionStatus,
-        ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot, EnvironmentSpec,
-        EvidenceRelation, ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus,
-        NoteRecord, NotebookCell, NotebookCellType, PassageAnchor, Recipe, RecipeInput, ResearchClaim,
-        ResearchExperimentRun, ResearchSynthesisProposal, ReviewFinding, ReviewMethod,
-        ReviewStatus, ReviewTargetType, ReviewerRecord, SourceRecord, SynthesisProposalStatus,
+        ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot, EnvironmentSpec, EvidenceRelation,
+        ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, NoteRecord, NotebookCell,
+        NotebookCellType, PassageAnchor, Recipe, RecipeInput, ResearchClaim, ResearchExperimentRun,
+        ResearchSynthesisProposal, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType,
+        ReviewerRecord, SourceRecord, SynthesisProposalStatus,
     };
     use rusqlite::params;
 

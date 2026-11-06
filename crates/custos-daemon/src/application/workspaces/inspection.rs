@@ -5,10 +5,7 @@ use custos_core::contracts::terminal::TerminalPort;
 use custos_domain::{DomainError, WriteWorkspaceFileParams};
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_workspaces_inspection(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_workspaces_inspection(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_WORKSPACES_DETECT => {
                 let raw_path_str = req
@@ -221,12 +218,11 @@ impl LocalApiDispatcher {
 
                                     let mut sub_remote: Option<String> = None;
                                     for remote_name in ["origin", "upstream"] {
-                                        if let Ok(r_out) =
-                                            tokio::process::Command::new(&git_bin)
-                                                .current_dir(&sub_dir)
-                                                .args(["remote", "get-url", remote_name])
-                                                .output()
-                                                .await
+                                        if let Ok(r_out) = tokio::process::Command::new(&git_bin)
+                                            .current_dir(&sub_dir)
+                                            .args(["remote", "get-url", remote_name])
+                                            .output()
+                                            .await
                                         {
                                             if r_out.status.success() {
                                                 let r = String::from_utf8_lossy(&r_out.stdout)
@@ -240,22 +236,16 @@ impl LocalApiDispatcher {
                                         }
                                     }
 
-                                    let (
-                                        sub_gh_host,
-                                        sub_gh_owner,
-                                        sub_gh_repo,
-                                        sub_gh_avatar,
-                                    ) = if let Some(ref r) = sub_remote {
-                                        parse_github_remote(r)
-                                    } else {
-                                        (None, None, None, None)
-                                    };
+                                    let (sub_gh_host, sub_gh_owner, sub_gh_repo, sub_gh_avatar) =
+                                        if let Some(ref r) = sub_remote {
+                                            parse_github_remote(r)
+                                        } else {
+                                            (None, None, None, None)
+                                        };
 
-                                    let sub_worktrees = list_git_worktrees(
-                                        &git_bin,
-                                        &sub_dir.to_string_lossy(),
-                                    )
-                                    .await;
+                                    let sub_worktrees =
+                                        list_git_worktrees(&git_bin, &sub_dir.to_string_lossy())
+                                            .await;
 
                                     sub_repositories.push(serde_json::json!({
                                         "name": sub_name,
@@ -477,8 +467,7 @@ impl LocalApiDispatcher {
                     Err(resp) => return resp,
                 };
 
-                let mut params =
-                    WriteWorkspaceFileParams::new(ws.id.clone(), path, content);
+                let mut params = WriteWorkspaceFileParams::new(ws.id.clone(), path, content);
                 params.create_parents = create_parents;
                 params.overwrite = overwrite;
 
@@ -671,21 +660,15 @@ pub(crate) mod tests {
             "hello.txt",
             "Hello, inspection!".to_string(),
         );
-        let write_res = coordinator.write_file(&ws, write_params)
-            .await
-            .unwrap();
+        let write_res = coordinator.write_file(&ws, write_params).await.unwrap();
         assert_eq!(write_res.content.len(), 18);
 
         // Read it back
-        let content = coordinator.read_file(&ws, "hello.txt", None)
-            .await
-            .unwrap();
+        let content = coordinator.read_file(&ws, "hello.txt", None).await.unwrap();
         assert_eq!(content.content, "Hello, inspection!");
 
         // Get file tree
-        let tree = coordinator.get_file_tree(&ws, None, None)
-            .await
-            .unwrap();
+        let tree = coordinator.get_file_tree(&ws, None, None).await.unwrap();
         assert!(tree.entries.iter().any(|e| e.path == "hello.txt"));
     }
 }

@@ -2,8 +2,8 @@
 
 use custos_domain::{CapabilityDescriptor, CapabilityGroup};
 
-use super::LocalApiDispatcher;
 use super::transport::{browser_execution_adapter_connected, remote_execution_adapter_connected};
+use super::LocalApiDispatcher;
 
 impl LocalApiDispatcher {
     /// List all capabilities registered in the Custos ADE kernel truthfully.
@@ -30,7 +30,14 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Code,
                     "Inspect daemon-owned folder and Git execution workspaces.",
                     Some("worktrees"),
-                    vec!["create", "list", "get", "archive", "inspect_dirty", "recover"],
+                    vec![
+                        "create",
+                        "list",
+                        "get",
+                        "archive",
+                        "inspect_dirty",
+                        "recover",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -111,7 +118,13 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Evidence,
                     "Reproduction recipes separated from observed execution records.",
                     Some("knowledge"),
-                    vec!["recipes.list", "recipes.get", "executions.list", "executions.get", "executions.resume.assess"],
+                    vec![
+                        "recipes.list",
+                        "recipes.get",
+                        "executions.list",
+                        "executions.get",
+                        "executions.resume.assess",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -151,7 +164,15 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Evidence,
                     "Version lineage, annotations, provenance DAG, and review findings.",
                     Some("artifacts"),
-                    vec!["list", "get", "record_lineage", "lineage.list", "lineage.graph", "annotations.list", "annotations.save"],
+                    vec![
+                        "list",
+                        "get",
+                        "record_lineage",
+                        "lineage.list",
+                        "lineage.graph",
+                        "annotations.list",
+                        "annotations.save",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -192,38 +213,61 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Compute,
                     "Bounded PTY streams scoped to an execution workspace.",
                     Some("terminal"),
-                    vec!["spawn", "write", "resize", "read", "terminate", "list", "get"],
+                    vec![
+                        "spawn",
+                        "write",
+                        "resize",
+                        "read",
+                        "terminate",
+                        "list",
+                        "get",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
-                    "compute.pty", "Terminal", CapabilityGroup::Compute,
-                    "Bounded PTY streams scoped to an execution workspace.", Some("terminal"),
+                    "compute.pty",
+                    "Terminal",
+                    CapabilityGroup::Compute,
+                    "Bounded PTY streams scoped to an execution workspace.",
+                    Some("terminal"),
                     "WorkspaceCoordinator is not configured on this daemon instance.",
                 )
             },
             if self.workspace.is_some() {
                 CapabilityDescriptor::available(
-                    "code.files", "Files", CapabilityGroup::Code,
-                    "Repository tree, file buffers, and source anchor inspection.", Some("files"),
+                    "code.files",
+                    "Files",
+                    CapabilityGroup::Code,
+                    "Repository tree, file buffers, and source anchor inspection.",
+                    Some("files"),
                     vec!["tree", "read", "write"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
-                    "code.files", "Files", CapabilityGroup::Code,
-                    "Repository tree, file buffers, and source anchor inspection.", Some("files"),
+                    "code.files",
+                    "Files",
+                    CapabilityGroup::Code,
+                    "Repository tree, file buffers, and source anchor inspection.",
+                    Some("files"),
                     "WorkspaceCoordinator is not configured on this daemon instance.",
                 )
             },
             if self.workspace.is_some() {
                 CapabilityDescriptor::available(
-                    "code.changes", "Changes", CapabilityGroup::Code,
-                    "Diff review and Git stage decisions in an execution workspace.", Some("changes"),
+                    "code.changes",
+                    "Changes",
+                    CapabilityGroup::Code,
+                    "Diff review and Git stage decisions in an execution workspace.",
+                    Some("changes"),
                     vec!["diff", "file_diff", "stage", "unstage", "discard"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
-                    "code.changes", "Changes", CapabilityGroup::Code,
-                    "Diff review and Git stage decisions in an execution workspace.", Some("changes"),
+                    "code.changes",
+                    "Changes",
+                    CapabilityGroup::Code,
+                    "Diff review and Git stage decisions in an execution workspace.",
+                    Some("changes"),
                     "WorkspaceCoordinator is not configured on this daemon instance.",
                 )
             },
@@ -234,7 +278,14 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Compute,
                     "Authorized kernels, code cells, and reproducible compute epochs.",
                     Some("experiments"),
-                    vec!["cells.list", "cells.save", "execute", "interrupt", "reset", "status"],
+                    vec![
+                        "cells.list",
+                        "cells.save",
+                        "execute",
+                        "interrupt",
+                        "reset",
+                        "status",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -253,7 +304,12 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Evidence,
                     "Criteria, receipts, verifier records, and freshness status.",
                     Some("evidence"),
-                    vec!["reviews.list", "reviews.record", "reviews.get", "reviews.mark_stale"],
+                    vec![
+                        "reviews.list",
+                        "reviews.record",
+                        "reviews.get",
+                        "reviews.mark_stale",
+                    ],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -267,18 +323,29 @@ impl LocalApiDispatcher {
             },
             if self.workflow.is_some() && self.usage_runs.is_some() {
                 CapabilityDescriptor::available(
-                    "coordination.kanban", "Activity", CapabilityGroup::Coordination,
-                    "Persisted Task runs and live run events.", Some("kanban"),
+                    "coordination.kanban",
+                    "Activity",
+                    CapabilityGroup::Coordination,
+                    "Persisted Task runs and live run events.",
+                    Some("kanban"),
                     vec!["runs.list", "runs.watch", "runs.cancel"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
-                    "coordination.kanban", "Activity", CapabilityGroup::Coordination,
-                    "Persisted Task runs and live run events.", Some("kanban"),
+                    "coordination.kanban",
+                    "Activity",
+                    CapabilityGroup::Coordination,
+                    "Persisted Task runs and live run events.",
+                    Some("kanban"),
                     "Workflow and persisted run projection are required.",
                 )
             },
-            if self.harnesses.list().iter().any(|harness| harness.is_available) {
+            if self
+                .harnesses
+                .list()
+                .iter()
+                .any(|harness| harness.is_available)
+            {
                 CapabilityDescriptor::available(
                     "coding.agents",
                     "Coding Agents",
@@ -363,7 +430,18 @@ impl LocalApiDispatcher {
                         CapabilityGroup::Browser,
                         "Governed headless browser automation via agent-browser.",
                         Some("browser"),
-                        vec!["sessions.list", "sessions.create", "tabs.list", "tabs.create", "tabs.navigate", "tabs.click", "tabs.fill", "tabs.snapshot", "tabs.screenshot", "tabs.close"],
+                        vec![
+                            "sessions.list",
+                            "sessions.create",
+                            "tabs.list",
+                            "tabs.create",
+                            "tabs.navigate",
+                            "tabs.click",
+                            "tabs.fill",
+                            "tabs.snapshot",
+                            "tabs.screenshot",
+                            "tabs.close",
+                        ],
                     )
                 } else {
                     CapabilityDescriptor::degraded(

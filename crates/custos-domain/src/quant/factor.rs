@@ -37,13 +37,19 @@ impl AlphaFactor {
         let universe = universe.into();
 
         if name.trim().is_empty() {
-            return Err(DomainError::Validation("AlphaFactor name cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "AlphaFactor name cannot be empty".into(),
+            ));
         }
         if formula.trim().is_empty() {
-            return Err(DomainError::Validation("AlphaFactor formula cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "AlphaFactor formula cannot be empty".into(),
+            ));
         }
         if decay_days == 0 {
-            return Err(DomainError::Validation("AlphaFactor decay_days must be positive".into()));
+            return Err(DomainError::Validation(
+                "AlphaFactor decay_days must be positive".into(),
+            ));
         }
 
         let now = chrono::Utc::now().timestamp();
@@ -66,11 +72,7 @@ impl AlphaFactor {
     pub fn with_metrics(mut self, ic_mean: f64, ic_std: f64, lookahead_clean: bool) -> Self {
         self.ic_mean = ic_mean;
         self.ic_std = ic_std;
-        self.ir = if ic_std > 1e-9 {
-            ic_mean / ic_std
-        } else {
-            0.0
-        };
+        self.ir = if ic_std > 1e-9 { ic_mean / ic_std } else { 0.0 };
         self.lookahead_clean = lookahead_clean;
         self
     }
@@ -225,4 +227,3 @@ pub fn compute_rank_ic(factor_values: &[f64], forward_returns: &[f64]) -> f64 {
         0.0
     }
 }
-

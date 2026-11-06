@@ -24,8 +24,13 @@ impl ComponentId {
         if raw.len() > 64 {
             return Err("component_id exceeds max length of 64 characters");
         }
-        if !raw.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
-            return Err("component_id must contain only lowercase alphanumeric, hyphen, or underscore");
+        if !raw
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        {
+            return Err(
+                "component_id must contain only lowercase alphanumeric, hyphen, or underscore",
+            );
         }
         Ok(Self(raw.to_string()))
     }
@@ -83,10 +88,10 @@ pub fn canonical_component_id(raw: &str) -> Option<&'static str> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DistributionPreset {
-    Base,       // Assistant only
-    Developer,  // Assistant + Coding
-    Research,   // Assistant + Research
-    Full,       // All four workbenches
+    Base,      // Assistant only
+    Developer, // Assistant + Coding
+    Research,  // Assistant + Research
+    Full,      // All four workbenches
 }
 
 impl DistributionPreset {
@@ -146,8 +151,14 @@ mod tests {
     #[test]
     fn test_distribution_presets() {
         assert_eq!(DistributionPreset::Base.components(), &["assistant"]);
-        assert_eq!(DistributionPreset::Developer.components(), &["assistant", "coding"]);
-        assert_eq!(DistributionPreset::Full.components(), &["assistant", "coding", "research", "quant"]);
+        assert_eq!(
+            DistributionPreset::Developer.components(),
+            &["assistant", "coding"]
+        );
+        assert_eq!(
+            DistributionPreset::Full.components(),
+            &["assistant", "coding", "research", "quant"]
+        );
     }
 
     #[test]
@@ -169,4 +180,3 @@ mod tests {
         assert!(ComponentId::validate("a".repeat(65).as_str()).is_err());
     }
 }
-

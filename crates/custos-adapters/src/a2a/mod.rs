@@ -181,7 +181,9 @@ impl A2aClient {
         }
 
         let resp = req.send().await.map_err(|e| {
-            custos_domain::DomainError::Validation(format!("A2A request to '{endpoint}' failed: {e}"))
+            custos_domain::DomainError::Validation(format!(
+                "A2A request to '{endpoint}' failed: {e}"
+            ))
         })?;
 
         if !resp.status().is_success() {
@@ -192,7 +194,9 @@ impl A2aClient {
         }
 
         let rpc_resp: A2aJsonRpcResponse = resp.json().await.map_err(|e| {
-            custos_domain::DomainError::Validation(format!("Failed to parse A2A JSON-RPC response: {e}"))
+            custos_domain::DomainError::Validation(format!(
+                "Failed to parse A2A JSON-RPC response: {e}"
+            ))
         })?;
 
         if let Some(err) = rpc_resp.error {

@@ -287,12 +287,7 @@ mod catalog_capability_tests {
             description: None,
             is_default: true,
             default_effort: Some("low".into()),
-            efforts: vec![
-                "low".into(),
-                "xhigh".into(),
-                "max".into(),
-                "ultra".into(),
-            ],
+            efforts: vec!["low".into(), "xhigh".into(), "max".into(), "ultra".into()],
             supports_fast_mode: false,
             context_window: Some(272000),
             pricing: None,

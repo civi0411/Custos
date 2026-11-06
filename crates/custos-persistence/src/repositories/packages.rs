@@ -96,7 +96,9 @@ impl PackageRepository {
         command_id: &str,
     ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let intent_json = serde_json::json!({
             "command_id": command_id,
@@ -124,7 +126,8 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -138,7 +141,9 @@ impl PackageRepository {
         installed_path: &str,
     ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         tx.execute(
             "INSERT INTO package_inventory (component_id, version, platform, state, artifact_digest, installed_path, installed_at, updated_at) \
@@ -162,7 +167,8 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -176,7 +182,9 @@ impl PackageRepository {
         installed_path: &str,
     ) -> Result<bool, DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let existing_state: Option<String> = tx
             .query_row(
@@ -215,7 +223,8 @@ impl PackageRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         }
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(true)
     }
 
@@ -228,7 +237,9 @@ impl PackageRepository {
         reason: &str,
     ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         tx.execute(
             "UPDATE package_inventory SET \
@@ -247,14 +258,17 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
     /// Enables an installed package for the active profile.
     pub fn enable(&self, component_id: &str) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         tx.execute(
             "UPDATE package_inventory SET \
@@ -274,14 +288,17 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
     /// Disables an installed package from the active profile.
     pub fn disable(&self, component_id: &str) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         tx.execute(
             "UPDATE package_inventory SET \
@@ -301,7 +318,8 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -381,7 +399,10 @@ mod tests {
             .find(|r| r.component_id == "custom_bench")
             .unwrap();
         assert_eq!(active_custom.state, "installed");
-        assert_eq!(active_custom.installed_path.as_deref(), Some("/path/to/custom_bench"));
+        assert_eq!(
+            active_custom.installed_path.as_deref(),
+            Some("/path/to/custom_bench")
+        );
         assert!(active_custom.activation_intent.is_none());
     }
 
@@ -405,11 +426,17 @@ mod tests {
         assert!(enabled.contains(&"quant".to_string()));
 
         let inventory = repo.list_inventory().unwrap();
-        let quant_row = inventory.iter().find(|r| r.component_id == "quant").unwrap();
+        let quant_row = inventory
+            .iter()
+            .find(|r| r.component_id == "quant")
+            .unwrap();
         assert_eq!(quant_row.state, "installed");
         assert_eq!(quant_row.version, "0.2.0");
         assert_eq!(quant_row.platform.as_deref(), Some("universal"));
-        assert_eq!(quant_row.installed_path.as_deref(), Some("/Users/mac/.custos/packages/quant/0.2.0"));
+        assert_eq!(
+            quant_row.installed_path.as_deref(),
+            Some("/Users/mac/.custos/packages/quant/0.2.0")
+        );
     }
 
     #[test]
@@ -427,11 +454,17 @@ mod tests {
         )
         .unwrap();
 
-        assert!(repo.list_enabled_components().unwrap().contains(&"quant".to_string()));
+        assert!(repo
+            .list_enabled_components()
+            .unwrap()
+            .contains(&"quant".to_string()));
 
         // 2. Explicitly disable quant
         repo.disable("quant").unwrap();
-        assert!(!repo.list_enabled_components().unwrap().contains(&"quant".to_string()));
+        assert!(!repo
+            .list_enabled_components()
+            .unwrap()
+            .contains(&"quant".to_string()));
 
         // 3. Daemon restart simulates local discovery candidate registration
         let registered = repo
@@ -446,10 +479,16 @@ mod tests {
 
         // Must NOT overwrite disabled state
         assert!(!registered);
-        assert!(!repo.list_enabled_components().unwrap().contains(&"quant".to_string()));
+        assert!(!repo
+            .list_enabled_components()
+            .unwrap()
+            .contains(&"quant".to_string()));
 
         // 4. Re-enabling restores active admission
         repo.enable("quant").unwrap();
-        assert!(repo.list_enabled_components().unwrap().contains(&"quant".to_string()));
+        assert!(repo
+            .list_enabled_components()
+            .unwrap()
+            .contains(&"quant".to_string()));
     }
 }

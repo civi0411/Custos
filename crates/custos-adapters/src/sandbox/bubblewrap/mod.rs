@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 use custos_core::contracts::sandbox::{verify_permit_binding, SandboxCommand, SandboxPort};
-use custos_domain::{digest, new_id, ActionIntent, DomainError, ExecutionReceipt, Permit, ReceiptStatus};
+use custos_domain::{
+    digest, new_id, ActionIntent, DomainError, ExecutionReceipt, Permit, ReceiptStatus,
+};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -26,10 +28,15 @@ impl BubblewrapSandbox {
             if which::which("bwrap").is_ok() {
                 let mut cmd = tokio::process::Command::new("bwrap");
                 cmd.args(&[
-                    "--ro-bind", "/", "/",
-                    "--dev", "/dev",
-                    "--proc", "/proc",
-                    "--tmpfs", "/tmp",
+                    "--ro-bind",
+                    "/",
+                    "/",
+                    "--dev",
+                    "/dev",
+                    "--proc",
+                    "/proc",
+                    "--tmpfs",
+                    "/tmp",
                 ]);
                 let ws = self.workspace_root.to_string_lossy();
                 cmd.args(&["--bind", &ws, &ws]);
@@ -78,11 +85,16 @@ impl SandboxPort for BubblewrapSandbox {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
-        let output = cmd.spawn().map_err(|e| {
-            DomainError::InvariantViolation(format!("Failed to spawn bwrap process: {e}"))
-        })?.wait_with_output().await.map_err(|e| {
-            DomainError::InvariantViolation(format!("Bubblewrap process execution failed: {e}"))
-        })?;
+        let output = cmd
+            .spawn()
+            .map_err(|e| {
+                DomainError::InvariantViolation(format!("Failed to spawn bwrap process: {e}"))
+            })?
+            .wait_with_output()
+            .await
+            .map_err(|e| {
+                DomainError::InvariantViolation(format!("Bubblewrap process execution failed: {e}"))
+            })?;
 
         let duration_ms = start.elapsed().as_millis() as u64;
         let is_failure = !output.status.success();
@@ -100,7 +112,11 @@ impl SandboxPort for BubblewrapSandbox {
             receipt_id: new_id("rcpt"),
             permit_id: permit.id.clone(),
             action_id: intent.id.clone(),
-            status: if is_failure { ReceiptStatus::Failure } else { ReceiptStatus::Success },
+            status: if is_failure {
+                ReceiptStatus::Failure
+            } else {
+                ReceiptStatus::Success
+            },
             output_digest,
             output_data: Some(out_json),
             error_message: if is_failure { Some(stderr) } else { None },

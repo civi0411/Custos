@@ -63,11 +63,7 @@ impl Skill for ComponentCloneSkill {
             .and_then(|v| v.as_str())
             .unwrap_or(tag_name);
 
-        let text_content = ctx
-            .args
-            .get("text")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let text_content = ctx.args.get("text").and_then(|v| v.as_str()).unwrap_or("");
 
         let component_name = ctx
             .args
@@ -81,7 +77,10 @@ impl Skill for ComponentCloneSkill {
         let mut extracted_colors = Vec::new();
         if classes.contains("bg-") {
             for part in classes.split_whitespace() {
-                if part.starts_with("bg-") || part.starts_with("text-") || part.starts_with("border-") {
+                if part.starts_with("bg-")
+                    || part.starts_with("text-")
+                    || part.starts_with("border-")
+                {
                     extracted_colors.push(part.to_string());
                 }
             }
@@ -126,8 +125,16 @@ export const {comp_name}: React.FC<{comp_name}Props> = ({{
 }};
 "#,
             comp_name = component_name,
-            title_fallback = if text_content.is_empty() { "Extracted UI Card" } else { text_content },
-            text_fallback = if text_content.is_empty() { "Cloned UI content with responsive layout." } else { text_content }
+            title_fallback = if text_content.is_empty() {
+                "Extracted UI Card"
+            } else {
+                text_content
+            },
+            text_fallback = if text_content.is_empty() {
+                "Cloned UI content with responsive layout."
+            } else {
+                text_content
+            }
         );
 
         let result = json!({
@@ -188,7 +195,10 @@ mod tests {
         };
         let res = skill.run(&ctx).await.expect("run succeeds");
         assert_eq!(res.skill_id, "component_clone");
-        assert_eq!(res.taint, custos_runtime::cognitive::skills::TaintLevel::Clean);
+        assert_eq!(
+            res.taint,
+            custos_runtime::cognitive::skills::TaintLevel::Clean
+        );
         let output = res.result;
         assert_eq!(output["component_name"], "HeroBannerCard");
         let code = output["generated_code"].as_str().unwrap();

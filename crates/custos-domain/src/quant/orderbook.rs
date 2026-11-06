@@ -66,8 +66,8 @@ impl OrderBookSnapshot {
 
         let best_bid_size = bids[0].size.max(0.0001);
         let best_ask_size = asks[0].size.max(0.0001);
-        let microprice = (best_ask * best_bid_size + best_bid * best_ask_size)
-            / (best_bid_size + best_ask_size);
+        let microprice =
+            (best_ask * best_bid_size + best_bid * best_ask_size) / (best_bid_size + best_ask_size);
 
         let total_ask = asks.last().map(|l| l.total).unwrap_or(0.0);
         let total_bid = bids.last().map(|l| l.total).unwrap_or(0.0);
@@ -135,8 +135,7 @@ impl OrderBookSnapshot {
         }
 
         let now_ms = chrono::Utc::now().timestamp_millis();
-        Self::from_levels(symbol, now_ms, asks, bids)
-            .expect("Synthesized levels guaranteed valid")
+        Self::from_levels(symbol, now_ms, asks, bids).expect("Synthesized levels guaranteed valid")
     }
 }
 

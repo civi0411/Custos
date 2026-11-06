@@ -5,9 +5,9 @@
 //! 2. Profile path resolution and discovery (ports, endpoints, databases).
 //! 3. Client lifecycle states: Connecting, Ready, Incompatible, Degraded, Recovering.
 
+use crate::local_api::LocalApiClient;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use crate::local_api::LocalApiClient;
 
 /// Client-visible daemon connectivity and attach lifecycle state (Phase D3 / F07).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -204,9 +204,7 @@ pub async fn ensure_daemon_client_async(
     ))
 }
 
-pub fn ensure_daemon_client(
-    profile: &ProfileResolver,
-) -> Result<Arc<LocalApiClient>, String> {
+pub fn ensure_daemon_client(profile: &ProfileResolver) -> Result<Arc<LocalApiClient>, String> {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         tokio::task::block_in_place(|| handle.block_on(ensure_daemon_client_async(profile)))
     } else {

@@ -4,10 +4,7 @@ use crate::api::*;
 use custos_runtime::workspace::CreateWorkspaceRequest;
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_workspaces_changes(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_workspaces_changes(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_WORKSPACES_CANDIDATES_SPAWN => {
                 let _mutation = self.candidate_mutation.lock().await;
@@ -754,10 +751,7 @@ impl LocalApiDispatcher {
                 let workflow = match self.workflow.as_ref() {
                     Some(w) => w,
                     None => {
-                        return ApiResponse::error(
-                            req.id,
-                            "WorkflowPort not configured on daemon",
-                        )
+                        return ApiResponse::error(req.id, "WorkflowPort not configured on daemon")
                     }
                 };
                 let coordinator = match self.workspace.as_ref() {
@@ -777,7 +771,9 @@ impl LocalApiDispatcher {
 
                 match self.task_service.get_task(&task_id).await {
                     Ok(Some(_)) => {}
-                    Ok(None) => return ApiResponse::error(req.id, format!("Task '{task_id}' not found")),
+                    Ok(None) => {
+                        return ApiResponse::error(req.id, format!("Task '{task_id}' not found"))
+                    }
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 }
 
@@ -805,7 +801,12 @@ impl LocalApiDispatcher {
                 {
                     match serde_json::from_value(serde_json::Value::Array(raw_cands.clone())) {
                         Ok(c) => c,
-                        Err(e) => return ApiResponse::error(req.id, format!("Invalid candidates config: {e}")),
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Invalid candidates config: {e}"),
+                            )
+                        }
                     }
                 } else {
                     let all_ws = match coordinator.list_workspaces().await {
@@ -836,7 +837,9 @@ impl LocalApiDispatcher {
                         .enumerate()
                         .map(|(idx, ws)| {
                             let (model_id, harness_id) = default_models[idx % default_models.len()];
-                            let cand_id = ws.metadata.get("candidate_index")
+                            let cand_id = ws
+                                .metadata
+                                .get("candidate_index")
                                 .and_then(|v| v.as_u64())
                                 .map(|i| format!("cand_{i}"))
                                 .unwrap_or_else(|| ws.id.to_string());
@@ -846,15 +849,19 @@ impl LocalApiDispatcher {
                         .collect()
                 };
 
-                let mut spec = custos_domain::CandidateRaceSpec::new(&task_id, &base_workspace_id, candidates)
-                    .with_timeout_seconds(timeout_seconds);
+                let mut spec =
+                    custos_domain::CandidateRaceSpec::new(&task_id, &base_workspace_id, candidates)
+                        .with_timeout_seconds(timeout_seconds);
 
                 if let Some(cmd) = test_command {
                     spec = spec.with_test_command(cmd);
                 }
 
                 match workflow.execute_candidate_race(spec).await {
-                    Ok(result) => ApiResponse::success(req.id, serde_json::to_value(&result).unwrap_or_default()),
+                    Ok(result) => ApiResponse::success(
+                        req.id,
+                        serde_json::to_value(&result).unwrap_or_default(),
+                    ),
                     Err(e) => ApiResponse::error(req.id, format!("Candidate race failed: {e}")),
                 }
             }
@@ -877,10 +884,8 @@ pub(crate) mod tests {
         );
 
         let invalid_id = "cmd with spaces!";
-        assert!(
-            !invalid_id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
-        );
+        assert!(!invalid_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')));
     }
 }

@@ -3,13 +3,13 @@
 //! Provides multiplexed stream subscription management, circuit breaking,
 //! and automatic degradation to REST polling upon network failure.
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 use custos_domain::pipeline::{ClosedBarInvariant, DataModality, PipelineRecord};
 use custos_domain::quant::portal::BarTimeframe;
 use custos_domain::OhlcvBar;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{broadcast, RwLock};
 
@@ -28,7 +28,10 @@ pub enum MarketStreamError {
 pub enum StreamState {
     Disconnected,
     Streaming,
-    DegradedToRestPolling { consecutive_failures: u32, poll_interval_secs: u64 },
+    DegradedToRestPolling {
+        consecutive_failures: u32,
+        poll_interval_secs: u64,
+    },
 }
 
 /// Shared subscription key
@@ -116,7 +119,9 @@ impl MarketStreamCoordinator {
     ) -> (bool, broadcast::Receiver<PipelineRecord<OhlcvBar>>) {
         let key = SubscriptionKey::new(symbol, timeframe);
         let mut subs = self.subscriptions.write().await;
-        let entry = subs.entry(key).or_insert(SubscriptionEntry { ref_count: 0 });
+        let entry = subs
+            .entry(key)
+            .or_insert(SubscriptionEntry { ref_count: 0 });
         let is_first = entry.ref_count == 0;
         entry.ref_count += 1;
         (is_first, self.sender.subscribe())
@@ -166,7 +171,12 @@ impl MarketStreamCoordinator {
         let bar = OhlcvBar::new(bar_open_ts, open, high, low, close, volume);
 
         let bronze = PipelineRecord::new_bronze(
-            format!("{}:{}:{}", symbol.to_uppercase(), timeframe.to_lowercase(), bar_open_ts),
+            format!(
+                "{}:{}:{}",
+                symbol.to_uppercase(),
+                timeframe.to_lowercase(),
+                bar_open_ts
+            ),
             DataModality::Market,
             bar,
             bar_open_ts,
@@ -229,7 +239,13 @@ mod tests {
         coordinator.record_failure();
         assert_eq!(coordinator.state(), StreamState::Streaming);
         let degraded = coordinator.record_failure();
-        assert!(matches!(degraded, StreamState::DegradedToRestPolling { consecutive_failures: 3, .. }));
+        assert!(matches!(
+            degraded,
+            StreamState::DegradedToRestPolling {
+                consecutive_failures: 3,
+                ..
+            }
+        ));
         coordinator.record_success();
         assert_eq!(coordinator.state(), StreamState::Streaming);
     }

@@ -7,8 +7,8 @@
 //! 4. Algorithmic Order Ticket Generation & Governed Outbox Handoff
 
 use custos_domain::quant::{
-    AlphaFactor, BacktestTearsheet, MonthlyReturn, OrderDirection, OrderTicket,
-    OrderTicketStatus, OrderType, RiskBreach, RiskPermitConfig,
+    AlphaFactor, BacktestTearsheet, MonthlyReturn, OrderDirection, OrderTicket, OrderTicketStatus,
+    OrderType, RiskBreach, RiskPermitConfig,
 };
 use custos_domain::session::WorkbenchLens;
 use custos_packs::create_default_pack_registry;
@@ -40,9 +40,15 @@ async fn test_quant_pack_manifest_roles_jobs_and_verifiers() {
 
     let verifiers = pack.verifiers();
     assert_eq!(verifiers.len(), 3);
-    assert!(verifiers.iter().any(|v| v.verifier_id() == "deflated_sharpe_verifier"));
-    assert!(verifiers.iter().any(|v| v.verifier_id() == "lookahead_bias_checker"));
-    assert!(verifiers.iter().any(|v| v.verifier_id() == "pbo_overfitting_verifier"));
+    assert!(verifiers
+        .iter()
+        .any(|v| v.verifier_id() == "deflated_sharpe_verifier"));
+    assert!(verifiers
+        .iter()
+        .any(|v| v.verifier_id() == "lookahead_bias_checker"));
+    assert!(verifiers
+        .iter()
+        .any(|v| v.verifier_id() == "pbo_overfitting_verifier"));
 }
 
 #[tokio::test]
@@ -68,10 +74,11 @@ async fn test_end_to_end_quant_research_to_execution_golden_flow() {
     .expect("valid alpha factor");
 
     // Fail check before lookahead bias audit
-    let unverified_ctx = VerificationContext::new("task_quant_alpha_01").with_metadata(serde_json::json!({
-        "lookahead_clean": factor.lookahead_clean,
-        "ic_mean": 0.045,
-    }));
+    let unverified_ctx =
+        VerificationContext::new("task_quant_alpha_01").with_metadata(serde_json::json!({
+            "lookahead_clean": factor.lookahead_clean,
+            "ic_mean": 0.045,
+        }));
     match lookahead_verifier.verify(&unverified_ctx).await {
         VerificationResult::Fail { reason } => {
             assert!(reason.contains("Lookahead bias not confirmed clean"));
@@ -84,11 +91,12 @@ async fn test_end_to_end_quant_research_to_execution_golden_flow() {
     let factor = factor.with_metrics(0.045, 0.04, true);
     assert!(factor.is_viable());
 
-    let clean_ctx = VerificationContext::new("task_quant_alpha_01").with_metadata(serde_json::json!({
-        "lookahead_clean": factor.lookahead_clean,
-        "ic_mean": factor.ic_mean,
-        "ir": factor.ir,
-    }));
+    let clean_ctx =
+        VerificationContext::new("task_quant_alpha_01").with_metadata(serde_json::json!({
+            "lookahead_clean": factor.lookahead_clean,
+            "ic_mean": factor.ic_mean,
+            "ir": factor.ir,
+        }));
     match lookahead_verifier.verify(&clean_ctx).await {
         VerificationResult::Pass { detail } => {
             assert!(detail.contains("Lookahead bias audit confirmed clean"));
@@ -108,17 +116,26 @@ async fn test_end_to_end_quant_research_to_execution_golden_flow() {
             2.1,
             3.2,
             vec![
-                MonthlyReturn { year: 2026, month: 1, return_pct: 0.04 },
-                MonthlyReturn { year: 2026, month: 2, return_pct: 0.035 },
+                MonthlyReturn {
+                    year: 2026,
+                    month: 1,
+                    return_pct: 0.04,
+                },
+                MonthlyReturn {
+                    year: 2026,
+                    month: 2,
+                    return_pct: 0.035,
+                },
             ],
         );
 
     // Verify DSR Hurdle
-    let dsr_ctx = VerificationContext::new("task_quant_backtest_02").with_metadata(serde_json::json!({
-        "annualized_sharpe": tearsheet.annualized_sharpe,
-        "dsr_value": tearsheet.deflated_sharpe,
-        "max_drawdown": tearsheet.max_drawdown,
-    }));
+    let dsr_ctx =
+        VerificationContext::new("task_quant_backtest_02").with_metadata(serde_json::json!({
+            "annualized_sharpe": tearsheet.annualized_sharpe,
+            "dsr_value": tearsheet.deflated_sharpe,
+            "max_drawdown": tearsheet.max_drawdown,
+        }));
     match dsr_verifier.verify(&dsr_ctx).await {
         VerificationResult::Pass { detail } => {
             assert!(detail.contains("DSR/Sharpe passed"));
@@ -160,7 +177,9 @@ async fn test_end_to_end_quant_research_to_execution_golden_flow() {
     .with_algorithmic_execution(OrderType::Twap, 4.0);
 
     // Validate against risk permit limits
-    assert!(risk_permit.validate_order_weight(order.target_weight).is_ok());
+    assert!(risk_permit
+        .validate_order_weight(order.target_weight)
+        .is_ok());
 
     // Sizing breach test
     assert!(risk_permit.validate_order_weight(0.10).is_err());

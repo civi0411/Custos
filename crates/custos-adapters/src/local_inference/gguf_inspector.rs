@@ -54,8 +54,11 @@ pub fn inspect_gguf_file(
     folder_id: &str,
     hardware: &LocalHardwareProfile,
 ) -> Result<LocalModelDescriptor, String> {
-    let file = File::open(file_path).map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
-    let metadata = file.metadata().map_err(|e| format!("Cannot read file metadata: {}", e))?;
+    let file =
+        File::open(file_path).map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| format!("Cannot read file metadata: {}", e))?;
     let file_size_bytes = metadata.len();
     let file_mtime = metadata
         .modified()
@@ -68,14 +71,18 @@ pub fn inspect_gguf_file(
 
     // 1. Magic check (4 bytes)
     let mut magic = [0u8; 4];
-    reader.read_exact(&mut magic).map_err(|e| format!("Failed to read magic: {}", e))?;
+    reader
+        .read_exact(&mut magic)
+        .map_err(|e| format!("Failed to read magic: {}", e))?;
     if &magic != b"GGUF" {
         return Err("Not a valid GGUF file (magic header mismatch)".to_string());
     }
 
     // 2. Version (u32 LE)
     let mut buf4 = [0u8; 4];
-    reader.read_exact(&mut buf4).map_err(|e| format!("Failed to read version: {}", e))?;
+    reader
+        .read_exact(&mut buf4)
+        .map_err(|e| format!("Failed to read version: {}", e))?;
     let version = u32::from_le_bytes(buf4);
     if version < 2 {
         return Err(format!("Unsupported legacy GGUF version {}", version));
@@ -83,13 +90,17 @@ pub fn inspect_gguf_file(
 
     // 3. Tensor count (u64 LE) & Metadata KV count (u64 LE)
     let mut buf8 = [0u8; 8];
-    reader.read_exact(&mut buf8).map_err(|e| format!("Failed to read tensor count: {}", e))?;
+    reader
+        .read_exact(&mut buf8)
+        .map_err(|e| format!("Failed to read tensor count: {}", e))?;
     let tensor_count = u64::from_le_bytes(buf8);
     if tensor_count == 0 {
         return Err("GGUF has no model tensors (it may be a tokenizer-only fixture)".to_string());
     }
 
-    reader.read_exact(&mut buf8).map_err(|e| format!("Failed to read metadata count: {}", e))?;
+    reader
+        .read_exact(&mut buf8)
+        .map_err(|e| format!("Failed to read metadata count: {}", e))?;
     let metadata_count = u64::from_le_bytes(buf8);
 
     // 4. Read metadata key-values
@@ -173,7 +184,9 @@ pub fn inspect_gguf_file(
     let kv_cache_bytes = 2 * block_count * head_count_kv * head_dim * eval_context * 2;
     let total_memory_required = file_size_bytes + kv_cache_bytes;
 
-    let usable_vram = hardware.metal_vram_limit_bytes.saturating_sub(1_500_000_000); // 1.5GB display reserve
+    let usable_vram = hardware
+        .metal_vram_limit_bytes
+        .saturating_sub(1_500_000_000); // 1.5GB display reserve
     let usable_ram = hardware.total_ram_bytes.saturating_sub(2_000_000_000); // 2GB OS headroom
 
     let compatibility = if total_memory_required <= usable_vram {
@@ -210,10 +223,8 @@ pub fn inspect_gguf_file(
 fn detect_quantization(file_stem: &str, kv_map: &HashMap<String, String>) -> String {
     let upper = file_stem.to_uppercase();
     for q in &[
-        "Q4_K_M", "Q4_K_S", "Q4_0", "Q4_1",
-        "Q5_K_M", "Q5_K_S", "Q5_0", "Q5_1",
-        "Q8_0", "Q8_1", "Q6_K", "Q2_K", "Q3_K_M", "Q3_K_S", "Q3_K_L",
-        "BF16", "FP16", "FP32",
+        "Q4_K_M", "Q4_K_S", "Q4_0", "Q4_1", "Q5_K_M", "Q5_K_S", "Q5_0", "Q5_1", "Q8_0", "Q8_1",
+        "Q6_K", "Q2_K", "Q3_K_M", "Q3_K_S", "Q3_K_L", "BF16", "FP16", "FP32",
     ] {
         if upper.contains(q) {
             return q.to_string();
@@ -324,23 +335,33 @@ fn skip_array<R: Read + Seek>(
 ) -> Result<(), String> {
     match elem_type {
         GgufType::Uint8 | GgufType::Int8 | GgufType::Bool => {
-            reader.seek(SeekFrom::Current(array_len as i64)).map_err(|e| e.to_string())?;
+            reader
+                .seek(SeekFrom::Current(array_len as i64))
+                .map_err(|e| e.to_string())?;
         }
         GgufType::Uint16 | GgufType::Int16 => {
-            reader.seek(SeekFrom::Current((array_len * 2) as i64)).map_err(|e| e.to_string())?;
+            reader
+                .seek(SeekFrom::Current((array_len * 2) as i64))
+                .map_err(|e| e.to_string())?;
         }
         GgufType::Uint32 | GgufType::Int32 | GgufType::Float32 => {
-            reader.seek(SeekFrom::Current((array_len * 4) as i64)).map_err(|e| e.to_string())?;
+            reader
+                .seek(SeekFrom::Current((array_len * 4) as i64))
+                .map_err(|e| e.to_string())?;
         }
         GgufType::Uint64 | GgufType::Int64 | GgufType::Float64 => {
-            reader.seek(SeekFrom::Current((array_len * 8) as i64)).map_err(|e| e.to_string())?;
+            reader
+                .seek(SeekFrom::Current((array_len * 8) as i64))
+                .map_err(|e| e.to_string())?;
         }
         GgufType::String => {
             for _ in 0..array_len {
                 let mut len_buf = [0u8; 8];
                 reader.read_exact(&mut len_buf).map_err(|e| e.to_string())?;
                 let str_len = u64::from_le_bytes(len_buf);
-                reader.seek(SeekFrom::Current(str_len as i64)).map_err(|e| e.to_string())?;
+                reader
+                    .seek(SeekFrom::Current(str_len as i64))
+                    .map_err(|e| e.to_string())?;
             }
         }
         GgufType::Array => {

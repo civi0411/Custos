@@ -116,8 +116,9 @@ impl PeerDelegationRouter {
                 let addr = EndpointAddr::from(endpoint_id);
                 let mut stream = node.connect_with_addr(addr, Some(req.task.clone())).await?;
 
-                let payload = serde_json::to_vec(&req)
-                    .map_err(|e| RoamingError::Transport(format!("serialize delegation request: {e}")))?;
+                let payload = serde_json::to_vec(&req).map_err(|e| {
+                    RoamingError::Transport(format!("serialize delegation request: {e}"))
+                })?;
                 write_frame(&mut stream.send, &payload).await?;
 
                 let resp_bytes = read_frame(&mut stream.recv).await?;

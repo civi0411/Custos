@@ -10,8 +10,8 @@
 //! 3. Graceful CPU Fallback: When an accelerator is held exclusively, background work drops to CPU rather than stalling or competing for VRAM.
 
 use custos_domain::{
-    ComputeDeviceRef, ComputeWorkloadKind, DeviceKind, DomainError,
-    OptionalConsumerPlacement, WorkloadLease, WorkloadLeaseStatus,
+    ComputeDeviceRef, ComputeWorkloadKind, DeviceKind, DomainError, OptionalConsumerPlacement,
+    WorkloadLease, WorkloadLeaseStatus,
 };
 
 /// Placement engine evaluating execution target and batch bounds for optional consumers
@@ -43,7 +43,10 @@ impl OptionalConsumerPlacementEngine {
 
         // 2. Cloud egress guardrail: prohibit egressing local datasets without explicit consent
         if let Some(target_id) = requested_device_id {
-            if (target_id.contains("colab") || target_id.contains("kaggle") || target_id.contains("cloud") || target_id.contains("rented"))
+            if (target_id.contains("colab")
+                || target_id.contains("kaggle")
+                || target_id.contains("cloud")
+                || target_id.contains("rented"))
                 && !allow_cloud_egress
             {
                 return Err(DomainError::Validation(

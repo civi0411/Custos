@@ -16,11 +16,20 @@ pub trait WorkflowPort: Send + Sync {
 
     /// Opt-in background dispatch. Unsupported runtimes fail explicitly.
     async fn start_run_background(&self, _cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
-        Err(DomainError::Validation("Background execution is not supported".into()))
+        Err(DomainError::Validation(
+            "Background execution is not supported".into(),
+        ))
     }
 
-    async fn live_run(&self, _session_id: &str, _run_id: &str, _cursor: u64) -> Result<custos_domain::LiveRunReplay, DomainError> {
-        Err(DomainError::Validation("Live run projection is not supported".into()))
+    async fn live_run(
+        &self,
+        _session_id: &str,
+        _run_id: &str,
+        _cursor: u64,
+    ) -> Result<custos_domain::LiveRunReplay, DomainError> {
+        Err(DomainError::Validation(
+            "Live run projection is not supported".into(),
+        ))
     }
 
     /// Cooperative cancel; MUST leave in-flight effects as `Uncertain`, never silently dropped.
@@ -41,6 +50,8 @@ pub trait WorkflowPort: Send + Sync {
         &self,
         _spec: CandidateRaceSpec,
     ) -> Result<CandidateRaceResult, DomainError> {
-        Err(DomainError::Validation("Candidate race is not supported by this workflow runtime".into()))
+        Err(DomainError::Validation(
+            "Candidate race is not supported by this workflow runtime".into(),
+        ))
     }
 }

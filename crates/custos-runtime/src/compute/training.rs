@@ -53,7 +53,10 @@ impl LocalTrainingRunner {
         let verdict = self.admission.admit_workload(&admission_req).await?;
         let lease = match verdict {
             WorkloadAdmissionVerdict::Admitted { lease } => lease,
-            WorkloadAdmissionVerdict::Queued { queue_position, reason } => {
+            WorkloadAdmissionVerdict::Queued {
+                queue_position,
+                reason,
+            } => {
                 let _ = attempt.apply(ExecEvent::SubmitRejected);
                 return Err(DomainError::Conflict(format!(
                     "Training workload queued at position {queue_position}: {reason}"
@@ -114,7 +117,8 @@ impl LocalTrainingRunner {
             // Safe checkpoint cadence
             if step % recipe.checkpoint_interval_steps == 0 || step == recipe.max_steps {
                 let ckpt_id = format!("ckpt_{}_{}", attempt.id, step);
-                let _manifest = self.create_step_checkpoint(&ckpt_id, step, last_loss, &recipe.model_id);
+                let _manifest =
+                    self.create_step_checkpoint(&ckpt_id, step, last_loss, &recipe.model_id);
                 checkpoints_created.push(ckpt_id);
             }
         }
@@ -146,7 +150,10 @@ impl LocalTrainingRunner {
         Ok(())
     }
 
-    async fn transition_to_running(&self, attempt: &mut ExecutionAttempt) -> Result<(), DomainError> {
+    async fn transition_to_running(
+        &self,
+        attempt: &mut ExecutionAttempt,
+    ) -> Result<(), DomainError> {
         attempt.apply(ExecEvent::PreflightOk)?;
         attempt.apply(ExecEvent::SubmitStarted)?;
         let ext_ref = ExternalJobRef::new("local_runner", &attempt.id, "v1.0.0")?;

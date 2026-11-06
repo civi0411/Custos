@@ -191,7 +191,11 @@ impl ExecutionWorkspace {
         }
     }
 
-    pub fn with_running_agent(mut self, agent_id: impl Into<String>, status: impl Into<String>) -> Self {
+    pub fn with_running_agent(
+        mut self,
+        agent_id: impl Into<String>,
+        status: impl Into<String>,
+    ) -> Self {
         self.running_agent_id = Some(agent_id.into());
         self.agent_status = Some(status.into());
         self

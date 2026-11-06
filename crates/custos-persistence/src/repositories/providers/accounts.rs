@@ -55,8 +55,8 @@ impl ProviderRepository {
                 ));
             }
         }
-        let encoded = serde_json::to_string(order)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let encoded =
+            serde_json::to_string(order).map_err(|e| DomainError::Validation(e.to_string()))?;
         tx.execute(
             "INSERT INTO provider_account_routing(service_type,round_robin,account_order,cursor) VALUES(?1,?2,?3,0) ON CONFLICT(service_type) DO UPDATE SET round_robin=excluded.round_robin,account_order=excluded.account_order,cursor=0",
             params![service, enabled, encoded],
@@ -578,7 +578,11 @@ impl ProviderRepository {
     }
 
     /// Checks if a provider has an active (non-expired) OAuth token granting the requested scope.
-    pub fn has_oauth_scope(&self, provider_id: &str, required_scope: &str) -> Result<bool, DomainError> {
+    pub fn has_oauth_scope(
+        &self,
+        provider_id: &str,
+        required_scope: &str,
+    ) -> Result<bool, DomainError> {
         let token = match self.get_oauth_token(provider_id)? {
             Some(t) => t,
             None => return Ok(false),
@@ -612,7 +616,10 @@ impl ProviderRepository {
                     .collect();
 
                 // email capability
-                if scopes.contains("email.send") || scopes.contains("mail.send") || scopes.contains("*") {
+                if scopes.contains("email.send")
+                    || scopes.contains("mail.send")
+                    || scopes.contains("*")
+                {
                     caps.push(custos_domain::ResourceActionCapability {
                         id: "connector.email".into(),
                         label: "Email Dispatch".into(),
@@ -633,7 +640,10 @@ impl ProviderRepository {
                 }
 
                 // calendar capability
-                if scopes.contains("calendar.events") || scopes.contains("calendar.write") || scopes.contains("*") {
+                if scopes.contains("calendar.events")
+                    || scopes.contains("calendar.write")
+                    || scopes.contains("*")
+                {
                     caps.push(custos_domain::ResourceActionCapability {
                         id: "connector.calendar".into(),
                         label: "Calendar Schedule".into(),

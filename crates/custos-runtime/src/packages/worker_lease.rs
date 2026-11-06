@@ -131,10 +131,10 @@ impl WorkerLease {
                             }
                             buf.extend_from_slice(&chunk[..n]);
                             if buf.len() > max_bytes {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("Output exceeded max buffer limit of {} bytes", max_bytes),
-                                ));
+                                return Err(std::io::Error::other(format!(
+                                    "Output exceeded max buffer limit of {} bytes",
+                                    max_bytes
+                                )));
                             }
                         }
                     }
@@ -179,7 +179,11 @@ impl WorkerLease {
                 let err_msg = String::from_utf8_lossy(&stderr_buf);
                 return Ok(WorkerObservation::failure(
                     &self.operation_id,
-                    format!("Worker process exited with code {:?}: {}", status.code(), err_msg.trim()),
+                    format!(
+                        "Worker process exited with code {:?}: {}",
+                        status.code(),
+                        err_msg.trim()
+                    ),
                     wall_ms,
                 ));
             }
@@ -190,7 +194,9 @@ impl WorkerLease {
             }
 
             let parsed_output: serde_json::Value = serde_json::from_slice(&stdout_buf)
-                .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&stdout_buf).to_string()));
+                .unwrap_or_else(|_| {
+                    serde_json::Value::String(String::from_utf8_lossy(&stdout_buf).to_string())
+                });
 
             Ok(WorkerObservation::success(
                 &self.operation_id,
@@ -201,7 +207,9 @@ impl WorkerLease {
         };
 
         match timeout(wall_timeout, execution).await {
-            Ok(result) => result.map_err(|e: std::io::Error| DomainError::Validation(e.to_string())),
+            Ok(result) => {
+                result.map_err(|e: std::io::Error| DomainError::Validation(e.to_string()))
+            }
             Err(_) => {
                 let _ = self.child.kill().await;
                 Ok(WorkerObservation::failure(
@@ -273,17 +281,16 @@ mod tests {
         };
 
         // Generates 1000 characters which exceeds 100 bytes limit
-        let lease = WorkerLease::spawn_command(
-            &op,
-            "python3",
-            &["-c", "print('A' * 1000)"],
-        )
-        .await
-        .expect("spawn");
+        let lease = WorkerLease::spawn_command(&op, "python3", &["-c", "print('A' * 1000)"])
+            .await
+            .expect("spawn");
 
         let obs = lease.await_observation().await.expect("await");
         assert!(!obs.success);
-        assert!(obs.error.unwrap().contains("Output exceeded max buffer limit"));
+        assert!(obs
+            .error
+            .unwrap()
+            .contains("Output exceeded max buffer limit"));
     }
 
     #[tokio::test]
@@ -301,7 +308,10 @@ mod tests {
         let lease = WorkerLease::spawn_command(
             &op,
             "python3",
-            &["-c", "import sys; sys.stderr.write('fatal domain error\\n'); sys.exit(42)"],
+            &[
+                "-c",
+                "import sys; sys.stderr.write('fatal domain error\\n'); sys.exit(42)",
+            ],
         )
         .await
         .expect("spawn");

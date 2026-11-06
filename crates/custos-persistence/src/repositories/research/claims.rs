@@ -11,7 +11,9 @@ impl ResearchRepository {
         claim: &ResearchClaim,
     ) -> Result<(), DomainError> {
         if claim.id.trim().is_empty() || claim.statement.trim().is_empty() {
-            return Err(DomainError::Validation("Claim id and statement cannot be empty".to_string()));
+            return Err(DomainError::Validation(
+                "Claim id and statement cannot be empty".to_string(),
+            ));
         }
         let invariants_json = serde_json::to_string(&claim.invariants)
             .map_err(|e| DomainError::Validation(e.to_string()))?;

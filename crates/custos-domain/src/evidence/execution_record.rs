@@ -55,14 +55,23 @@ impl ExecutionRecord {
         let mut blockers = Vec::new();
         let metadata_valid = match self.validate_compute_state() {
             Ok(()) => true,
-            Err(error) => { blockers.push(error.to_string()); false }
+            Err(error) => {
+                blockers.push(error.to_string());
+                false
+            }
         };
         let inventory_valid = match &self.checkpoint {
             Some(checkpoint) => match checkpoint.validate_for_state_resume() {
                 Ok(()) => true,
-                Err(error) => { blockers.push(error.to_string()); false }
+                Err(error) => {
+                    blockers.push(error.to_string());
+                    false
+                }
             },
-            None => { blockers.push("No checkpoint has been recorded for this attempt".into()); false }
+            None => {
+                blockers.push("No checkpoint has been recorded for this attempt".into());
+                false
+            }
         };
         CheckpointResumeAssessment {
             metadata_valid,
@@ -111,7 +120,10 @@ impl ExecutionRecord {
         self
     }
 
-    pub fn with_checkpoint(mut self, checkpoint: crate::compute::TrainingCheckpointManifest) -> Self {
+    pub fn with_checkpoint(
+        mut self,
+        checkpoint: crate::compute::TrainingCheckpointManifest,
+    ) -> Self {
         self.checkpoint = Some(checkpoint);
         self
     }
@@ -158,11 +170,16 @@ impl ExecutionRecord {
         checkpoint.validate()?;
         if checkpoint.commit_status != CheckpointCommitStatus::CommittedProtected
             || step != checkpoint.global_step
-            || self.latest_protected_checkpoint_step.is_some_and(|previous| step < previous)
+            || self
+                .latest_protected_checkpoint_step
+                .is_some_and(|previous| step < previous)
         {
-            return Err(DomainError::Validation("Protected checkpoint must be committed, match its step and not regress".into()));
+            return Err(DomainError::Validation(
+                "Protected checkpoint must be committed, match its step and not regress".into(),
+            ));
         }
-        self.latest_local_checkpoint_step = Some(self.latest_local_checkpoint_step.unwrap_or(0).max(step));
+        self.latest_local_checkpoint_step =
+            Some(self.latest_local_checkpoint_step.unwrap_or(0).max(step));
         self.latest_observed_step = Some(self.latest_observed_step.unwrap_or(0).max(step));
         self.latest_protected_checkpoint_step = Some(step);
         self.last_protected_at = Some(Utc::now());
@@ -173,31 +190,53 @@ impl ExecutionRecord {
     /// Rejects contradictory persisted progress and lineage declarations.
     pub fn validate_compute_state(&self) -> Result<(), DomainError> {
         if self.id.trim().is_empty() || self.recipe_id.trim().is_empty() {
-            return Err(DomainError::Validation("Execution and recipe IDs are required".into()));
+            return Err(DomainError::Validation(
+                "Execution and recipe IDs are required".into(),
+            ));
         }
-        if let Some(checkpoint) = &self.checkpoint { checkpoint.validate()?; }
-        if let (Some(observed), Some(local)) = (self.latest_observed_step, self.latest_local_checkpoint_step) {
+        if let Some(checkpoint) = &self.checkpoint {
+            checkpoint.validate()?;
+        }
+        if let (Some(observed), Some(local)) =
+            (self.latest_observed_step, self.latest_local_checkpoint_step)
+        {
             if local > observed {
-                return Err(DomainError::Validation("Local checkpoint progress cannot exceed observed training progress".into()));
+                return Err(DomainError::Validation(
+                    "Local checkpoint progress cannot exceed observed training progress".into(),
+                ));
             }
         }
         if let Some(step) = self.latest_protected_checkpoint_step {
-            if self.checkpoint.as_ref().is_none_or(|checkpoint|
+            if self.checkpoint.as_ref().is_none_or(|checkpoint| {
                 checkpoint.commit_status != CheckpointCommitStatus::CommittedProtected
-                    || checkpoint.global_step != step)
-                || self.last_protected_at.is_none()
-                || self.latest_local_checkpoint_step.is_none_or(|local| local < step)
+                    || checkpoint.global_step != step
+            }) || self.last_protected_at.is_none()
+                || self
+                    .latest_local_checkpoint_step
+                    .is_none_or(|local| local < step)
             {
-                return Err(DomainError::Validation("Protected progress requires matching committed checkpoint metadata".into()));
+                return Err(DomainError::Validation(
+                    "Protected progress requires matching committed checkpoint metadata".into(),
+                ));
             }
         } else if self.last_protected_at.is_some() {
-            return Err(DomainError::Validation("Protection timestamp requires a protected checkpoint step".into()));
+            return Err(DomainError::Validation(
+                "Protection timestamp requires a protected checkpoint step".into(),
+            ));
         }
         if self.resume_from_attempt_id.is_some() != self.resumed_from_checkpoint_id.is_some()
-            || self.resume_from_attempt_id.as_ref().is_some_and(|parent| parent == &self.id || parent.trim().is_empty())
-            || self.resumed_from_checkpoint_id.as_ref().is_some_and(|id| id.trim().is_empty())
+            || self
+                .resume_from_attempt_id
+                .as_ref()
+                .is_some_and(|parent| parent == &self.id || parent.trim().is_empty())
+            || self
+                .resumed_from_checkpoint_id
+                .as_ref()
+                .is_some_and(|id| id.trim().is_empty())
         {
-            return Err(DomainError::Validation("Continuation requires a distinct parent attempt and checkpoint identity".into()));
+            return Err(DomainError::Validation(
+                "Continuation requires a distinct parent attempt and checkpoint identity".into(),
+            ));
         }
         Ok(())
     }
@@ -246,17 +285,34 @@ mod tests {
         assert!(!result.can_start);
         assert_eq!(result.blockers.len(), 1);
         assert_eq!(result.unverified_checks.len(), 3);
-        let mut manifest = crate::TrainingCheckpointManifest::new("c", 400, 1.0, "s3://bucket/c", "a".repeat(64))
-            .with_full_state("model@rev", "engine@rev", "cursor400")
-            .with_commit_status(CheckpointCommitStatus::CommittedProtected);
-        for path in ["adapter_model.safetensors", "optimizer.pt", "scheduler.pt", "rng_state.pth", "trainer_state.json"] {
-            manifest.files.push(crate::CheckpointFileEntry { path: path.into(), size_bytes: 1,
-                digest: "a".repeat(64), required_for_state_resume: true });
+        let mut manifest =
+            crate::TrainingCheckpointManifest::new("c", 400, 1.0, "s3://bucket/c", "a".repeat(64))
+                .with_full_state("model@rev", "engine@rev", "cursor400")
+                .with_commit_status(CheckpointCommitStatus::CommittedProtected);
+        for path in [
+            "adapter_model.safetensors",
+            "optimizer.pt",
+            "scheduler.pt",
+            "rng_state.pth",
+            "trainer_state.json",
+        ] {
+            manifest.files.push(crate::CheckpointFileEntry {
+                path: path.into(),
+                size_bytes: 1,
+                digest: "a".repeat(64),
+                required_for_state_resume: true,
+            });
         }
-        let declared = record.clone().with_checkpoint(manifest).assess_checkpoint_resume();
+        let declared = record
+            .clone()
+            .with_checkpoint(manifest)
+            .assess_checkpoint_resume();
         assert!(declared.state_inventory_declared);
         assert!(declared.blockers.is_empty());
-        assert!(!declared.can_start, "Metadata must never authorize training");
+        assert!(
+            !declared.can_start,
+            "Metadata must never authorize training"
+        );
         assert!(!declared.unverified_checks.is_empty());
         let inconsistent = record.with_resume_from("parent");
         assert!(!inconsistent.assess_checkpoint_resume().metadata_valid);
@@ -265,7 +321,8 @@ mod tests {
     #[test]
     fn checkpoint_milestones_cannot_fabricate_protection_or_mutate_on_failure() {
         let mut record = ExecutionRecord::new("recipe");
-        let checkpoint = crate::TrainingCheckpointManifest::new("c", 400, 1.0, "s3://b/c", "a".repeat(64));
+        let checkpoint =
+            crate::TrainingCheckpointManifest::new("c", 400, 1.0, "s3://b/c", "a".repeat(64));
         assert!(record.commit_protected_checkpoint(400, checkpoint).is_err());
         assert!(record.checkpoint.is_none());
         assert!(record.latest_protected_checkpoint_step.is_none());
@@ -298,7 +355,10 @@ mod tests {
             .with_milestones(400, Some(400), Some(400));
 
         assert_eq!(attempt_b.resume_from_attempt_id, Some(record.id));
-        assert_eq!(attempt_b.resumed_from_checkpoint_id, Some("ckpt_400".into()));
+        assert_eq!(
+            attempt_b.resumed_from_checkpoint_id,
+            Some("ckpt_400".into())
+        );
         assert_eq!(attempt_b.output_namespace, Some("attempt_b_runpod".into()));
         assert_eq!(attempt_b.latest_observed_step, Some(400));
     }

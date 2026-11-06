@@ -464,7 +464,10 @@ mod tests {
         ) -> Result<Vec<custos_domain::Run>, DomainError> {
             Ok(Vec::new())
         }
-        async fn save_worker_run(&self, _: &mut custos_domain::WorkerRun) -> Result<(), DomainError> {
+        async fn save_worker_run(
+            &self,
+            _: &mut custos_domain::WorkerRun,
+        ) -> Result<(), DomainError> {
             Ok(())
         }
         async fn get_worker_run(
@@ -494,7 +497,9 @@ mod tests {
         }
         async fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
             if self.fail_update.load(std::sync::atomic::Ordering::SeqCst) {
-                return Err(DomainError::Validation("Simulated storage write error".into()));
+                return Err(DomainError::Validation(
+                    "Simulated storage write error".into(),
+                ));
             }
             self.claims
                 .write()
@@ -537,9 +542,7 @@ mod tests {
             let guard = self.claims.read().await;
             Ok(guard
                 .values()
-                .filter(|c| {
-                    c.status == ClaimStatus::Pending || c.status == ClaimStatus::Dispatched
-                })
+                .filter(|c| c.status == ClaimStatus::Pending || c.status == ClaimStatus::Dispatched)
                 .cloned()
                 .collect())
         }
@@ -562,7 +565,10 @@ mod tests {
 
         // Attempt release -> must return Err
         let release_err = dispatcher.release_claim(&claim.id).await;
-        assert!(release_err.is_err(), "release_claim must return Err on DB error");
+        assert!(
+            release_err.is_err(),
+            "release_claim must return Err on DB error"
+        );
 
         // In-memory claim must NOT be released and must remain active
         let active = dispatcher.get_active_claim("task_err_test", None).await;
@@ -647,11 +653,16 @@ mod tests {
             .fail_update
             .store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let err = dispatcher.mark_dispatched(&claim.id, "worker_run_999").await;
+        let err = dispatcher
+            .mark_dispatched(&claim.id, "worker_run_999")
+            .await;
         assert!(err.is_err(), "mark_dispatched must fail on store error");
 
         // In-memory claim status must remain Pending
-        let active = dispatcher.get_active_claim("task_dispatch_err", None).await.unwrap();
+        let active = dispatcher
+            .get_active_claim("task_dispatch_err", None)
+            .await
+            .unwrap();
         assert_eq!(active.status, ClaimStatus::Pending);
     }
 }

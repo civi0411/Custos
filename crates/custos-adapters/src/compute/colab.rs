@@ -4,18 +4,18 @@
 //! the Colab CLI (`google-colab-cli`). Decouples kernel stop from runtime unassignment
 //! to avoid burning Colab compute units while preserving post-run inspection.
 
-use std::path::PathBuf;
-use std::sync::Arc;
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use custos_core::contracts::experiment::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
 use custos_domain::{
-    DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef,
-    ProgressTriplet, ResourceState,
+    DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef, ProgressTriplet,
+    ResourceState,
 };
 
 #[derive(Clone)]
@@ -82,18 +82,29 @@ impl ExecutionTargetPort for ColabTargetAdapter {
             let has_colab = which::which(&self.colab_bin).is_ok();
             let config_dir = dirs::config_dir().map(|c| c.join("colab-cli"));
             let home_config = dirs::home_dir().map(|h| h.join(".config").join("colab-cli"));
-            let gcloud_creds = dirs::config_dir().map(|c| c.join("gcloud").join("application_default_credentials.json"));
-            let has_creds = config_dir.map(|c| c.join("token.json").exists()).unwrap_or(false)
-                || home_config.map(|h| h.join("token.json").exists()).unwrap_or(false)
+            let gcloud_creds = dirs::config_dir().map(|c| {
+                c.join("gcloud")
+                    .join("application_default_credentials.json")
+            });
+            let has_creds = config_dir
+                .map(|c| c.join("token.json").exists())
+                .unwrap_or(false)
+                || home_config
+                    .map(|h| h.join("token.json").exists())
+                    .unwrap_or(false)
                 || gcloud_creds.map(|g| g.exists()).unwrap_or(false)
                 || std::env::var("COLAB_TOKEN").is_ok()
                 || std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok();
 
             if !has_colab {
                 if which::which("uv").is_ok() || which::which("python3").is_ok() {
-                    warnings.push("Colab CLI not found in PATH; will run via local python environment".to_string());
+                    warnings.push(
+                        "Colab CLI not found in PATH; will run via local python environment"
+                            .to_string(),
+                    );
                 } else {
-                    blockers.push("Colab CLI not installed and no Python runtime found".to_string());
+                    blockers
+                        .push("Colab CLI not installed and no Python runtime found".to_string());
                 }
             }
 
@@ -123,7 +134,10 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         _idempotency_key: &str,
     ) -> Result<ExternalJobRef, DomainError> {
         let account = "colab_account".to_string();
-        let session_id = format!("colab-{}", attempt.experiment_id.replace('_', "-").to_lowercase());
+        let session_id = format!(
+            "colab-{}",
+            attempt.experiment_id.replace('_', "-").to_lowercase()
+        );
 
         let attempt_dir = self.work_dir.join("colab").join(&attempt.id);
         tokio::fs::create_dir_all(&attempt_dir).await.map_err(|e| {
@@ -133,9 +147,12 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         let entrypoint = attempt_dir.join("run.py");
         if !entrypoint.exists() {
             if self.mock_mode {
-                tokio::fs::write(&entrypoint, "# Custos Colab runtime script\nprint('Colab job started')\n")
-                    .await
-                    .map_err(|e| DomainError::Validation(format!("Failed to write script: {e}")))?;
+                tokio::fs::write(
+                    &entrypoint,
+                    "# Custos Colab runtime script\nprint('Colab job started')\n",
+                )
+                .await
+                .map_err(|e| DomainError::Validation(format!("Failed to write script: {e}")))?;
             } else {
                 return Err(DomainError::Validation(format!(
                     "Colab execution entrypoint '{}' does not exist; stage your script before submitting",
@@ -155,13 +172,16 @@ impl ExecutionTargetPort for ColabTargetAdapter {
             .arg(&session_id)
             .arg("--keep");
 
-        let output = cmd.output().await.map_err(|e| {
-            DomainError::Validation(format!("Failed to launch Colab run: {e}"))
-        })?;
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| DomainError::Validation(format!("Failed to launch Colab run: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DomainError::Validation(format!("Colab run failed: {stderr}")));
+            return Err(DomainError::Validation(format!(
+                "Colab run failed: {stderr}"
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -184,7 +204,10 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         ExternalJobRef::new(account, runtime_id, "v1")
     }
 
-    async fn observe(&self, external_ref: &ExternalJobRef) -> Result<AttemptObservation, DomainError> {
+    async fn observe(
+        &self,
+        external_ref: &ExternalJobRef,
+    ) -> Result<AttemptObservation, DomainError> {
         let (raw_status, exit_code) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
             (guard.clone(), None)
@@ -216,7 +239,10 @@ impl ExecutionTargetPort for ColabTargetAdapter {
             ExecState::Running
         } else if raw_status.contains("stopped") || raw_status.contains("not found") {
             ExecState::Stopped
-        } else if raw_status.contains("idle") || raw_status.contains("completed") || raw_status.contains("finished") {
+        } else if raw_status.contains("idle")
+            || raw_status.contains("completed")
+            || raw_status.contains("finished")
+        {
             ExecState::Completed
         } else if raw_status.contains("failed") || raw_status.contains("error") {
             ExecState::Failed
@@ -280,7 +306,11 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         &self,
         external_ref: &ExternalJobRef,
     ) -> Result<Vec<ExecutionArtifact>, DomainError> {
-        let dest = self.work_dir.join("colab").join("outputs").join(&external_ref.job_id);
+        let dest = self
+            .work_dir
+            .join("colab")
+            .join("outputs")
+            .join(&external_ref.job_id);
         tokio::fs::create_dir_all(&dest).await.map_err(|e| {
             DomainError::Validation(format!("Failed to create Colab output dir: {e}"))
         })?;
@@ -299,9 +329,9 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         }
 
         let mut artifacts = Vec::new();
-        let mut entries = tokio::fs::read_dir(&dest).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to read output dir: {e}"))
-        })?;
+        let mut entries = tokio::fs::read_dir(&dest)
+            .await
+            .map_err(|e| DomainError::Validation(format!("Failed to read output dir: {e}")))?;
 
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
@@ -373,6 +403,9 @@ mod tests {
         let attempt = ExecutionAttempt::new("exp_fail", "default", ComputeBackendKind::Colab, None);
         let res = adapter.submit(&attempt, "idem").await;
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("does not exist; stage your script"));
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("does not exist; stage your script"));
     }
 }

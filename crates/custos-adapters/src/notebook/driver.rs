@@ -16,7 +16,6 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
 
-
 pub const PYTHON_RUNNER_SCRIPT: &str = r#"
 import sys, json, traceback, io, os
 
@@ -201,15 +200,13 @@ impl NotebookWorkerSession for LocalNotebookWorkerSession {
         cwd: Option<String>,
     ) -> Result<NotebookWorkerResponse, DomainError> {
         if self.interrupted.load(Ordering::SeqCst) {
-            return Err(DomainError::Validation("Python worker was interrupted".into()));
+            return Err(DomainError::Validation(
+                "Python worker was interrupted".into(),
+            ));
         }
 
         let (resp_tx, resp_rx) = oneshot::channel();
-        let req = WorkerRequest {
-            code,
-            cwd,
-            resp_tx,
-        };
+        let req = WorkerRequest { code, cwd, resp_tx };
 
         if self.tx.send(req).await.is_err() {
             return Err(DomainError::Validation(

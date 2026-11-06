@@ -143,7 +143,14 @@ impl WorkspaceCoordinator {
         let dirty = match self.provider.inspect_dirty(&ws).await {
             Ok(dirty) => dirty,
             Err(error) => {
-                self.repository.update_workspace_status(&ws_id, WorkspaceStatus::SetupFailed { reason: error.to_string() }).await?;
+                self.repository
+                    .update_workspace_status(
+                        &ws_id,
+                        WorkspaceStatus::SetupFailed {
+                            reason: error.to_string(),
+                        },
+                    )
+                    .await?;
                 return Err(error);
             }
         };
@@ -179,14 +186,14 @@ impl WorkspaceCoordinator {
 
     /// Inspects the dirty status and uncommitted changes of a workspace.
     pub async fn inspect_dirty(&self, id: &WorkspaceId) -> Result<DirtyManifest, DomainError> {
-        let mut ws = self
-            .repository
-            .get_workspace(id)
-            .await?
-            .ok_or_else(|| DomainError::NotFound {
-                kind: "ExecutionWorkspace".into(),
-                id: id.to_string(),
-            })?;
+        let mut ws =
+            self.repository
+                .get_workspace(id)
+                .await?
+                .ok_or_else(|| DomainError::NotFound {
+                    kind: "ExecutionWorkspace".into(),
+                    id: id.to_string(),
+                })?;
         let dirty = self.provider.inspect_dirty(&ws).await?;
         ws = ws.with_dirty_manifest(dirty.clone());
         let _ = self.repository.save_workspace(&ws).await;

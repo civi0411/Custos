@@ -4,10 +4,7 @@ use custos_core::contracts::harness::RunObserver;
 use serde_json::Value;
 use std::sync::Arc;
 
-pub fn normalize_opencode(
-    value: &Value,
-    observer: &Arc<dyn RunObserver>,
-) -> Option<String> {
+pub fn normalize_opencode(value: &Value, observer: &Arc<dyn RunObserver>) -> Option<String> {
     let mut text: Option<String> = None;
     let kind = value["type"].as_str().unwrap_or("");
 

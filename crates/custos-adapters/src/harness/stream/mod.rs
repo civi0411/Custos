@@ -87,7 +87,13 @@ mod tests {
             serde_json::json!({"type":"item.completed","item":{"type":"agent_message","id":"a","text":"Hello world"}}),
             serde_json::json!({"type":"item.completed","item":{"type":"command_execution","id":"tool","command":"echo test","aggregated_output":"test"}}),
         ] {
-            normalize(&value, StreamProtocol::CodexJson, &observer, &mut parts, &mut answer);
+            normalize(
+                &value,
+                StreamProtocol::CodexJson,
+                &observer,
+                &mut parts,
+                &mut answer,
+            );
         }
         assert_eq!(answer, "Hello world");
         assert!(captured
@@ -135,7 +141,13 @@ mod tests {
             serde_json::json!({"type":"item.completed","item":{"type":"agent_message","id":"m1","text":"Done"}}),
             serde_json::json!({"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":5}}),
         ] {
-            normalize(&value, StreamProtocol::CodexJson, &codex_observer, &mut parts, &mut codex_answer);
+            normalize(
+                &value,
+                StreamProtocol::CodexJson,
+                &codex_observer,
+                &mut parts,
+                &mut codex_answer,
+            );
         }
 
         let claude_captured = Arc::new(Observer::default());
@@ -149,14 +161,32 @@ mod tests {
             serde_json::json!({"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Done"}}}),
             serde_json::json!({"type":"result","usage":{"input_tokens":10,"output_tokens":5}}),
         ] {
-            normalize(&value, StreamProtocol::ClaudeJson, &claude_observer, &mut claude_parts, &mut claude_answer);
+            normalize(
+                &value,
+                StreamProtocol::ClaudeJson,
+                &claude_observer,
+                &mut claude_parts,
+                &mut claude_answer,
+            );
         }
 
         assert_eq!(codex_answer, "Done");
         assert_eq!(claude_answer, "Done");
 
-        let codex_kinds: Vec<String> = codex_captured.events.lock().unwrap().iter().map(|(k, _)| k.clone()).collect();
-        let claude_kinds: Vec<String> = claude_captured.events.lock().unwrap().iter().map(|(k, _)| k.clone()).collect();
+        let codex_kinds: Vec<String> = codex_captured
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect();
+        let claude_kinds: Vec<String> = claude_captured
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect();
 
         assert!(codex_kinds.contains(&"status".to_string()));
         assert!(claude_kinds.contains(&"status".to_string()));

@@ -10,21 +10,24 @@ impl LocalApiDispatcher {
             }
             METHOD_PIPELINE_STATUS => {
                 let now_ms = chrono::Utc::now().timestamp_millis();
-                ApiResponse::success(req.id, serde_json::json!({
-                    "status": "active",
-                    "timestamp_ms": now_ms,
-                    "stages": {
-                        "bronze": { "status": "ingesting", "invariant_checks": "enforced" },
-                        "silver": { "status": "verified", "invariant_checks": "enforced" },
-                        "gold": { "status": "point_in_time", "invariant_checks": "enforced" },
-                    },
-                    "modalities": {
-                        "code": { "status": "active", "ast_validation": "tree_sitter_verified" },
-                        "science": { "status": "active", "evidence_grounding": "strictly_anchored" },
-                        "agent": { "status": "active", "outbox_governance": "fenced_idempotent" },
-                        "market": { "status": "active", "lookahead_prevention": "closed_bar_invariant" },
-                    },
-                }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "status": "active",
+                        "timestamp_ms": now_ms,
+                        "stages": {
+                            "bronze": { "status": "ingesting", "invariant_checks": "enforced" },
+                            "silver": { "status": "verified", "invariant_checks": "enforced" },
+                            "gold": { "status": "point_in_time", "invariant_checks": "enforced" },
+                        },
+                        "modalities": {
+                            "code": { "status": "active", "ast_validation": "tree_sitter_verified" },
+                            "science": { "status": "active", "evidence_grounding": "strictly_anchored" },
+                            "agent": { "status": "active", "outbox_governance": "fenced_idempotent" },
+                            "market": { "status": "active", "lookahead_prevention": "closed_bar_invariant" },
+                        },
+                    }),
+                )
             }
             METHOD_PIPELINE_STRUCTURE_DETECT => {
                 let content = match req.params.get("content").and_then(|v| v.as_str()) {
@@ -32,8 +35,13 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Missing or empty 'content' parameter"),
                 };
                 match custos_domain::pipeline::TabularStructureDetector::detect(content) {
-                    Ok(detected) => ApiResponse::success(req.id, serde_json::to_value(detected).unwrap_or(serde_json::Value::Null)),
-                    Err(e) => ApiResponse::error(req.id, format!("Failed to detect structure: {e}")),
+                    Ok(detected) => ApiResponse::success(
+                        req.id,
+                        serde_json::to_value(detected).unwrap_or(serde_json::Value::Null),
+                    ),
+                    Err(e) => {
+                        ApiResponse::error(req.id, format!("Failed to detect structure: {e}"))
+                    }
                 }
             }
             METHOD_PIPELINE_RUN => {
@@ -41,17 +49,27 @@ impl LocalApiDispatcher {
                     Some(c) if !c.trim().is_empty() => c,
                     _ => return ApiResponse::error(req.id, "Missing or empty 'content' parameter"),
                 };
-                let modality_str = req.params.get("modality").and_then(|v| v.as_str()).unwrap_or("Market");
+                let modality_str = req
+                    .params
+                    .get("modality")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Market");
                 let modality = match modality_str {
                     "Science" => custos_domain::pipeline::DataModality::Science,
                     "Code" => custos_domain::pipeline::DataModality::Code,
                     "Agent" => custos_domain::pipeline::DataModality::Agent,
                     _ => custos_domain::pipeline::DataModality::Market,
                 };
-                let detected = match custos_domain::pipeline::TabularStructureDetector::detect(content) {
-                    Ok(d) => d,
-                    Err(e) => return ApiResponse::error(req.id, format!("Structure detection failed: {e}")),
-                };
+                let detected =
+                    match custos_domain::pipeline::TabularStructureDetector::detect(content) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Structure detection failed: {e}"),
+                            )
+                        }
+                    };
 
                 let now_ms = chrono::Utc::now().timestamp_millis();
                 let run_id = custos_domain::new_id("pipe_run");
@@ -73,7 +91,11 @@ impl LocalApiDispatcher {
                 let mut invariants_verified = vec!["TabularStructureInvariant".to_string()];
                 let silver_res = match modality {
                     custos_domain::pipeline::DataModality::Market => {
-                        let inv = custos_domain::pipeline::ClosedBarInvariant::new(now_ms - 60000, 60000, now_ms);
+                        let inv = custos_domain::pipeline::ClosedBarInvariant::new(
+                            now_ms - 60000,
+                            60000,
+                            now_ms,
+                        );
                         invariants_verified.push("ClosedBarInvariant".to_string());
                         bronze_record.promote_to_silver(&inv)
                     }
@@ -89,12 +111,20 @@ impl LocalApiDispatcher {
                         bronze_record.promote_to_silver(&inv)
                     }
                     custos_domain::pipeline::DataModality::Code => {
-                        let inv = custos_domain::pipeline::AstSyntaxInvariant::new("virtual.rs", "{ let x = 1; }");
+                        let inv = custos_domain::pipeline::AstSyntaxInvariant::new(
+                            "virtual.rs",
+                            "{ let x = 1; }",
+                        );
                         invariants_verified.push("AstSyntaxInvariant".to_string());
                         bronze_record.promote_to_silver(&inv)
                     }
                     custos_domain::pipeline::DataModality::Agent => {
-                        let inv = custos_domain::pipeline::GovernedOutboxInvariant::new("act_perm", "fs.read", None::<String>, true);
+                        let inv = custos_domain::pipeline::GovernedOutboxInvariant::new(
+                            "act_perm",
+                            "fs.read",
+                            None::<String>,
+                            true,
+                        );
                         invariants_verified.push("GovernedOutboxInvariant".to_string());
                         bronze_record.promote_to_silver(&inv)
                     }
@@ -102,7 +132,12 @@ impl LocalApiDispatcher {
 
                 let silver = match silver_res {
                     Ok(s) => s,
-                    Err(e) => return ApiResponse::error(req.id, format!("Silver invariant promotion failed: {e}")),
+                    Err(e) => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Silver invariant promotion failed: {e}"),
+                        )
+                    }
                 };
 
                 if let Err(e) = silver.promote_to_gold() {
@@ -113,25 +148,33 @@ impl LocalApiDispatcher {
                 let mut anonymized_columns = Vec::new();
                 for h in &detected.headers {
                     let lower = h.to_lowercase();
-                    if lower == "pid" || lower.contains("patient") || lower.contains("trader") || lower.contains("account") || lower.contains("user_id") {
+                    if lower == "pid"
+                        || lower.contains("patient")
+                        || lower.contains("trader")
+                        || lower.contains("account")
+                        || lower.contains("user_id")
+                    {
                         anonymized_columns.push(h.clone());
                     }
                 }
 
-                ApiResponse::success(req.id, serde_json::json!({
-                    "run_id": run_id,
-                    "status": "success",
-                    "stage_reached": "Gold",
-                    "modality": modality_str,
-                    "content_hash": content_hash,
-                    "rows_ingested": detected.total_rows,
-                    "headers": detected.headers,
-                    "anonymized_columns": anonymized_columns,
-                    "anonymization_salt_applied": !anonymized_columns.is_empty(),
-                    "invariants_verified": invariants_verified,
-                    "quality_score": detected.quality_score,
-                    "completed_at_ms": chrono::Utc::now().timestamp_millis(),
-                }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "run_id": run_id,
+                        "status": "success",
+                        "stage_reached": "Gold",
+                        "modality": modality_str,
+                        "content_hash": content_hash,
+                        "rows_ingested": detected.total_rows,
+                        "headers": detected.headers,
+                        "anonymized_columns": anonymized_columns,
+                        "anonymization_salt_applied": !anonymized_columns.is_empty(),
+                        "invariants_verified": invariants_verified,
+                        "quality_score": detected.quality_score,
+                        "completed_at_ms": chrono::Utc::now().timestamp_millis(),
+                    }),
+                )
             }
             "v1.system.metrics" | "v1.system.telemetry" => {
                 let mut process_groups: Vec<serde_json::Value> = Vec::new();
@@ -192,7 +235,8 @@ impl LocalApiDispatcher {
                 }
 
                 // Build children map: ppid -> Vec<pid>
-                let mut children_map: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+                let mut children_map: std::collections::HashMap<u32, Vec<u32>> =
+                    std::collections::HashMap::new();
                 for p in &all_processes {
                     children_map.entry(p.ppid).or_default().push(p.pid);
                 }
@@ -221,7 +265,10 @@ impl LocalApiDispatcher {
                             ("daemon", "Custos Daemon (Core Engine)", "daemon")
                         } else if lower.contains("custos-app-desktop") {
                             ("desktop", "Custos Desktop (GUI Studio)", "app")
-                        } else if lower.contains("zsh") || lower.contains("bash") || lower.contains("fish") {
+                        } else if lower.contains("zsh")
+                            || lower.contains("bash")
+                            || lower.contains("fish")
+                        {
                             ("terminal", "Interactive Terminal Shell", "terminal")
                         } else {
                             ("worker", "Custos Worker Process", "worker")
@@ -303,7 +350,8 @@ impl LocalApiDispatcher {
 
                 // Accurate listening ports using lsof machine format -F pcn filtered by own_pids (Orca pattern)
                 let mut listening_ports: Vec<serde_json::Value> = Vec::new();
-                let mut active_ports_set: std::collections::BTreeSet<u16> = std::collections::BTreeSet::new();
+                let mut active_ports_set: std::collections::BTreeSet<u16> =
+                    std::collections::BTreeSet::new();
 
                 if let Some(out) = std::process::Command::new("lsof")
                     .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"])
@@ -324,7 +372,9 @@ impl LocalApiDispatcher {
                                 "n" if own_pids.contains(&current_pid) => {
                                     if let Some((host, port_str)) = rest.rsplit_once(':') {
                                         if let Ok(port) = port_str.parse::<u16>() {
-                                            let is_public = !(host.starts_with("127.") || host == "[::1]" || host == "localhost");
+                                            let is_public = !(host.starts_with("127.")
+                                                || host == "[::1]"
+                                                || host == "localhost");
                                             if active_ports_set.insert(port) {
                                                 listening_ports.push(serde_json::json!({
                                                     "port": port,

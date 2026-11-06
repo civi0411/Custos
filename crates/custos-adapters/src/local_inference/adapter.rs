@@ -283,7 +283,9 @@ impl ModelProvider for NativeLocalModelAdapter {
                                             let args_str = tc
                                                 .arguments
                                                 .as_ref()
-                                                .map(|a| serde_json::to_string(a).unwrap_or_default())
+                                                .map(|a| {
+                                                    serde_json::to_string(a).unwrap_or_default()
+                                                })
                                                 .unwrap_or_default();
 
                                             let call_event = ModelTurnEvent {

@@ -10,8 +10,6 @@ use std::path::Path;
 use tokio::fs;
 use tokio::process::Command;
 
-
-
 #[derive(Debug, Clone, Default)]
 pub struct LocalWorkspaceProvider;
 
@@ -89,7 +87,9 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
 
                 if is_base_repo {
                     if workspace.path.trim().is_empty() || workspace.path == "/" {
-                        return Err(DomainError::Validation("Workspace path cannot be root".into()));
+                        return Err(DomainError::Validation(
+                            "Workspace path cannot be root".into(),
+                        ));
                     }
                     if !main_repo.exists() {
                         return Err(DomainError::Validation(format!(
@@ -100,29 +100,49 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                     let root = Command::new("git")
                         .current_dir(main_repo)
                         .args(["rev-parse", "--show-toplevel"])
-                        .output().await
-                        .map_err(|error| DomainError::Validation(format!("Cannot inspect Git checkout: {error}")))?;
+                        .output()
+                        .await
+                        .map_err(|error| {
+                            DomainError::Validation(format!("Cannot inspect Git checkout: {error}"))
+                        })?;
                     if !root.status.success() {
-                        return Err(DomainError::Validation("Existing directory is not a Git checkout".into()));
+                        return Err(DomainError::Validation(
+                            "Existing directory is not a Git checkout".into(),
+                        ));
                     }
                     let root_text = String::from_utf8_lossy(&root.stdout);
-                    let observed_root = Path::new(root_text.trim()).canonicalize()
-                        .map_err(|error| DomainError::Validation(format!("Cannot resolve Git root: {error}")))?;
-                    let expected_root = main_repo.canonicalize()
-                        .map_err(|error| DomainError::Validation(format!("Cannot resolve repository path: {error}")))?;
+                    let observed_root =
+                        Path::new(root_text.trim())
+                            .canonicalize()
+                            .map_err(|error| {
+                                DomainError::Validation(format!("Cannot resolve Git root: {error}"))
+                            })?;
+                    let expected_root = main_repo.canonicalize().map_err(|error| {
+                        DomainError::Validation(format!("Cannot resolve repository path: {error}"))
+                    })?;
                     if observed_root != expected_root {
-                        return Err(DomainError::Validation("Register the actual Git checkout root, not a subdirectory".into()));
+                        return Err(DomainError::Validation(
+                            "Register the actual Git checkout root, not a subdirectory".into(),
+                        ));
                     }
-                    let observed = Command::new("git").current_dir(main_repo)
+                    let observed = Command::new("git")
+                        .current_dir(main_repo)
                         .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
-                        .output().await
-                        .map_err(|error| DomainError::Validation(format!("Cannot inspect checkout branch: {error}")))?;
+                        .output()
+                        .await
+                        .map_err(|error| {
+                            DomainError::Validation(format!(
+                                "Cannot inspect checkout branch: {error}"
+                            ))
+                        })?;
                     let actual = if observed.status.success() {
                         String::from_utf8_lossy(&observed.stdout).trim().to_string()
                     } else if observed.status.code() == Some(1) {
                         "HEAD".to_string()
                     } else {
-                        return Err(DomainError::Validation("Cannot determine checkout branch".into()));
+                        return Err(DomainError::Validation(
+                            "Cannot determine checkout branch".into(),
+                        ));
                     };
                     if branch != &actual {
                         return Err(DomainError::Conflict(format!("Checkout is on '{actual}', not declared branch '{branch}'; registration never switches branches")));
@@ -132,22 +152,44 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
 
                 workspace.validate_path_safety()?;
 
-                let checked = Command::new("git").current_dir(repo_path)
-                    .args(["check-ref-format", "--branch", branch]).output().await
-                    .map_err(|error| DomainError::Validation(format!("Cannot validate Git branch: {error}")))?;
+                let checked = Command::new("git")
+                    .current_dir(repo_path)
+                    .args(["check-ref-format", "--branch", branch])
+                    .output()
+                    .await
+                    .map_err(|error| {
+                        DomainError::Validation(format!("Cannot validate Git branch: {error}"))
+                    })?;
                 if branch.starts_with('-') || branch.contains("@{") || !checked.status.success() {
-                    return Err(DomainError::Validation("Invalid literal Git branch name".into()));
+                    return Err(DomainError::Validation(
+                        "Invalid literal Git branch name".into(),
+                    ));
                 }
                 let resolved_base = if let Some(base) = base_commit {
-                    let resolved = Command::new("git").current_dir(repo_path)
-                        .args(["rev-parse", "--verify", "--end-of-options", &format!("{base}^{{commit}}")])
-                        .output().await
-                        .map_err(|error| DomainError::Validation(format!("Cannot resolve worktree base: {error}")))?;
+                    let resolved = Command::new("git")
+                        .current_dir(repo_path)
+                        .args([
+                            "rev-parse",
+                            "--verify",
+                            "--end-of-options",
+                            &format!("{base}^{{commit}}"),
+                        ])
+                        .output()
+                        .await
+                        .map_err(|error| {
+                            DomainError::Validation(format!(
+                                "Cannot resolve worktree base: {error}"
+                            ))
+                        })?;
                     if !resolved.status.success() {
-                        return Err(DomainError::Validation("Worktree base does not resolve to a commit".into()));
+                        return Err(DomainError::Validation(
+                            "Worktree base does not resolve to a commit".into(),
+                        ));
                     }
                     Some(String::from_utf8_lossy(&resolved.stdout).trim().to_string())
-                } else { None };
+                } else {
+                    None
+                };
 
                 if target_path.exists() {
                     return Err(DomainError::Conflict(format!(
@@ -174,10 +216,9 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                     .arg("--verify")
                     .arg(format!("refs/heads/{}", branch));
 
-                let branch_probe = check_branch_cmd
-                    .output()
-                    .await
-                    .map_err(|error| DomainError::Validation(format!("Cannot inspect existing branch: {error}")))?;
+                let branch_probe = check_branch_cmd.output().await.map_err(|error| {
+                    DomainError::Validation(format!("Cannot inspect existing branch: {error}"))
+                })?;
                 let branch_exists = branch_probe.status.success();
 
                 let mut cmd = Command::new("git");
@@ -263,7 +304,10 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
             WorkspaceKind::Git { .. } => {
                 let target = Path::new(&workspace.path);
                 if !target.is_dir() {
-                    return Err(DomainError::Validation(format!("Git workspace is missing: {}", workspace.path)));
+                    return Err(DomainError::Validation(format!(
+                        "Git workspace is missing: {}",
+                        workspace.path
+                    )));
                 }
 
                 // Run git status --porcelain=v1 -z for robust null-delimited parsing
@@ -279,7 +323,10 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                 })?;
 
                 if !output.status.success() {
-                    return Err(DomainError::Validation(format!("git status failed: {}", String::from_utf8_lossy(&output.stderr).trim())));
+                    return Err(DomainError::Validation(format!(
+                        "git status failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )));
                 }
                 let bytes = output.stdout;
                 let mut modified_files = Vec::new();
@@ -373,7 +420,10 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
             WorkspaceKind::Git { base_commit, .. } => {
                 let target = Path::new(&workspace.path);
                 if !target.is_dir() {
-                    return Err(DomainError::Validation(format!("Git workspace is missing: {}", workspace.path)));
+                    return Err(DomainError::Validation(format!(
+                        "Git workspace is missing: {}",
+                        workspace.path
+                    )));
                 }
 
                 let mut cmd = Command::new("git");
@@ -552,10 +602,18 @@ mod tests {
         fs::create_dir_all(&repo).await.unwrap();
         run_git_cmd(&["init", "--initial-branch=actual"], &repo).await;
         let provider = LocalWorkspaceProvider::new();
-        let make = |path: &Path, branch: &str| ExecutionWorkspace::new(
-            WorkspaceId::generate(), "existing", WorkspaceKind::Git {
-                repo_path: path.to_string_lossy().into_owned(), branch: branch.into(), base_commit: None,
-            }, path.to_string_lossy().into_owned());
+        let make = |path: &Path, branch: &str| {
+            ExecutionWorkspace::new(
+                WorkspaceId::generate(),
+                "existing",
+                WorkspaceKind::Git {
+                    repo_path: path.to_string_lossy().into_owned(),
+                    branch: branch.into(),
+                    base_commit: None,
+                },
+                path.to_string_lossy().into_owned(),
+            )
+        };
         assert!(provider.provision(&make(&repo, "actual")).await.is_ok());
         assert!(provider.provision(&make(&repo, "main")).await.is_err());
         let nested = repo.join("nested");
@@ -572,13 +630,42 @@ mod tests {
         let repo = tmp.path().join("repo");
         fs::create_dir_all(&repo).await.unwrap();
         run_git_cmd(&["init"], &repo).await;
-        run_git_cmd(&["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "base"], &repo).await;
+        run_git_cmd(
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "base",
+            ],
+            &repo,
+        )
+        .await;
         let provider = LocalWorkspaceProvider::new();
-        for (index, (branch, base)) in [("--detach", None), ("bad..branch", None), ("@{-1}", None), ("feature", Some("--help")), ("feature", Some("missing-ref"))].into_iter().enumerate() {
+        for (index, (branch, base)) in [
+            ("--detach", None),
+            ("bad..branch", None),
+            ("@{-1}", None),
+            ("feature", Some("--help")),
+            ("feature", Some("missing-ref")),
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let target = tmp.path().join(format!("candidate-{index}"));
-            let ws = ExecutionWorkspace::new(WorkspaceId::generate(), "candidate", WorkspaceKind::Git {
-                repo_path: repo.to_string_lossy().into_owned(), branch: branch.into(), base_commit: base.map(str::to_owned),
-            }, target.to_string_lossy().into_owned());
+            let ws = ExecutionWorkspace::new(
+                WorkspaceId::generate(),
+                "candidate",
+                WorkspaceKind::Git {
+                    repo_path: repo.to_string_lossy().into_owned(),
+                    branch: branch.into(),
+                    base_commit: base.map(str::to_owned),
+                },
+                target.to_string_lossy().into_owned(),
+            );
             assert!(provider.provision(&ws).await.is_err());
             assert!(!target.exists());
         }

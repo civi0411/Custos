@@ -8,16 +8,17 @@ use crate::repositories::{
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
-    CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort, NotebookStoragePort,
-    OutboxEntry, OutboxPort, OutboxStatus, QuantPort, ReplanPort, RunPort, WorkflowRevisionPort,
+    CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort,
+    NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, QuantPort, ReplanPort, RunPort,
+    WorkflowRevisionPort,
 };
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
-    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, NotebookKernelState, ReplanRecord, Run, Session,
-    SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId,
-    WorkspaceStatus,
+    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, NotebookKernelState,
+    ReplanRecord, Run, Session, SessionId, SessionJournalEntry, Span, Task, WorkerRun,
+    WorkflowRevision, WorkspaceId, WorkspaceStatus,
 };
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
@@ -190,10 +191,14 @@ impl SqliteTaskStore {
     }
 
     /// Reconciles all in-flight entities across outbox, runs, and attempts on daemon startup/recovery.
-    pub fn reconcile_all_on_startup(&self) -> Result<custos_domain::ReconciliationSummary, DomainError> {
+    pub fn reconcile_all_on_startup(
+        &self,
+    ) -> Result<custos_domain::ReconciliationSummary, DomainError> {
         let outbox_reconciled = self.outbox_repo.reconcile_on_startup()?;
         let runs_reconciled = self.run_repo.reconcile_runs_on_startup()?;
-        let attempts_reconciled = self.experiment_attempt_repo.reconcile_attempts_on_startup()?;
+        let attempts_reconciled = self
+            .experiment_attempt_repo
+            .reconcile_attempts_on_startup()?;
         Ok(custos_domain::ReconciliationSummary {
             outbox_reconciled,
             runs_reconciled,
@@ -250,7 +255,9 @@ impl SqliteTaskStore {
         if res == 1 {
             Ok(())
         } else {
-            Err(DomainError::Validation("SQLite health check returned unexpected value".into()))
+            Err(DomainError::Validation(
+                "SQLite health check returned unexpected value".into(),
+            ))
         }
     }
 
@@ -260,7 +267,9 @@ impl SqliteTaskStore {
             .prepare("SELECT key, value FROM daemon_settings")
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut map = std::collections::HashMap::new();
@@ -275,11 +284,14 @@ impl SqliteTaskStore {
         &self,
         settings: &std::collections::HashMap<String, String>,
     ) -> Result<(), DomainError> {
-        if settings.keys().any(|key| key.trim().is_empty() || key.len() > 128)
+        if settings
+            .keys()
+            .any(|key| key.trim().is_empty() || key.len() > 128)
             || settings.values().any(|value| value.len() > 65_536)
         {
             return Err(DomainError::Validation(
-                "Settings keys must be non-empty and <=128 bytes; values must be <=65536 bytes".into(),
+                "Settings keys must be non-empty and <=128 bytes; values must be <=65536 bytes"
+                    .into(),
             ));
         }
         let mut conn = self.db.lock()?;
@@ -819,7 +831,10 @@ impl ReplanPort for SqliteTaskStore {
 
 #[async_trait]
 impl CommandLedgerPort for SqliteTaskStore {
-    async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError> {
+    async fn get_command(
+        &self,
+        command_id: &str,
+    ) -> Result<Option<CommandLedgerEntry>, DomainError> {
         self.command_ledger_repo.get_command(command_id)
     }
 
@@ -945,39 +960,75 @@ impl WorkspaceRepoPort for SqliteTaskStore {
 
 #[async_trait]
 impl QuantPort for SqliteTaskStore {
-    async fn save_tearsheet(&self, tearsheet: &custos_domain::quant::BacktestTearsheet, task_id: &str) -> Result<(), DomainError> {
+    async fn save_tearsheet(
+        &self,
+        tearsheet: &custos_domain::quant::BacktestTearsheet,
+        task_id: &str,
+    ) -> Result<(), DomainError> {
         self.quant_repo.save_tearsheet(tearsheet, task_id).await
     }
 
-    async fn get_latest_tearsheet(&self, strategy_id: &str) -> Result<Option<custos_domain::quant::BacktestTearsheet>, DomainError> {
+    async fn get_latest_tearsheet(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<custos_domain::quant::BacktestTearsheet>, DomainError> {
         self.quant_repo.get_latest_tearsheet(strategy_id).await
     }
 
-    async fn save_order_ticket(&self, ticket: &custos_domain::quant::OrderTicket, task_id: &str) -> Result<(), DomainError> {
+    async fn save_order_ticket(
+        &self,
+        ticket: &custos_domain::quant::OrderTicket,
+        task_id: &str,
+    ) -> Result<(), DomainError> {
         self.quant_repo.save_order_ticket(ticket, task_id).await
     }
 
-    async fn list_order_tickets(&self, strategy_id: Option<&str>, task_id: Option<&str>) -> Result<Vec<custos_domain::quant::OrderTicket>, DomainError> {
-        self.quant_repo.list_order_tickets(strategy_id, task_id).await
+    async fn list_order_tickets(
+        &self,
+        strategy_id: Option<&str>,
+        task_id: Option<&str>,
+    ) -> Result<Vec<custos_domain::quant::OrderTicket>, DomainError> {
+        self.quant_repo
+            .list_order_tickets(strategy_id, task_id)
+            .await
     }
 
-    async fn get_order_ticket(&self, order_id: &str) -> Result<Option<custos_domain::quant::OrderTicket>, DomainError> {
+    async fn get_order_ticket(
+        &self,
+        order_id: &str,
+    ) -> Result<Option<custos_domain::quant::OrderTicket>, DomainError> {
         self.quant_repo.get_order_ticket(order_id).await
     }
 
-    async fn update_order_ticket(&self, ticket: &custos_domain::quant::OrderTicket) -> Result<(), DomainError> {
+    async fn update_order_ticket(
+        &self,
+        ticket: &custos_domain::quant::OrderTicket,
+    ) -> Result<(), DomainError> {
         self.quant_repo.update_order_ticket(ticket).await
     }
 
-    async fn save_market_bars(&self, symbol: &str, timeframe: &str, bars: &[custos_domain::quant::OhlcvBar]) -> Result<(), DomainError> {
-        self.quant_repo.save_market_bars(symbol, timeframe, bars).await
+    async fn save_market_bars(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        bars: &[custos_domain::quant::OhlcvBar],
+    ) -> Result<(), DomainError> {
+        self.quant_repo
+            .save_market_bars(symbol, timeframe, bars)
+            .await
     }
 
-    async fn get_market_bars(&self, symbol: &str, timeframe: &str, limit: usize) -> Result<Vec<custos_domain::quant::OhlcvBar>, DomainError> {
-        self.quant_repo.get_market_bars(symbol, timeframe, limit).await
+    async fn get_market_bars(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+    ) -> Result<Vec<custos_domain::quant::OhlcvBar>, DomainError> {
+        self.quant_repo
+            .get_market_bars(symbol, timeframe, limit)
+            .await
     }
 }
-
 
 #[cfg(test)]
 mod tests;

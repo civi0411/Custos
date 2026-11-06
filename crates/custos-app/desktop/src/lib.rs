@@ -87,16 +87,15 @@ async fn custos_request(
             lifecycle.set_state(DaemonLifecycleState::Recovering).await;
             let profile = ProfileResolver::from_env();
             if let Ok(new_client) = ensure_daemon_client_async(&profile).await {
-                let retry_resp = new_client
-                    .send_request(req)
-                    .await
-                    .map_err(|e2| {
-                        tokio::spawn({
-                            let lc = lifecycle.inner().clone();
-                            async move { lc.set_state(DaemonLifecycleState::Degraded).await; }
-                        });
-                        format!("{e}; retry failed: {e2}")
-                    })?;
+                let retry_resp = new_client.send_request(req).await.map_err(|e2| {
+                    tokio::spawn({
+                        let lc = lifecycle.inner().clone();
+                        async move {
+                            lc.set_state(DaemonLifecycleState::Degraded).await;
+                        }
+                    });
+                    format!("{e}; retry failed: {e2}")
+                })?;
                 lifecycle.set_state(DaemonLifecycleState::Ready).await;
                 retry_resp
             } else {
@@ -107,7 +106,9 @@ async fn custos_request(
     };
     if let Some(err) = resp.error {
         if err.contains("incompatible") || err.contains("schema mismatch") {
-            lifecycle.set_state(DaemonLifecycleState::Incompatible).await;
+            lifecycle
+                .set_state(DaemonLifecycleState::Incompatible)
+                .await;
         }
         Err(err)
     } else {
@@ -133,7 +134,9 @@ pub fn run() {
         Err(e) => {
             tracing::warn!(error = %e, "Initial daemon connection failed; desktop will connect lazily on request");
             (
-                Arc::new(LocalApiClient::from_port(profile.read_port().unwrap_or(3000))),
+                Arc::new(LocalApiClient::from_port(
+                    profile.read_port().unwrap_or(3000),
+                )),
                 DaemonLifecycleState::Connecting,
             )
         }
@@ -174,4 +177,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

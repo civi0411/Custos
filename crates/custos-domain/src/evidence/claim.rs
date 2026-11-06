@@ -7,7 +7,9 @@ use crate::error::DomainError;
 use crate::ids::new_id;
 
 /// 4-Level Grounding Status enforcing zero false-passes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ClaimGroundingLevel {
     /// L0: Raw assertion without citation or verification
@@ -320,10 +322,14 @@ impl ClaimAssessmentRecord {
         let claim_id = claim_id.into();
         let evaluator_id = evaluator_id.into();
         if claim_id.trim().is_empty() {
-            return Err(DomainError::Validation("Assessment requires non-empty claim_id".into()));
+            return Err(DomainError::Validation(
+                "Assessment requires non-empty claim_id".into(),
+            ));
         }
         if !(0.0..=1.0).contains(&confidence_score) {
-            return Err(DomainError::Validation("Confidence score must be between 0.0 and 1.0".into()));
+            return Err(DomainError::Validation(
+                "Confidence score must be between 0.0 and 1.0".into(),
+            ));
         }
         Ok(Self {
             id: new_id("assess"),
@@ -355,7 +361,10 @@ impl ClaimAssessmentRecord {
 
 impl ResearchClaim {
     /// Elevates grounding level based on a verified assessment record
-    pub fn elevate_grounding(&mut self, assessment: &ClaimAssessmentRecord) -> Result<(), DomainError> {
+    pub fn elevate_grounding(
+        &mut self,
+        assessment: &ClaimAssessmentRecord,
+    ) -> Result<(), DomainError> {
         if assessment.claim_id != self.id {
             return Err(DomainError::Validation(format!(
                 "Assessment target {} does not match claim {}",
@@ -363,7 +372,9 @@ impl ResearchClaim {
             )));
         }
         if assessment.is_stale {
-            return Err(DomainError::Validation("Cannot elevate claim with stale assessment".into()));
+            return Err(DomainError::Validation(
+                "Cannot elevate claim with stale assessment".into(),
+            ));
         }
         if !assessment.status.is_passing() {
             return Err(DomainError::Validation(format!(
@@ -388,7 +399,9 @@ impl ResearchClaim {
     /// Adds a cryptographically linked evidence passage to this claim
     pub fn link_evidence(&mut self, link: ClaimEvidenceLink) -> Result<(), DomainError> {
         if link.passage_anchor_id.trim().is_empty() {
-            return Err(DomainError::Validation("Evidence link requires valid passage_anchor_id".into()));
+            return Err(DomainError::Validation(
+                "Evidence link requires valid passage_anchor_id".into(),
+            ));
         }
         self.evidence_links.push(link);
         if self.level == ClaimGroundingLevel::L0Ungrounded {
@@ -400,11 +413,15 @@ impl ResearchClaim {
     /// Seals the claim proof into a CAS URI (L3Sealed)
     pub fn seal_cas_proof(&mut self, uri: impl Into<String>) -> Result<(), DomainError> {
         if self.level != ClaimGroundingLevel::L2Verified {
-            return Err(DomainError::Validation("Claim must be L2Verified before sealing CAS proof".into()));
+            return Err(DomainError::Validation(
+                "Claim must be L2Verified before sealing CAS proof".into(),
+            ));
         }
         let uri = uri.into();
         if !uri.starts_with("cas://") {
-            return Err(DomainError::Validation("Proof URI must start with cas://".into()));
+            return Err(DomainError::Validation(
+                "Proof URI must start with cas://".into(),
+            ));
         }
         self.sealed_proof_uri = Some(uri);
         self.level = ClaimGroundingLevel::L3Sealed;
@@ -412,8 +429,10 @@ impl ResearchClaim {
     }
 
     pub fn is_verified_for_coding(&self) -> bool {
-        matches!(self.level, ClaimGroundingLevel::L2Verified | ClaimGroundingLevel::L3Sealed)
-            && self.confidence_score >= 0.70
+        matches!(
+            self.level,
+            ClaimGroundingLevel::L2Verified | ClaimGroundingLevel::L3Sealed
+        ) && self.confidence_score >= 0.70
     }
 }
 
@@ -447,9 +466,10 @@ mod tests {
 
     #[test]
     fn test_claim_elevation_and_cas_sealing_state_machine() {
-        let mut claim = ResearchClaimProposal::new("LoRA achieves parity with full fine-tuning", 100)
-            .unwrap()
-            .into_unverified_claim();
+        let mut claim =
+            ResearchClaimProposal::new("LoRA achieves parity with full fine-tuning", 100)
+                .unwrap()
+                .into_unverified_claim();
         assert_eq!(claim.level, ClaimGroundingLevel::L0Ungrounded);
         assert!(!claim.is_verified_for_coding());
 

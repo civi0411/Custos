@@ -87,7 +87,10 @@ pub trait ExecutionTargetPort: Send + Sync {
     ) -> Result<ExternalJobRef, DomainError>;
 
     /// 3. Observe / Reconcile: gets honest status of exact job
-    async fn observe(&self, external_ref: &ExternalJobRef) -> Result<AttemptObservation, DomainError>;
+    async fn observe(
+        &self,
+        external_ref: &ExternalJobRef,
+    ) -> Result<AttemptObservation, DomainError>;
 
     /// 4. Request Checkpoint: signals engine to save at next optimizer-step boundary
     async fn request_checkpoint(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError>;

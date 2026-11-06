@@ -330,7 +330,8 @@ mod tests {
         );
         files.insert(
             "secret.rs".into(),
-            "// Config with secret\nconst KEY: &str = \"sk-ant-test1234567890abcdef1234567890\";\n".into(),
+            "// Config with secret\nconst KEY: &str = \"sk-ant-test1234567890abcdef1234567890\";\n"
+                .into(),
         );
         files.insert(
             "dup.rs".into(),
@@ -362,7 +363,10 @@ mod tests {
             untrusted_sources: vec!["secret.rs".into()],
         };
 
-        let pack = compiler.compile(&req).await.expect("Compilation must succeed");
+        let pack = compiler
+            .compile(&req)
+            .await
+            .expect("Compilation must succeed");
 
         // Step 1: Traversal is excluded
         assert!(!pack.items.iter().any(|it| it.source.contains("passwd")));

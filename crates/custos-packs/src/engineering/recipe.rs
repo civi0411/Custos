@@ -63,11 +63,19 @@ impl std::fmt::Display for RecipeFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RecipeFailure::DiagnoseFailed(reason) => write!(f, "Diagnostic failure: {reason}"),
-            RecipeFailure::PatchFailed { reason, .. } => write!(f, "Patch generation failed: {reason}"),
-            RecipeFailure::ScopeViolation { path, allowed } => {
-                write!(f, "Scope violation: '{path}' is not within allowed paths: {allowed:?}")
+            RecipeFailure::PatchFailed { reason, .. } => {
+                write!(f, "Patch generation failed: {reason}")
             }
-            RecipeFailure::VerificationFailed { verifier_id, reason } => {
+            RecipeFailure::ScopeViolation { path, allowed } => {
+                write!(
+                    f,
+                    "Scope violation: '{path}' is not within allowed paths: {allowed:?}"
+                )
+            }
+            RecipeFailure::VerificationFailed {
+                verifier_id,
+                reason,
+            } => {
                 write!(f, "Verification failed on {verifier_id}: {reason}")
             }
         }
@@ -97,9 +105,9 @@ impl EngineeringRecipePipeline {
             return Ok(());
         }
         for file in modified_files {
-            let allowed = allowed_paths.iter().any(|allowed| {
-                file == allowed || file.starts_with(&format!("{allowed}/"))
-            });
+            let allowed = allowed_paths
+                .iter()
+                .any(|allowed| file == allowed || file.starts_with(&format!("{allowed}/")));
             if !allowed {
                 return Err(RecipeFailure::ScopeViolation {
                     path: file.clone(),
@@ -164,7 +172,10 @@ mod tests {
         )
         .expect("Recipe outcome must assemble on valid inputs");
 
-        assert_eq!(outcome.diagnostic.root_cause, "Null pointer in worker lease");
+        assert_eq!(
+            outcome.diagnostic.root_cause,
+            "Null pointer in worker lease"
+        );
         assert_eq!(outcome.patch.modified_files, vec!["src/lib.rs"]);
         assert!(outcome.verification.passed);
     }

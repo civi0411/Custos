@@ -41,7 +41,13 @@ impl CliHarness {
     pub fn from_spec(spec: &HarnessSpec, workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             id: spec.id.to_string(),
-            binary_path: PathBuf::from(spec.bins.split([',', '|']).next().unwrap_or(spec.bins).trim()),
+            binary_path: PathBuf::from(
+                spec.bins
+                    .split([',', '|'])
+                    .next()
+                    .unwrap_or(spec.bins)
+                    .trim(),
+            ),
             workspace_root: workspace_root.into(),
             default_timeout: Duration::from_secs(120),
             mediation_level: spec.mediation,
@@ -140,7 +146,11 @@ impl CliHarness {
         self.mock_state.push_response(response).await;
     }
 
-    pub fn normalize_output_to_intents(&self, task_id: &str, raw_output: &str) -> Vec<ActionIntent> {
+    pub fn normalize_output_to_intents(
+        &self,
+        task_id: &str,
+        raw_output: &str,
+    ) -> Vec<ActionIntent> {
         super::stream::extract_observed_intents(raw_output, &self.id, task_id)
     }
 
@@ -294,8 +304,10 @@ impl AgentRuntimePort for CliHarness {
             active.insert(run_id.clone(), cancel_flag.clone());
         }
 
-        let wrapped_observer =
-            Arc::new(super::observer::CancellableObserver::new(observer, cancel_flag));
+        let wrapped_observer = Arc::new(super::observer::CancellableObserver::new(
+            observer,
+            cancel_flag,
+        ));
         let res = super::stream::run_observed_process_with_protocol(
             cmd,
             wrapped_observer,
@@ -316,8 +328,12 @@ impl AgentRuntimePort for CliHarness {
         instruction: &str,
         cwd: &Path,
     ) -> Result<HarnessExecutionResult, DomainError> {
-        self.run_native_observed(instruction, cwd, std::sync::Arc::new(super::observer::NoopObserver))
-            .await
+        self.run_native_observed(
+            instruction,
+            cwd,
+            std::sync::Arc::new(super::observer::NoopObserver),
+        )
+        .await
     }
 }
 
@@ -447,7 +463,6 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,7 +470,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_generic_cli_adapter_mock_mode() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
@@ -474,7 +490,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_generic_cli_profile_and_assurance_invariants() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
         let adapter = CliHarness::claude_code(&temp_dir);
         let profile = adapter.profile();
 
@@ -489,12 +506,16 @@ mod tests {
         assert_eq!(codex.profile().cost_visibility, CostVisibility::ExactTokens);
 
         let opencode = CliHarness::opencode(&temp_dir);
-        assert_eq!(opencode.profile().cost_visibility, CostVisibility::Estimated);
+        assert_eq!(
+            opencode.profile().cost_visibility,
+            CostVisibility::Estimated
+        );
     }
 
     #[tokio::test]
     async fn test_generic_cli_gate_4_fraud_rejection() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
         let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
         let profile = adapter.profile();
 
@@ -508,28 +529,37 @@ mod tests {
         .with_assurance(Assurance::CustosMediated);
 
         let res = profile.validate_intent_assurance(&fraudulent_intent);
-        assert!(res.is_err(), "Gate 4 must reject fraudulent CustosMediated assurance");
+        assert!(
+            res.is_err(),
+            "Gate 4 must reject fraudulent CustosMediated assurance"
+        );
         let err = res.unwrap_err();
         assert!(err.to_string().contains("Gate 4 Violation"));
     }
 
     #[tokio::test]
     async fn test_generic_cli_cancel_and_steer() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
         let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
 
         let run_id = "run_test_123";
         adapter.cancel_run(run_id).await.unwrap();
 
-        adapter.steer_run(run_id, "Avoid modifying src/main.rs").await.unwrap();
+        adapter
+            .steer_run(run_id, "Avoid modifying src/main.rs")
+            .await
+            .unwrap();
         let steers = adapter.steer_messages.lock().await;
-        assert_eq!(steers.get(run_id).unwrap(), &vec!["Avoid modifying src/main.rs"]);
+        assert_eq!(
+            steers.get(run_id).unwrap(),
+            &vec!["Avoid modifying src/main.rs"]
+        );
         drop(steers);
 
         let mut worker_run = WorkerRun::new("task_001".into(), "claude-code".into(), 1);
         worker_run.run_id = Some(run_id.to_string());
         let pack = ContextPack::new("pack_001".into(), vec![], 0, "sha256:test".into());
-
 
         let effects = adapter.execute_turn(&worker_run, &pack).await.unwrap();
         assert_eq!(effects.len(), 2);
@@ -540,7 +570,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_generic_cli_live_binary_missing_error() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
         let adapter = CliHarness::new(
             "nonexistent-agent",
             "nonexistent_bin_12345",
@@ -560,6 +591,9 @@ mod tests {
             .run_native_observed("test", &temp_dir, Arc::new(MockObserver))
             .await;
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("is not installed or not found on PATH"));
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("is not installed or not found on PATH"));
     }
 }

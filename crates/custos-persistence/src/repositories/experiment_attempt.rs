@@ -3,9 +3,9 @@
 //! Provides single-writer SQLite persistence for `ExecutionAttempt`, idempotency-keyed `Invocation`s,
 //! generation-CAS checkpoint promotions (fencing stale writers), and startup crash reconciliation.
 
-use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
+use std::sync::{Arc, Mutex};
 
 use custos_core::contracts::checkpoint_store::PromotionOutcome;
 use custos_domain::{
@@ -25,10 +25,12 @@ impl ExperimentAttemptRepository {
     /// Saves or updates an ExecutionAttempt atomically with an outbox event
     pub fn save_attempt(&self, attempt: &ExecutionAttempt) -> Result<(), DomainError> {
         let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
-
-        let attempt_json = serde_json::to_string(attempt)
+        let tx = conn
+            .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let attempt_json =
+            serde_json::to_string(attempt).map_err(|e| DomainError::Validation(e.to_string()))?;
         let ext_json = attempt
             .external_ref
             .as_ref()
@@ -88,7 +90,8 @@ impl ExperimentAttemptRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -133,8 +136,8 @@ impl ExperimentAttemptRepository {
         let mut attempts = Vec::new();
         for r in rows {
             let json = r.map_err(|e| DomainError::Validation(e.to_string()))?;
-            let attempt: ExecutionAttempt = serde_json::from_str(&json)
-                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            let attempt: ExecutionAttempt =
+                serde_json::from_str(&json).map_err(|e| DomainError::Validation(e.to_string()))?;
             attempts.push(attempt);
         }
         Ok(attempts)
@@ -186,7 +189,9 @@ impl ExperimentAttemptRepository {
         canonical_step: u64,
     ) -> Result<PromotionOutcome, DomainError> {
         let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         // Query current max generation promoted for this experiment
         let current_max_gen: Option<u64> = tx
@@ -201,7 +206,9 @@ impl ExperimentAttemptRepository {
 
         if let Some(cur) = current_max_gen {
             if expected_generation < cur {
-                return Ok(PromotionOutcome::StaleGeneration { actual_generation: cur });
+                return Ok(PromotionOutcome::StaleGeneration {
+                    actual_generation: cur,
+                });
             }
         }
 
@@ -214,7 +221,8 @@ impl ExperimentAttemptRepository {
 
         match insert_res {
             Ok(_) => {
-                tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+                tx.commit()
+                    .map_err(|e| DomainError::Validation(e.to_string()))?;
                 Ok(PromotionOutcome::Promoted { canonical_step })
             }
             Err(rusqlite::Error::SqliteFailure(err, _))
@@ -232,7 +240,9 @@ impl ExperimentAttemptRepository {
     /// In-flight states -> Uncertain, ReleaseRequested -> Unknown
     pub fn reconcile_attempts_on_startup(&self) -> Result<usize, DomainError> {
         let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut stmt = tx
             .prepare(
@@ -255,12 +265,15 @@ impl ExperimentAttemptRepository {
         let now = Utc::now().timestamp();
 
         for (id, json) in rows {
-            let mut attempt: ExecutionAttempt = serde_json::from_str(&json)
-                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            let mut attempt: ExecutionAttempt =
+                serde_json::from_str(&json).map_err(|e| DomainError::Validation(e.to_string()))?;
 
             if matches!(
                 attempt.exec_state,
-                ExecState::Submitting | ExecState::Submitted | ExecState::Running | ExecState::Stopping
+                ExecState::Submitting
+                    | ExecState::Submitted
+                    | ExecState::Running
+                    | ExecState::Stopping
             ) {
                 attempt.exec_state = ExecState::Uncertain;
             }
@@ -288,7 +301,8 @@ impl ExperimentAttemptRepository {
             count += 1;
         }
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(count)
     }
 }
@@ -310,7 +324,10 @@ mod tests {
         let attempt = ExecutionAttempt::new("exp_1", "recipe_1", ComputeBackendKind::Local, None);
         repo.save_attempt(&attempt).unwrap();
 
-        let fetched = repo.get_attempt(&attempt.id).unwrap().expect("Must find attempt");
+        let fetched = repo
+            .get_attempt(&attempt.id)
+            .unwrap()
+            .expect("Must find attempt");
         assert_eq!(fetched.id, attempt.id);
         assert_eq!(fetched.experiment_id, "exp_1");
         assert_eq!(fetched.exec_state, ExecState::Planned);
@@ -355,21 +372,37 @@ mod tests {
 
         // Generation 1 promotes successfully
         let res1 = repo.promote_checkpoint(exp, 1, "ckpt_1", 100).unwrap();
-        assert_eq!(res1, PromotionOutcome::Promoted { canonical_step: 100 });
+        assert_eq!(
+            res1,
+            PromotionOutcome::Promoted {
+                canonical_step: 100
+            }
+        );
 
         // Generation 2 promotes successfully
         let res2 = repo.promote_checkpoint(exp, 2, "ckpt_2", 200).unwrap();
-        assert_eq!(res2, PromotionOutcome::Promoted { canonical_step: 200 });
+        assert_eq!(
+            res2,
+            PromotionOutcome::Promoted {
+                canonical_step: 200
+            }
+        );
 
         // D4: Stale writer with Generation 1 tries to promote -> rejected with StaleGeneration
         let stale = repo.promote_checkpoint(exp, 1, "ckpt_stale", 150).unwrap();
-        assert_eq!(stale, PromotionOutcome::StaleGeneration { actual_generation: 2 });
+        assert_eq!(
+            stale,
+            PromotionOutcome::StaleGeneration {
+                actual_generation: 2
+            }
+        );
     }
 
     #[test]
     fn test_crash_reconciliation_to_uncertain() {
         let repo = in_memory_repo();
-        let mut attempt = ExecutionAttempt::new("exp_crash", "recipe_1", ComputeBackendKind::Local, None);
+        let mut attempt =
+            ExecutionAttempt::new("exp_crash", "recipe_1", ComputeBackendKind::Local, None);
         attempt.exec_state = ExecState::Running;
         attempt.resource_state = ResourceState::ReleaseRequested;
         repo.save_attempt(&attempt).unwrap();

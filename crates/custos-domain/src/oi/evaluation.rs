@@ -231,7 +231,13 @@ impl OptimizationEvaluator {
 mod tests {
     use super::*;
 
-    fn make_run(task: &str, harness: &str, quality: f64, cost: f64, human_sec: u64) -> TaskExecutionMetrics {
+    fn make_run(
+        task: &str,
+        harness: &str,
+        quality: f64,
+        cost: f64,
+        human_sec: u64,
+    ) -> TaskExecutionMetrics {
         TaskExecutionMetrics {
             task_id: task.into(),
             harness_id: harness.into(),
@@ -253,7 +259,10 @@ mod tests {
         let cfg = ComparisonMarginConfig::default();
 
         let report = OptimizationEvaluator::evaluate(&base, &cand, &cfg);
-        assert!(matches!(report.outcome, OptimizationClaimOutcome::Inconclusive { .. }));
+        assert!(matches!(
+            report.outcome,
+            OptimizationClaimOutcome::Inconclusive { .. }
+        ));
     }
 
     #[test]
@@ -271,7 +280,10 @@ mod tests {
         let cfg = ComparisonMarginConfig::default();
 
         let report = OptimizationEvaluator::evaluate(&base, &cand, &cfg);
-        assert!(matches!(report.outcome, OptimizationClaimOutcome::QualityInferior { .. }));
+        assert!(matches!(
+            report.outcome,
+            OptimizationClaimOutcome::QualityInferior { .. }
+        ));
         assert!(!report.outcome.is_admissible_optimization());
     }
 
@@ -292,7 +304,10 @@ mod tests {
         let cfg = ComparisonMarginConfig::default();
 
         let report = OptimizationEvaluator::evaluate(&base, &cand, &cfg);
-        assert!(matches!(report.outcome, OptimizationClaimOutcome::NotCheaper { .. }));
+        assert!(matches!(
+            report.outcome,
+            OptimizationClaimOutcome::NotCheaper { .. }
+        ));
         assert!(!report.outcome.is_admissible_optimization());
     }
 
@@ -311,7 +326,10 @@ mod tests {
         let cfg = ComparisonMarginConfig::default();
 
         let report = OptimizationEvaluator::evaluate(&base, &cand, &cfg);
-        assert!(matches!(report.outcome, OptimizationClaimOutcome::QualityPreservedAndCheaper { .. }));
+        assert!(matches!(
+            report.outcome,
+            OptimizationClaimOutcome::QualityPreservedAndCheaper { .. }
+        ));
         assert!(report.outcome.is_admissible_optimization());
     }
 }

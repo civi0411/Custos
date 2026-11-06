@@ -5,7 +5,11 @@ use serde_json::Value;
 
 /// Unified normalization of raw process output or stream lines into structured `ActionIntent`s.
 /// Handles Claude stream-json, Codex item/tool events, Goose tools, OpenCode parts, and line-by-line CLI text heuristics.
-pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str) -> Vec<ActionIntent> {
+pub fn extract_observed_intents(
+    raw_output: &str,
+    _harness: &str,
+    task_id: &str,
+) -> Vec<ActionIntent> {
     let mut intents = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -20,9 +24,14 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
             if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
                 // A. Direct Claude tool_use event: {"type": "tool_use", "name": "...", "input": {...}}
                 // or content_block_start: {"event": {"type": "content_block_start", "content_block": {"type": "tool_use", ...}}}
-                let direct_tool_use = if value.get("type").and_then(Value::as_str) == Some("tool_use") && value.get("part").is_none() {
+                let direct_tool_use = if value.get("type").and_then(Value::as_str)
+                    == Some("tool_use")
+                    && value.get("part").is_none()
+                {
                     Some(&value)
-                } else if value.pointer("/event/type").and_then(Value::as_str) == Some("content_block_start") {
+                } else if value.pointer("/event/type").and_then(Value::as_str)
+                    == Some("content_block_start")
+                {
                     let cb = &value["event"]["content_block"];
                     if cb.get("type").and_then(Value::as_str) == Some("tool_use") {
                         Some(cb)
@@ -39,10 +48,7 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
                         .or_else(|| block.get("tool"))
                         .and_then(Value::as_str)
                         .unwrap_or("unknown");
-                    let input = block
-                        .get("input")
-                        .cloned()
-                        .unwrap_or(Value::Null);
+                    let input = block.get("input").cloned().unwrap_or(Value::Null);
 
                     let (action_name, target, risk) = match tool_name {
                         "bash" | "execute_command" => {
@@ -134,14 +140,14 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
                         .get("name")
                         .and_then(Value::as_str)
                         .unwrap_or("codex_exec");
-                    let args = tool_call
-                        .get("arguments")
-                        .cloned()
-                        .unwrap_or(Value::Null);
+                    let args = tool_call.get("arguments").cloned().unwrap_or(Value::Null);
 
                     let (action_name, target, risk) = match name {
                         "apply_patch" | "write_file" => {
-                            let path = args.get("path").and_then(Value::as_str).unwrap_or("unknown");
+                            let path = args
+                                .get("path")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown");
                             ("write_file", path.to_string(), RiskLevel::High)
                         }
                         "exec_shell" | "bash" => {
@@ -166,17 +172,28 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
                 }
 
                 // D. Goose tool: {"tool": "...", "parameters": {...}}
-                let goose_tool = value.get("tool").or_else(|| value.get("name")).and_then(Value::as_str);
+                let goose_tool = value
+                    .get("tool")
+                    .or_else(|| value.get("name"))
+                    .and_then(Value::as_str);
                 if let Some(tool_name) = goose_tool {
                     if !tool_name.is_empty() {
-                        let params = value.get("parameters").or_else(|| value.get("arguments")).cloned().unwrap_or(Value::Null);
+                        let params = value
+                            .get("parameters")
+                            .or_else(|| value.get("arguments"))
+                            .cloned()
+                            .unwrap_or(Value::Null);
                         let (action_name, target, risk) = match tool_name {
                             "developer__text_editor" | "text_editor" => {
-                                let path = params.get("path").and_then(Value::as_str).unwrap_or("unknown");
+                                let path = params
+                                    .get("path")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("unknown");
                                 ("write_file", path.to_string(), RiskLevel::High)
                             }
                             "developer__shell" | "shell" => {
-                                let cmd = params.get("command").and_then(Value::as_str).unwrap_or("");
+                                let cmd =
+                                    params.get("command").and_then(Value::as_str).unwrap_or("");
                                 ("shell_exec", cmd.to_string(), RiskLevel::High)
                             }
                             _ => (tool_name, "workspace".to_string(), RiskLevel::Medium),
@@ -198,14 +215,28 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
                 }
 
                 // E. OpenCode part tool_use
-                if value.get("type").and_then(Value::as_str) == Some("tool_use") && value.get("part").is_some() {
+                if value.get("type").and_then(Value::as_str) == Some("tool_use")
+                    && value.get("part").is_some()
+                {
                     let block = &value["part"];
-                    let identity = block.get("id").or_else(|| block.get("callID")).and_then(Value::as_str).unwrap_or("");
+                    let identity = block
+                        .get("id")
+                        .or_else(|| block.get("callID"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
                     if identity.is_empty() || seen.insert(identity.to_string()) {
-                        let target = block.pointer("/input/file_path").or_else(|| block.pointer("/input/command")).and_then(Value::as_str).unwrap_or("native_workspace");
+                        let target = block
+                            .pointer("/input/file_path")
+                            .or_else(|| block.pointer("/input/command"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("native_workspace");
                         let intent = ActionIntent::new(
                             new_id("intent"),
-                            block.get("tool").and_then(Value::as_str).unwrap_or("tool_use").to_string(),
+                            block
+                                .get("tool")
+                                .and_then(Value::as_str)
+                                .unwrap_or("tool_use")
+                                .to_string(),
                             target.to_string(),
                             block.clone(),
                             RiskLevel::High,
@@ -241,7 +272,8 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
             .with_assurance(Assurance::ProviderGoverned);
 
             intents.push(intent);
-        } else if trimmed.starts_with("[tool_call:write_file]") || trimmed.contains("Writing file:") {
+        } else if trimmed.starts_with("[tool_call:write_file]") || trimmed.contains("Writing file:")
+        {
             let file_path = trimmed
                 .trim_start_matches("[tool_call:write_file]")
                 .split("Writing file:")
@@ -291,7 +323,8 @@ pub fn extract_observed_intents(raw_output: &str, _harness: &str, task_id: &str)
             .with_assurance(Assurance::ProviderGoverned);
 
             intents.push(intent);
-        } else if trimmed.starts_with("[tool_call:view_file]") || trimmed.contains("Reading file:") {
+        } else if trimmed.starts_with("[tool_call:view_file]") || trimmed.contains("Reading file:")
+        {
             let file_path = trimmed
                 .trim_start_matches("[tool_call:view_file]")
                 .split("Reading file:")

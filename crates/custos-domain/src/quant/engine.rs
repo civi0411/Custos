@@ -3,10 +3,10 @@
 //! Models discrete-time, zero-I/O bar processing, realistic slippage, transaction costs,
 //! position accounting, and drawdown tracking for algorithmic strategies in Rust.
 
-use serde::{Deserialize, Serialize};
-use crate::error::DomainError;
 use super::backtest::BacktestTearsheet;
 use super::risk::ProtectionSpec;
+use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct OhlcvBar {
@@ -90,8 +90,10 @@ impl StrategyRule for DualMovingAverageRule {
         let fast_slice = &history[bar_idx + 1 - self.fast_period..=bar_idx];
         let slow_slice = &history[bar_idx + 1 - self.slow_period..=bar_idx];
 
-        let fast_sma: f64 = fast_slice.iter().map(|b| b.close).sum::<f64>() / self.fast_period as f64;
-        let slow_sma: f64 = slow_slice.iter().map(|b| b.close).sum::<f64>() / self.slow_period as f64;
+        let fast_sma: f64 =
+            fast_slice.iter().map(|b| b.close).sum::<f64>() / self.fast_period as f64;
+        let slow_sma: f64 =
+            slow_slice.iter().map(|b| b.close).sum::<f64>() / self.slow_period as f64;
 
         if fast_sma > slow_sma {
             SignalAction::TargetPercent(self.target_pct)
@@ -135,11 +137,13 @@ impl NativeBacktestEngine {
             // 1. Position Protection evaluation (Stop Loss / Take Profit / Trailing Stop)
             if let Some(ref prot) = config.protection {
                 if position_qty.abs() > 1e-6 && entry_price > 0.0 {
-                    let pnl_pct = (current_price - entry_price) / entry_price * position_qty.signum();
+                    let pnl_pct =
+                        (current_price - entry_price) / entry_price * position_qty.signum();
                     if (prot.stop_loss_pct > 0.0 && pnl_pct <= -prot.stop_loss_pct)
                         || (prot.take_profit_pct > 0.0 && pnl_pct >= prot.take_profit_pct)
                     {
-                        let slippage_factor = 1.0 - config.slippage_bps * 1e-4 * position_qty.signum();
+                        let slippage_factor =
+                            1.0 - config.slippage_bps * 1e-4 * position_qty.signum();
                         let exit_price = current_price * slippage_factor;
                         let proceeds = position_qty * exit_price;
                         let commission = proceeds.abs() * config.commission_rate;
@@ -164,7 +168,8 @@ impl NativeBacktestEngine {
             match action {
                 SignalAction::TargetPercent(target_pct) => {
                     let total_equity = cash + position_qty * current_price;
-                    let target_notional = total_equity * target_pct.clamp(-config.leverage, config.leverage);
+                    let target_notional =
+                        total_equity * target_pct.clamp(-config.leverage, config.leverage);
                     let target_qty = target_notional / current_price;
                     let delta_qty = target_qty - position_qty;
 
@@ -181,7 +186,8 @@ impl NativeBacktestEngine {
                         if position_qty.abs() < 1e-6 {
                             entry_price = exec_price;
                         } else if position_qty.signum() == delta_qty.signum() {
-                            entry_price = (position_qty * entry_price + cost) / (position_qty + delta_qty);
+                            entry_price =
+                                (position_qty * entry_price + cost) / (position_qty + delta_qty);
                         } else {
                             trades_count += 1;
                         }
@@ -190,7 +196,8 @@ impl NativeBacktestEngine {
                 }
                 SignalAction::ClosePosition => {
                     if position_qty.abs() > 1e-6 {
-                        let exec_price = current_price * (1.0 - config.slippage_bps * 1e-4 * position_qty.signum());
+                        let exec_price = current_price
+                            * (1.0 - config.slippage_bps * 1e-4 * position_qty.signum());
                         let proceeds = position_qty * exec_price;
                         let comm = proceeds.abs() * config.commission_rate;
                         cash += proceeds - comm;
@@ -229,7 +236,11 @@ impl NativeBacktestEngine {
             0.0
         };
         let var_ret = if daily_returns.len() > 1 {
-            daily_returns.iter().map(|r| (r - mean_ret).powi(2)).sum::<f64>() / (daily_returns.len() - 1) as f64
+            daily_returns
+                .iter()
+                .map(|r| (r - mean_ret).powi(2))
+                .sum::<f64>()
+                / (daily_returns.len() - 1) as f64
         } else {
             0.0
         };
@@ -253,26 +264,34 @@ impl NativeBacktestEngine {
         };
 
         // 5. Deflated Sharpe Ratio (Multiple testing correction)
-        let dsr = super::backtest::calculate_dsr(annualized_sharpe, 1, daily_returns.len(), 0.0, 3.0, 1.0);
+        let dsr = super::backtest::calculate_dsr(
+            annualized_sharpe,
+            1,
+            daily_returns.len(),
+            0.0,
+            3.0,
+            1.0,
+        );
 
         // 6. Institutional Risk/Return Metrics (Sortino, Downside Deviation, Omega, CVaR)
         let inst = super::metrics::compute_institutional_suite(&daily_returns, None, 252.0);
 
-        let sheet = BacktestTearsheet::new(strategy_id, annualized_sharpe, max_drawdown, total_return)?
-            .with_deflated_sharpe(dsr)
-            .with_extended_metrics(
-                std_ret * (252.0_f64).sqrt(),
-                win_rate,
-                profit_factor,
-                trades_count as f64,
-                Vec::new(),
-            )
-            .with_institutional_metrics(
-                inst.sortino_ratio,
-                inst.downside_deviation,
-                inst.omega_ratio,
-                inst.cvar_95,
-            );
+        let sheet =
+            BacktestTearsheet::new(strategy_id, annualized_sharpe, max_drawdown, total_return)?
+                .with_deflated_sharpe(dsr)
+                .with_extended_metrics(
+                    std_ret * (252.0_f64).sqrt(),
+                    win_rate,
+                    profit_factor,
+                    trades_count as f64,
+                    Vec::new(),
+                )
+                .with_institutional_metrics(
+                    inst.sortino_ratio,
+                    inst.downside_deviation,
+                    inst.omega_ratio,
+                    inst.cvar_95,
+                );
 
         Ok(sheet)
     }

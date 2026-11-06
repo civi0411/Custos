@@ -7,13 +7,11 @@
 //! 4. Duplicate execution request ID returns cached result without re-executing.
 //! 5. Replacing cells in notebook A does not delete cells in notebook B in the same session.
 
-use std::sync::Arc;
 use custos_adapters::notebook::LocalPythonDriver;
-use custos_domain::{
-    CellExecutionStatus, ExecuteCellParams, NotebookCell, NotebookCellType,
-};
+use custos_domain::{CellExecutionStatus, ExecuteCellParams, NotebookCell, NotebookCellType};
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::PythonKernelCoordinator;
+use std::sync::Arc;
 
 fn test_coordinator() -> PythonKernelCoordinator {
     PythonKernelCoordinator::new(Arc::new(LocalPythonDriver))
@@ -185,7 +183,10 @@ async fn test_g06_duplicate_execution_request_id_returns_cached_result() {
         .expect("duplicate execution request");
     // Execution count must remain 1 (not re-executed)
     assert_eq!(res2.execution_count, 1);
-    assert_eq!(res2.execution_request_id.as_deref(), Some("req-g06-unique-42"));
+    assert_eq!(
+        res2.execution_request_id.as_deref(),
+        Some("req-g06-unique-42")
+    );
     assert!(res2.stdout.contains("evaluating once"));
 }
 
@@ -216,12 +217,8 @@ async fn test_g06_multi_notebook_persistence_isolation_in_same_session() {
         cell_version: Some(1),
         ..Default::default()
     };
-    repo.replace_notebook_cells_scoped(
-        session_id,
-        Some("nb-alpha"),
-        &[nb_a_cell1, nb_a_cell2],
-    )
-    .expect("save nb-alpha cells");
+    repo.replace_notebook_cells_scoped(session_id, Some("nb-alpha"), &[nb_a_cell1, nb_a_cell2])
+        .expect("save nb-alpha cells");
 
     // 2. Write cells for notebook B in the same session
     let nb_b_cell1 = NotebookCell {
@@ -234,12 +231,8 @@ async fn test_g06_multi_notebook_persistence_isolation_in_same_session() {
         cell_version: Some(1),
         ..Default::default()
     };
-    repo.replace_notebook_cells_scoped(
-        session_id,
-        Some("nb-beta"),
-        &[nb_b_cell1],
-    )
-    .expect("save nb-beta cells");
+    repo.replace_notebook_cells_scoped(session_id, Some("nb-beta"), &[nb_b_cell1])
+        .expect("save nb-beta cells");
 
     // Verify initial counts
     let cells_a = repo
@@ -263,18 +256,18 @@ async fn test_g06_multi_notebook_persistence_isolation_in_same_session() {
         cell_version: Some(2),
         ..Default::default()
     };
-    repo.replace_notebook_cells_scoped(
-        session_id,
-        Some("nb-alpha"),
-        &[nb_a_new],
-    )
-    .expect("replace alpha");
+    repo.replace_notebook_cells_scoped(session_id, Some("nb-alpha"), &[nb_a_new])
+        .expect("replace alpha");
 
     // 4. Assert: Notebook B cells were NOT wiped!
     let cells_b_after = repo
         .list_notebook_cells_scoped(session_id, Some("nb-beta"))
         .expect("list beta after alpha replacement");
-    assert_eq!(cells_b_after.len(), 1, "Notebook B cells must be preserved!");
+    assert_eq!(
+        cells_b_after.len(),
+        1,
+        "Notebook B cells must be preserved!"
+    );
     assert_eq!(cells_b_after[0].id, "cell-b1");
 
     // Notebook A now has only the replacement cell

@@ -413,7 +413,10 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                 };
 
                 // 1. Authority / Gateway check
-                match executor.authorize(&invocation_ctx, &call.name, &call.arguments).await {
+                match executor
+                    .authorize(&invocation_ctx, &call.name, &call.arguments)
+                    .await
+                {
                     Ok(()) => {
                         if self.cancelled_runs.read().await.contains(&effective_run_id) {
                             intent.lifecycle_state = ActionLifecycleState::Failed;
@@ -423,25 +426,35 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                         }
 
                         // 2. Execute tool
-                        match executor.execute(&invocation_ctx, &call.name, &call.arguments).await {
+                        match executor
+                            .execute(&invocation_ctx, &call.name, &call.arguments)
+                            .await
+                        {
                             Ok(ToolResult::Success(val)) => {
                                 intent.lifecycle_state = ActionLifecycleState::Receipt;
                                 let mut writer = LimitedWriter::new(
                                     Vec::with_capacity(self.max_tool_output_bytes.min(8192)),
                                     self.max_tool_output_bytes,
                                 );
-                                let output_str = if serde_json::to_writer(&mut writer, &val).is_ok() {
+                                let output_str = if serde_json::to_writer(&mut writer, &val).is_ok()
+                                {
                                     let (raw_buf, capped) = writer.into_inner();
                                     let mut s = String::from_utf8_lossy(&raw_buf).into_owned();
                                     if capped {
-                                        truncate_to_char_boundary(&mut s, self.max_tool_output_bytes);
+                                        truncate_to_char_boundary(
+                                            &mut s,
+                                            self.max_tool_output_bytes,
+                                        );
                                         s.push_str("\n... [TRUNCATED: output exceeded max tool output limit]");
                                     }
                                     s
                                 } else {
                                     let mut s = val.to_string();
                                     if s.len() > self.max_tool_output_bytes {
-                                        truncate_to_char_boundary(&mut s, self.max_tool_output_bytes);
+                                        truncate_to_char_boundary(
+                                            &mut s,
+                                            self.max_tool_output_bytes,
+                                        );
                                         s.push_str("\n... [TRUNCATED: output exceeded max tool output limit]");
                                     }
                                     s
@@ -467,10 +480,8 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                             }
                             Err(err) => {
                                 intent.lifecycle_state = ActionLifecycleState::Failed;
-                                conversation_history.push_str(&format!(
-                                    "Tool Error [{}]: {}\n",
-                                    call.call_id, err
-                                ));
+                                conversation_history
+                                    .push_str(&format!("Tool Error [{}]: {}\n", call.call_id, err));
                             }
                         }
                     }
@@ -514,8 +525,6 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         Ok(accumulated_intents)
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -612,7 +621,11 @@ mod tests {
         async fn generate(&self, _req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
             let mut list = self.responses.lock().unwrap();
             if list.is_empty() {
-                Ok(ModelResponse::text("Default completion", "scripted-model", 10))
+                Ok(ModelResponse::text(
+                    "Default completion",
+                    "scripted-model",
+                    10,
+                ))
             } else {
                 Ok(list.remove(0))
             }
@@ -632,7 +645,9 @@ mod tests {
             _params: &serde_json::Value,
         ) -> Result<(), DomainError> {
             if name == "delete_file" && !self.allow_delete {
-                return Err(DomainError::Validation("Permission denied: delete_file is disallowed".into()));
+                return Err(DomainError::Validation(
+                    "Permission denied: delete_file is disallowed".into(),
+                ));
             }
             Ok(())
         }
@@ -644,8 +659,12 @@ mod tests {
             params: &serde_json::Value,
         ) -> Result<ToolResult, DomainError> {
             match name {
-                "read_file" => Ok(ToolResult::Success(serde_json::json!({ "content": "fn main() {}" }))),
-                "write_file" => Ok(ToolResult::Success(serde_json::json!({ "written": true, "path": params["path"] }))),
+                "read_file" => Ok(ToolResult::Success(
+                    serde_json::json!({ "content": "fn main() {}" }),
+                )),
+                "write_file" => Ok(ToolResult::Success(
+                    serde_json::json!({ "written": true, "path": params["path"] }),
+                )),
                 "large_output_tool" => {
                     let large = "x".repeat(10_000);
                     Ok(ToolResult::Success(serde_json::json!({ "data": large })))
@@ -684,7 +703,9 @@ mod tests {
             responses: std::sync::Mutex::new(vec![resp1, resp2, resp3]),
         });
 
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
         let runtime = GovernedAgentRuntime::new(
             provider,
             "You are a test agent",
@@ -697,9 +718,13 @@ mod tests {
         .with_max_iterations(5);
 
         let worker_run = WorkerRun::new("task_multi".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
-        let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap();
         assert_eq!(intents.len(), 2);
         assert_eq!(intents[0].name, "read_file");
         assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Receipt);
@@ -723,7 +748,9 @@ mod tests {
             responses: std::sync::Mutex::new(vec![resp1, resp2]),
         });
 
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
         let runtime = GovernedAgentRuntime::new(
             provider,
             "You are a test agent",
@@ -733,9 +760,13 @@ mod tests {
         .with_max_iterations(3);
 
         let worker_run = WorkerRun::new("task_reject".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
-        let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap();
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].name, "delete_file");
         // Rejection must mark the intent Failed, not hang or panic
@@ -757,7 +788,9 @@ mod tests {
             responses: std::sync::Mutex::new(vec![resp1, resp2]),
         });
 
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
         let runtime = GovernedAgentRuntime::new(
             provider,
             "You are a test agent",
@@ -768,9 +801,13 @@ mod tests {
         .with_max_iterations(2);
 
         let worker_run = WorkerRun::new("task_trunc".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
-        let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap();
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Receipt);
     }
@@ -790,7 +827,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_output_cap_truncation_multibyte_utf8_no_panic() {
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
 
         for cap in [15, 17, 21, 23, 27, 33, 45, 51] {
             let mut resp1 = ModelResponse::text("Reading multibyte...", "test-model", 20);
@@ -814,9 +853,13 @@ mod tests {
             .with_max_iterations(2);
 
             let worker_run = WorkerRun::new("task_mb".to_string(), "coder".to_string(), 1);
-            let context_pack = ContextPack::new("pack_mb".to_string(), vec![], 0, "sha256:0".to_string());
+            let context_pack =
+                ContextPack::new("pack_mb".to_string(), vec![], 0, "sha256:0".to_string());
 
-            let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+            let intents = runtime
+                .execute_turn(&worker_run, &context_pack)
+                .await
+                .unwrap();
             assert_eq!(intents.len(), 1);
             assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Receipt);
         }
@@ -835,7 +878,9 @@ mod tests {
             responses: std::sync::Mutex::new(vec![resp1]),
         });
 
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
         let runtime = GovernedAgentRuntime::new(
             provider,
             "You are a test agent",
@@ -844,13 +889,17 @@ mod tests {
         .with_tool_executor(executor);
 
         let worker_run = WorkerRun::new("task_cancel".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
         // Cancel the run in advance
         runtime.cancel_run(&worker_run.id).await.unwrap();
 
         // Must fail with Validation error indicating cancellation
-        let err = runtime.execute_turn(&worker_run, &context_pack).await.unwrap_err();
+        let err = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("canceled"));
     }
 
@@ -860,12 +909,25 @@ mod tests {
 
     #[async_trait]
     impl GovernedToolExecutor for SelfCancellingToolExecutor {
-        async fn authorize(&self, _ctx: &InvocationContext, _name: &str, _params: &serde_json::Value) -> Result<(), DomainError> {
+        async fn authorize(
+            &self,
+            _ctx: &InvocationContext,
+            _name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<(), DomainError> {
             Ok(())
         }
 
-        async fn execute(&self, ctx: &InvocationContext, _name: &str, _params: &serde_json::Value) -> Result<ToolResult, DomainError> {
-            self.cancelled_handle.write().await.insert(ctx.run_id.clone());
+        async fn execute(
+            &self,
+            ctx: &InvocationContext,
+            _name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<ToolResult, DomainError> {
+            self.cancelled_handle
+                .write()
+                .await
+                .insert(ctx.run_id.clone());
             Ok(ToolResult::Success(serde_json::json!({"step": 1})))
         }
     }
@@ -907,24 +969,31 @@ mod tests {
         runtime.cancelled_runs = cancelled_runs;
 
         let worker_run = WorkerRun::new("task_cancel_mid".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
-        let err = runtime.execute_turn(&worker_run, &context_pack).await.unwrap_err();
+        let err = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap_err();
         assert!(matches!(err, DomainError::Validation(_)));
-        assert!(err.to_string().contains("canceled during agent loop execution"));
+        assert!(err
+            .to_string()
+            .contains("canceled during agent loop execution"));
     }
 
     #[tokio::test]
     async fn test_profile_honest_tool_capabilities() {
-        let provider = Arc::new(MockTestProvider { tool_to_return: None });
+        let provider = Arc::new(MockTestProvider {
+            tool_to_return: None,
+        });
 
         // When tools are empty: Must declare ObserveOnly
-        let empty_runtime = GovernedAgentRuntime::new(
-            provider.clone(),
-            "Prompt",
-            vec![],
+        let empty_runtime = GovernedAgentRuntime::new(provider.clone(), "Prompt", vec![]);
+        assert_eq!(
+            empty_runtime.profile().tool_mediation,
+            ToolMediationLevel::ObserveOnly
         );
-        assert_eq!(empty_runtime.profile().tool_mediation, ToolMediationLevel::ObserveOnly);
         assert!(!empty_runtime.is_tool_enabled());
 
         // When tools are registered: May declare CustosMediated
@@ -933,7 +1002,10 @@ mod tests {
             "Prompt",
             vec![serde_json::json!({ "name": "sample_tool" })],
         );
-        assert_eq!(enabled_runtime.profile().tool_mediation, ToolMediationLevel::CustosMediated);
+        assert_eq!(
+            enabled_runtime.profile().tool_mediation,
+            ToolMediationLevel::CustosMediated
+        );
         assert!(enabled_runtime.is_tool_enabled());
     }
 
@@ -963,7 +1035,9 @@ mod tests {
             responses: std::sync::Mutex::new(vec![resp1, resp2, resp3]),
         });
 
-        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let executor = Arc::new(TestToolExecutor {
+            allow_delete: false,
+        });
         let runtime = GovernedAgentRuntime::new(
             provider,
             "System prompt",
@@ -973,9 +1047,13 @@ mod tests {
         .with_max_iterations(2); // Only 2 iterations allowed
 
         let worker_run = WorkerRun::new("task_exhaust".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_ex".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_ex".to_string(), vec![], 0, "sha256:0".to_string());
 
-        let err = runtime.execute_turn(&worker_run, &context_pack).await.unwrap_err();
+        let err = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap_err();
         assert!(matches!(err, DomainError::BudgetExceeded(_)));
         assert!(err.to_string().contains("iteration limit"));
     }
@@ -989,17 +1067,28 @@ mod tests {
 
         let runtime = GovernedAgentRuntime::new(provider, "System prompt", vec![]);
         let worker_run = WorkerRun::new("task_steer_clean".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_st".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_st".to_string(), vec![], 0, "sha256:0".to_string());
 
         // Add steering guidance
-        runtime.steer_run(&worker_run.id, "Follow pattern X").await.unwrap();
+        runtime
+            .steer_run(&worker_run.id, "Follow pattern X")
+            .await
+            .unwrap();
         assert!(!runtime.steer_messages.read().await.is_empty());
 
         // Execute turn
-        let _ = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+        let _ = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap();
 
         // Steering handles for this run must be cleaned up
-        assert!(!runtime.steer_messages.read().await.contains_key(&worker_run.id));
+        assert!(!runtime
+            .steer_messages
+            .read()
+            .await
+            .contains_key(&worker_run.id));
     }
 
     struct ApprovalPendingToolExecutor;
@@ -1036,7 +1125,11 @@ mod tests {
             arguments: serde_json::json!({ "path": "sensitive.txt", "content": "secret" }),
         });
 
-        let resp2 = ModelResponse::text("Action is awaiting approval from operator.", "test-model", 10);
+        let resp2 = ModelResponse::text(
+            "Action is awaiting approval from operator.",
+            "test-model",
+            10,
+        );
 
         let provider = Arc::new(ScriptedMultiTurnProvider {
             responses: std::sync::Mutex::new(vec![resp1, resp2]),
@@ -1052,7 +1145,8 @@ mod tests {
         .with_max_iterations(5);
 
         let worker_run = WorkerRun::new("task_approval".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
         let intents = runtime
             .execute_turn(&worker_run, &context_pack)
@@ -1074,7 +1168,9 @@ mod tests {
             _params: &serde_json::Value,
         ) -> Result<(), DomainError> {
             if name == "write_file" {
-                return Err(DomainError::Unauthorized("Write not authorized by policy".into()));
+                return Err(DomainError::Unauthorized(
+                    "Write not authorized by policy".into(),
+                ));
             }
             Ok(())
         }
@@ -1098,7 +1194,11 @@ mod tests {
             arguments: serde_json::json!({ "path": "unauthorized.txt", "content": "malicious" }),
         });
 
-        let resp2 = ModelResponse::text("I understand the write request was denied.", "test-model", 10);
+        let resp2 = ModelResponse::text(
+            "I understand the write request was denied.",
+            "test-model",
+            10,
+        );
 
         let provider = Arc::new(ScriptedMultiTurnProvider {
             responses: std::sync::Mutex::new(vec![resp1, resp2]),
@@ -1114,7 +1214,8 @@ mod tests {
         .with_max_iterations(5);
 
         let worker_run = WorkerRun::new("task_unauth".to_string(), "coder".to_string(), 1);
-        let context_pack = ContextPack::new("pack_unauth".to_string(), vec![], 0, "sha256:0".to_string());
+        let context_pack =
+            ContextPack::new("pack_unauth".to_string(), vec![], 0, "sha256:0".to_string());
 
         let intents = runtime
             .execute_turn(&worker_run, &context_pack)
@@ -1155,4 +1256,3 @@ mod tests {
         assert!(buf.is_empty());
     }
 }
-

@@ -3,10 +3,10 @@
 //! Provides zero-drift time synchronization, exact bar boundary calculation
 //! with deterministic grace periods (e.g., +500ms), and 0% CPU adaptive deep sleep.
 
+use chrono::Utc;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::Utc;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
@@ -126,7 +126,7 @@ mod tests {
         let grace_ms = 500;
 
         let next = PrecisionEventClock::compute_next_boundary(now_ms, interval_secs, grace_ms);
-        
+
         // Next 1-minute boundary must be exact minute mark (1_700_000_060_000) + 500ms
         let interval_ms = 60 * 1000;
         let expected_base = ((now_ms / interval_ms) + 1) * interval_ms;

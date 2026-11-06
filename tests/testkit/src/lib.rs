@@ -219,7 +219,13 @@ impl OutboxPort for InMemoryOutbox {
     }
 
     async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
-        Ok(self.entries.lock().unwrap().iter().find(|e| e.id == id).cloned())
+        Ok(self
+            .entries
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.id == id)
+            .cloned())
     }
 
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError> {

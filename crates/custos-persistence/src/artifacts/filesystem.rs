@@ -39,7 +39,9 @@ impl ArtifactStore for FsArtifactStore {
 
         let id = new_id("art");
         let path = self.base_dir.join(&hash);
-        let temp_path = self.base_dir.join(format!("{}.tmp.{}", hash, new_id("tmp")));
+        let temp_path = self
+            .base_dir
+            .join(format!("{}.tmp.{}", hash, new_id("tmp")));
         let size_bytes = data.len() as u64;
 
         tokio::fs::create_dir_all(&self.base_dir)
@@ -155,7 +157,11 @@ mod tests {
 
         for key in traversal_keys {
             let res = store.get(key).await;
-            assert!(res.is_err(), "Key '{}' should be rejected as invalid/traversal", key);
+            assert!(
+                res.is_err(),
+                "Key '{}' should be rejected as invalid/traversal",
+                key
+            );
         }
     }
 
@@ -169,7 +175,9 @@ mod tests {
 
         // Corrupt file on disk
         let file_path = dir.path().join(&art_ref.hash);
-        tokio::fs::write(&file_path, b"corrupted tampered content").await.unwrap();
+        tokio::fs::write(&file_path, b"corrupted tampered content")
+            .await
+            .unwrap();
 
         // Reading must fail with digest mismatch, never serving wrong bytes
         let read_res = store.get(&art_ref.hash).await;

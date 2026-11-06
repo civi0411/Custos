@@ -159,8 +159,17 @@ mod tests {
         let report = ExplainService::explain(&snapshot).expect("explain report");
         assert_eq!(report.chosen_harness_id, "custos-local");
         assert_eq!(report.estimated_cost_usd, 0.0);
-        let cloud_candidate = report.candidates.iter().find(|c| c.harness_id == "claude-code").unwrap();
+        let cloud_candidate = report
+            .candidates
+            .iter()
+            .find(|c| c.harness_id == "claude-code")
+            .unwrap();
         assert!(!cloud_candidate.admissible);
-        assert!(cloud_candidate.rejection_reasons.as_ref().unwrap().iter().any(|r| r.contains("Local-only")));
+        assert!(cloud_candidate
+            .rejection_reasons
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|r| r.contains("Local-only")));
     }
 }

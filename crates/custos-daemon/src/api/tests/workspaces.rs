@@ -1,621 +1,822 @@
 use super::super::*;
-use std::sync::Arc;
-use custos_core::TaskService;
-use custos_runtime::session::SessionManager;
 use custos_bridge::BridgeService;
 use custos_core::contracts::WorkspaceRepository;
-    #[tokio::test]
-    async fn test_workspace_api_dispatch_lifecycle() {
-        use custos_adapters::workspace::LocalWorkspaceProvider;
-        use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
-        use custos_persistence::SqliteTaskStore;
-        use custos_runtime::workspace::WorkspaceCoordinator;
+use custos_core::TaskService;
+use custos_runtime::session::SessionManager;
+use std::sync::Arc;
+#[tokio::test]
+async fn test_workspace_api_dispatch_lifecycle() {
+    use custos_adapters::workspace::LocalWorkspaceProvider;
+    use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
+    use custos_persistence::SqliteTaskStore;
+    use custos_runtime::workspace::WorkspaceCoordinator;
 
-        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-        let task_service = Arc::new(TaskService::new(store.clone()));
-        let session_manager = Arc::new(SessionManager::new());
-        let bridge_service = Arc::new(BridgeService::new(
-            session_manager.clone(),
-            task_service.clone(),
-        ));
-        let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
-        let coordinator = Arc::new(WorkspaceCoordinator::new(store.clone(), workspace_provider));
+    let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+    let task_service = Arc::new(TaskService::new(store.clone()));
+    let session_manager = Arc::new(SessionManager::new());
+    let bridge_service = Arc::new(BridgeService::new(
+        session_manager.clone(),
+        task_service.clone(),
+    ));
+    let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
+    let coordinator = Arc::new(WorkspaceCoordinator::new(store.clone(), workspace_provider));
 
-        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
-            .with_workspace(coordinator);
+    let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+        .with_workspace(coordinator);
 
-        let tmp = tempfile::tempdir().unwrap();
-        let ws_path = tmp.path().join("api_test_ws");
-        let path_str = ws_path.to_str().unwrap().to_string();
+    let tmp = tempfile::tempdir().unwrap();
+    let ws_path = tmp.path().join("api_test_ws");
+    let path_str = ws_path.to_str().unwrap().to_string();
 
-        // 1. Create Workspace
-        let create_req = ApiRequest {
-            id: "req_ws_1".into(),
-            method: METHOD_WORKSPACES_CREATE.into(),
-            params: serde_json::json!({
-                "name": "api-workspace",
-                "kind": {
-                    "type": "folder",
-                    "path": path_str
-                },
-                "path": path_str,
-                "metadata": {
-                    "domain": "assistant"
-                }
-            }),
-        };
-        let create_resp = dispatcher.handle_request(create_req).await;
-        assert!(
-            create_resp.error.is_none(),
-            "Error: {:?}",
-            create_resp.error
-        );
-        let created_ws: ExecutionWorkspace =
-            serde_json::from_value(create_resp.result.unwrap()).unwrap();
-        assert_eq!(created_ws.name, "api-workspace");
-        assert_eq!(created_ws.status, WorkspaceStatus::Ready);
-        assert!(ws_path.exists());
-
-        // 2. Get Workspace
-        let get_req = ApiRequest {
-            id: "req_ws_2".into(),
-            method: METHOD_WORKSPACES_GET.into(),
-            params: serde_json::json!({
-                "workspace_id": created_ws.id.as_str()
-            }),
-        };
-        let get_resp = dispatcher.handle_request(get_req).await;
-        assert!(get_resp.error.is_none());
-        let loaded_ws: ExecutionWorkspace =
-            serde_json::from_value(get_resp.result.unwrap()).unwrap();
-        assert_eq!(loaded_ws.id, created_ws.id);
-
-        // 3. List Workspaces
-        let list_req = ApiRequest {
-            id: "req_ws_3".into(),
-            method: METHOD_WORKSPACES_LIST.into(),
-            params: serde_json::json!({}),
-        };
-        let list_resp = dispatcher.handle_request(list_req).await;
-        assert!(list_resp.error.is_none());
-        let workspaces: Vec<ExecutionWorkspace> =
-            serde_json::from_value(list_resp.result.unwrap()).unwrap();
-        assert_eq!(workspaces.len(), 1);
-
-        // 3b. Inspect dirty manifest
-        let inspect_req = ApiRequest {
-            id: "req_ws_inspect".into(),
-            method: METHOD_WORKSPACES_INSPECT_DIRTY.into(),
-            params: serde_json::json!({
-                "workspace_id": created_ws.id.as_str()
-            }),
-        };
-        let inspect_resp = dispatcher.handle_request(inspect_req).await;
-        assert!(inspect_resp.is_success());
-        let dirty: custos_domain::DirtyManifest =
-            serde_json::from_value(inspect_resp.result.unwrap()).unwrap();
-        assert!(!dirty.is_dirty);
-
-        // 3c. Recover workspace
-        let recover_req = ApiRequest {
-            id: "req_ws_recover".into(),
-            method: METHOD_WORKSPACES_RECOVER.into(),
-            params: serde_json::json!({
-                "workspace_id": created_ws.id.as_str()
-            }),
-        };
-        let recover_resp = dispatcher.handle_request(recover_req).await;
-        assert!(recover_resp.is_success());
-
-        // 4. Archive Workspace (with delete_physical: true)
-        let archive_req = ApiRequest {
-            id: "req_ws_4".into(),
-            method: METHOD_WORKSPACES_ARCHIVE.into(),
-            params: serde_json::json!({
-                "workspace_id": created_ws.id.as_str(),
-                "delete_physical": true,
-                "force": false
-            }),
-        };
-        let archive_resp = dispatcher.handle_request(archive_req).await;
-        assert!(archive_resp.error.is_none());
-        assert!(!ws_path.exists());
-    }
-
-
-    #[tokio::test]
-    async fn test_workspace_files_api_dispatch() {
-        use custos_persistence::SqliteTaskStore;
-
-        let temp_dir =
-            std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
-        let _ = tokio::fs::create_dir_all(&temp_dir).await;
-
-        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-        let task_service = Arc::new(TaskService::new(store.clone()));
-        let session_manager = Arc::new(SessionManager::new());
-        let bridge_service = Arc::new(BridgeService::new(
-            session_manager.clone(),
-            task_service.clone(),
-        ));
-
-        let ws_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(store, ws_provider));
-        let ws = ws_coord
-            .create_workspace(CreateWorkspaceRequest {
-                name: "files_test_ws".into(),
-                kind: custos_domain::WorkspaceKind::Folder {
-                    path: temp_dir.to_string_lossy().to_string(),
-                },
-                path: temp_dir.to_string_lossy().to_string(),
-                lineage: None,
-                owner_task_id: None,
-                metadata: None,
-                setup_script: None,
-            })
-            .await
-            .expect("create workspace");
-
-        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
-            .with_workspace(ws_coord);
-
-        // 1. Write file
-        let write_resp = dispatcher
-            .handle_request(ApiRequest {
-                id: "wf_1".into(),
-                method: METHOD_WORKSPACE_FILES_WRITE.into(),
-                params: serde_json::json!({
-                    "workspace_id": ws.id.to_string(),
-                    "path": "src/hello.rs",
-                    "content": "pub fn hello() -> &'static str { \"world\" }\n",
-                }),
-            })
-            .await;
-        assert!(write_resp.is_success());
-        let written: custos_domain::WorkspaceFileContent =
-            serde_json::from_value(write_resp.result.unwrap()).unwrap();
-        assert_eq!(written.path, "src/hello.rs");
-        assert_eq!(written.line_count, 1);
-
-        // 2. Read file
-        let read_resp = dispatcher
-            .handle_request(ApiRequest {
-                id: "wf_2".into(),
-                method: METHOD_WORKSPACE_FILES_READ.into(),
-                params: serde_json::json!({
-                    "workspace_id": ws.id.to_string(),
-                    "path": "src/hello.rs",
-                }),
-            })
-            .await;
-        assert!(read_resp.is_success());
-        let read: custos_domain::WorkspaceFileContent =
-            serde_json::from_value(read_resp.result.unwrap()).unwrap();
-        assert!(read.content.contains("pub fn hello"));
-
-        // 3. Tree
-        let tree_resp = dispatcher
-            .handle_request(ApiRequest {
-                id: "wf_3".into(),
-                method: METHOD_WORKSPACE_FILES_TREE.into(),
-                params: serde_json::json!({
-                    "workspace_id": ws.id.to_string(),
-                }),
-            })
-            .await;
-        assert!(tree_resp.is_success());
-        let tree: custos_domain::WorkspaceFileTree =
-            serde_json::from_value(tree_resp.result.unwrap()).unwrap();
-        assert!(tree.entries.iter().any(|e| e.path == "src/hello.rs"));
-
-        // 4. Diff (folder ws is not git repo, returns clean summary)
-        let diff_resp = dispatcher
-            .handle_request(ApiRequest {
-                id: "wf_4".into(),
-                method: METHOD_WORKSPACE_DIFF.into(),
-                params: serde_json::json!({
-                    "workspace_id": ws.id.to_string(),
-                }),
-            })
-            .await;
-        assert!(diff_resp.is_success());
-        let diff: custos_domain::WorkspaceDiffSummary =
-            serde_json::from_value(diff_resp.result.unwrap()).unwrap();
-        assert!(diff.is_clean);
-
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-
-
-    #[tokio::test]
-    async fn candidate_creation_and_integration_replay_use_recorded_workspace_state() {
-        use custos_core::contracts::WorkspaceRepository;
-        let temp = tempfile::tempdir().unwrap();
-        let repo = temp.path().join("repository"); std::fs::create_dir(&repo).unwrap();
-        let git = |path: &std::path::Path, args: &[&str]| {
-            let output = std::process::Command::new("git").current_dir(path)
-                .env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1")
-                .args(["-c", "user.name=Custos Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"])
-                .args(args).output().unwrap();
-            assert!(output.status.success(), "{:?}: {}", args, String::from_utf8_lossy(&output.stderr));
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        };
-        git(&repo, &["init", "-b", "main"]);
-        std::fs::write(repo.join("file.txt"), "base").unwrap(); git(&repo, &["add", "."]); git(&repo, &["commit", "-m", "base"]);
-        // Merge commands inherit only fixture-local identity, never the user's repo configuration.
-        git(&repo, &["config", "user.name", "Custos Test"]); git(&repo, &["config", "user.email", "test@example.invalid"]); git(&repo, &["config", "commit.gpgsign", "false"]);
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy()).unwrap());
-        let service = Arc::new(TaskService::new(store.clone()));
-        let task = service.execute_create(CreateTask { title: "Candidate integration test".into(), metadata: None, contract: None }).await.unwrap().0;
-        let sessions = Arc::new(SessionManager::new());
-        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
-        let mut base = custos_domain::ExecutionWorkspace::new(custos_domain::WorkspaceId::new("base"), "base", custos_domain::WorkspaceKind::Git { repo_path: repo.to_string_lossy().into(), branch: "main".into(), base_commit: None }, repo.to_string_lossy().to_string());
-        base.status = custos_domain::WorkspaceStatus::Ready; store.save_workspace(&base).await.unwrap();
-        let make_dispatcher = || LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone()).with_workspace(coordinator.clone());
-        let dispatcher = make_dispatcher();
-        let spawn_params = serde_json::json!({"task_id": task.id, "base_workspace_id": "base", "count": 1, "command_id": "create-candidates-once"});
-        let request = |method: &str, params: serde_json::Value| ApiRequest { id: "fixture-request".into(), method: method.into(), params };
-        let first = dispatcher.handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, spawn_params.clone())).await;
-        assert!(first.is_success(), "{:?}", first.error);
-        let first = first.result.unwrap();
-        let winner_id = first["candidates"][0]["id"].as_str().unwrap().to_string();
-        let candidate = std::path::PathBuf::from(first["candidates"][0]["path"].as_str().unwrap());
-        let second = make_dispatcher().handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, spawn_params.clone())).await;
-        assert!(second.is_success(), "{:?}", second.error);
-        assert_eq!(second.result.unwrap()["candidates"][0]["id"], winner_id);
-        assert_eq!(store.list_workspaces().await.unwrap().len(), 2);
-        let mut different = spawn_params; different["count"] = serde_json::json!(2);
-        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, different)).await.is_success());
-        std::fs::write(candidate.join("file.txt"), "candidate").unwrap(); git(&candidate, &["add", "."]); git(&candidate, &["commit", "-m", "candidate"]);
-        let before = git(&repo, &["rev-parse", "HEAD"]);
-        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, serde_json::json!({"winner_workspace_id": winner_id}))).await.is_success());
-        let preview = dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, serde_json::json!({"winner_workspace_id": winner_id, "preview": true}))).await;
-        assert!(preview.is_success(), "{:?}", preview.error);
-        let preview = preview.result.unwrap();
-        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), before, "preview must not merge");
-        let apply = serde_json::json!({"winner_workspace_id": winner_id, "expected_target_head": preview["current_target_head"], "expected_winner_head": preview["winner_head"]});
-        let mut stale = apply.clone(); stale["expected_winner_head"] = serde_json::json!("stale");
-        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, stale)).await.is_success());
-        let integrated = dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone())).await;
-        assert!(integrated.is_success(), "{:?}", integrated.error);
-        assert_eq!(integrated.result.unwrap()["merge_success"], true);
-        let merged_head = git(&repo, &["rev-parse", "HEAD"]);
-        assert_ne!(merged_head, before);
-        let repeated = make_dispatcher().handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone())).await;
-        assert!(repeated.is_success()); assert_eq!(repeated.result.unwrap()["merge_success"], true);
-        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), merged_head);
-        let mut interrupted = store.get_workspace(&custos_domain::WorkspaceId::new(&winner_id)).await.unwrap().unwrap();
-        interrupted.metadata["integration"].as_object_mut().unwrap().remove("result");
-        store.save_workspace(&interrupted).await.unwrap();
-        // Recovery follows the recorded target even when the user switches checkout.
-        git(&repo, &["checkout", "-b", "unrelated", &before]);
-        let reconciled = make_dispatcher().handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply)).await;
-        assert!(reconciled.is_success()); assert_eq!(reconciled.result.unwrap()["merge_status"], "merged_reconciled");
-        assert_eq!(git(&repo, &["rev-parse", "main"]), merged_head);
-        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), before, "recovery must not change the user's checkout");
-        assert!(candidate.exists(), "integration never removes candidate checkout");
-    }
-
-    #[tokio::test]
-    async fn two_worktree_concurrent_isolation_and_stale_base_rejection() {
-        use custos_core::contracts::WorkspaceRepository;
-        let temp = tempfile::tempdir().unwrap();
-        let repo = temp.path().join("main_repo");
-        std::fs::create_dir(&repo).unwrap();
-        let git = |path: &std::path::Path, args: &[&str]| {
-            let output = std::process::Command::new("git")
-                .current_dir(path)
-                .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                .env("GIT_CONFIG_NOSYSTEM", "1")
-                .args([
-                    "-c",
-                    "user.name=Custos Test",
-                    "-c",
-                    "user.email=test@example.invalid",
-                    "-c",
-                    "commit.gpgsign=false",
-                ])
-                .args(args)
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "{:?}: {}",
-                args,
-                String::from_utf8_lossy(&output.stderr)
-            );
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        };
-        git(&repo, &["init", "-b", "main"]);
-        std::fs::write(repo.join("README.md"), "# Initial Main\n").unwrap();
-        git(&repo, &["add", "."]);
-        git(&repo, &["commit", "-m", "initial commit"]);
-        git(&repo, &["config", "user.name", "Custos Test"]);
-        git(&repo, &["config", "user.email", "test@example.invalid"]);
-        git(&repo, &["config", "commit.gpgsign", "false"]);
-
-        let store = Arc::new(
-            custos_persistence::SqliteTaskStore::new(
-                &temp.path().join("two_wt.db").to_string_lossy(),
-            )
-            .unwrap(),
-        );
-        let service = Arc::new(TaskService::new(store.clone()));
-        let task = service
-            .execute_create(CreateTask {
-                title: "Two worktree isolation test".into(),
-                metadata: None,
-                contract: None,
-            })
-            .await
-            .unwrap()
-            .0;
-        let sessions = Arc::new(SessionManager::new());
-        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
-            store.clone(),
-            Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
-        ));
-        let mut base = custos_domain::ExecutionWorkspace::new(
-            custos_domain::WorkspaceId::new("base"),
-            "base",
-            custos_domain::WorkspaceKind::Git {
-                repo_path: repo.to_string_lossy().into(),
-                branch: "main".into(),
-                base_commit: None,
+    // 1. Create Workspace
+    let create_req = ApiRequest {
+        id: "req_ws_1".into(),
+        method: METHOD_WORKSPACES_CREATE.into(),
+        params: serde_json::json!({
+            "name": "api-workspace",
+            "kind": {
+                "type": "folder",
+                "path": path_str
             },
-            repo.to_string_lossy().to_string(),
+            "path": path_str,
+            "metadata": {
+                "domain": "assistant"
+            }
+        }),
+    };
+    let create_resp = dispatcher.handle_request(create_req).await;
+    assert!(
+        create_resp.error.is_none(),
+        "Error: {:?}",
+        create_resp.error
+    );
+    let created_ws: ExecutionWorkspace =
+        serde_json::from_value(create_resp.result.unwrap()).unwrap();
+    assert_eq!(created_ws.name, "api-workspace");
+    assert_eq!(created_ws.status, WorkspaceStatus::Ready);
+    assert!(ws_path.exists());
+
+    // 2. Get Workspace
+    let get_req = ApiRequest {
+        id: "req_ws_2".into(),
+        method: METHOD_WORKSPACES_GET.into(),
+        params: serde_json::json!({
+            "workspace_id": created_ws.id.as_str()
+        }),
+    };
+    let get_resp = dispatcher.handle_request(get_req).await;
+    assert!(get_resp.error.is_none());
+    let loaded_ws: ExecutionWorkspace = serde_json::from_value(get_resp.result.unwrap()).unwrap();
+    assert_eq!(loaded_ws.id, created_ws.id);
+
+    // 3. List Workspaces
+    let list_req = ApiRequest {
+        id: "req_ws_3".into(),
+        method: METHOD_WORKSPACES_LIST.into(),
+        params: serde_json::json!({}),
+    };
+    let list_resp = dispatcher.handle_request(list_req).await;
+    assert!(list_resp.error.is_none());
+    let workspaces: Vec<ExecutionWorkspace> =
+        serde_json::from_value(list_resp.result.unwrap()).unwrap();
+    assert_eq!(workspaces.len(), 1);
+
+    // 3b. Inspect dirty manifest
+    let inspect_req = ApiRequest {
+        id: "req_ws_inspect".into(),
+        method: METHOD_WORKSPACES_INSPECT_DIRTY.into(),
+        params: serde_json::json!({
+            "workspace_id": created_ws.id.as_str()
+        }),
+    };
+    let inspect_resp = dispatcher.handle_request(inspect_req).await;
+    assert!(inspect_resp.is_success());
+    let dirty: custos_domain::DirtyManifest =
+        serde_json::from_value(inspect_resp.result.unwrap()).unwrap();
+    assert!(!dirty.is_dirty);
+
+    // 3c. Recover workspace
+    let recover_req = ApiRequest {
+        id: "req_ws_recover".into(),
+        method: METHOD_WORKSPACES_RECOVER.into(),
+        params: serde_json::json!({
+            "workspace_id": created_ws.id.as_str()
+        }),
+    };
+    let recover_resp = dispatcher.handle_request(recover_req).await;
+    assert!(recover_resp.is_success());
+
+    // 4. Archive Workspace (with delete_physical: true)
+    let archive_req = ApiRequest {
+        id: "req_ws_4".into(),
+        method: METHOD_WORKSPACES_ARCHIVE.into(),
+        params: serde_json::json!({
+            "workspace_id": created_ws.id.as_str(),
+            "delete_physical": true,
+            "force": false
+        }),
+    };
+    let archive_resp = dispatcher.handle_request(archive_req).await;
+    assert!(archive_resp.error.is_none());
+    assert!(!ws_path.exists());
+}
+
+#[tokio::test]
+async fn test_workspace_files_api_dispatch() {
+    use custos_persistence::SqliteTaskStore;
+
+    let temp_dir = std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
+    let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+    let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+    let task_service = Arc::new(TaskService::new(store.clone()));
+    let session_manager = Arc::new(SessionManager::new());
+    let bridge_service = Arc::new(BridgeService::new(
+        session_manager.clone(),
+        task_service.clone(),
+    ));
+
+    let ws_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+    let ws_coord = Arc::new(WorkspaceCoordinator::new(store, ws_provider));
+    let ws = ws_coord
+        .create_workspace(CreateWorkspaceRequest {
+            name: "files_test_ws".into(),
+            kind: custos_domain::WorkspaceKind::Folder {
+                path: temp_dir.to_string_lossy().to_string(),
+            },
+            path: temp_dir.to_string_lossy().to_string(),
+            lineage: None,
+            owner_task_id: None,
+            metadata: None,
+            setup_script: None,
+        })
+        .await
+        .expect("create workspace");
+
+    let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+        .with_workspace(ws_coord);
+
+    // 1. Write file
+    let write_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "wf_1".into(),
+            method: METHOD_WORKSPACE_FILES_WRITE.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+                "path": "src/hello.rs",
+                "content": "pub fn hello() -> &'static str { \"world\" }\n",
+            }),
+        })
+        .await;
+    assert!(write_resp.is_success());
+    let written: custos_domain::WorkspaceFileContent =
+        serde_json::from_value(write_resp.result.unwrap()).unwrap();
+    assert_eq!(written.path, "src/hello.rs");
+    assert_eq!(written.line_count, 1);
+
+    // 2. Read file
+    let read_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "wf_2".into(),
+            method: METHOD_WORKSPACE_FILES_READ.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+                "path": "src/hello.rs",
+            }),
+        })
+        .await;
+    assert!(read_resp.is_success());
+    let read: custos_domain::WorkspaceFileContent =
+        serde_json::from_value(read_resp.result.unwrap()).unwrap();
+    assert!(read.content.contains("pub fn hello"));
+
+    // 3. Tree
+    let tree_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "wf_3".into(),
+            method: METHOD_WORKSPACE_FILES_TREE.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+            }),
+        })
+        .await;
+    assert!(tree_resp.is_success());
+    let tree: custos_domain::WorkspaceFileTree =
+        serde_json::from_value(tree_resp.result.unwrap()).unwrap();
+    assert!(tree.entries.iter().any(|e| e.path == "src/hello.rs"));
+
+    // 4. Diff (folder ws is not git repo, returns clean summary)
+    let diff_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "wf_4".into(),
+            method: METHOD_WORKSPACE_DIFF.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+            }),
+        })
+        .await;
+    assert!(diff_resp.is_success());
+    let diff: custos_domain::WorkspaceDiffSummary =
+        serde_json::from_value(diff_resp.result.unwrap()).unwrap();
+    assert!(diff.is_clean);
+
+    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+}
+
+#[tokio::test]
+async fn candidate_creation_and_integration_replay_use_recorded_workspace_state() {
+    use custos_core::contracts::WorkspaceRepository;
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repository");
+    std::fs::create_dir(&repo).unwrap();
+    let git = |path: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .current_dir(path)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .args([
+                "-c",
+                "user.name=Custos Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{:?}: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
         );
-        base.status = custos_domain::WorkspaceStatus::Ready;
-        store.save_workspace(&base).await.unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
+    git(&repo, &["init", "-b", "main"]);
+    std::fs::write(repo.join("file.txt"), "base").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "base"]);
+    // Merge commands inherit only fixture-local identity, never the user's repo configuration.
+    git(&repo, &["config", "user.name", "Custos Test"]);
+    git(&repo, &["config", "user.email", "test@example.invalid"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
+    let store = Arc::new(
+        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+            .unwrap(),
+    );
+    let service = Arc::new(TaskService::new(store.clone()));
+    let task = service
+        .execute_create(CreateTask {
+            title: "Candidate integration test".into(),
+            metadata: None,
+            contract: None,
+        })
+        .await
+        .unwrap()
+        .0;
+    let sessions = Arc::new(SessionManager::new());
+    let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+        store.clone(),
+        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+    ));
+    let mut base = custos_domain::ExecutionWorkspace::new(
+        custos_domain::WorkspaceId::new("base"),
+        "base",
+        custos_domain::WorkspaceKind::Git {
+            repo_path: repo.to_string_lossy().into(),
+            branch: "main".into(),
+            base_commit: None,
+        },
+        repo.to_string_lossy().to_string(),
+    );
+    base.status = custos_domain::WorkspaceStatus::Ready;
+    store.save_workspace(&base).await.unwrap();
+    let make_dispatcher = || {
+        LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone())
+            .with_workspace(coordinator.clone())
+    };
+    let dispatcher = make_dispatcher();
+    let spawn_params = serde_json::json!({"task_id": task.id, "base_workspace_id": "base", "count": 1, "command_id": "create-candidates-once"});
+    let request = |method: &str, params: serde_json::Value| ApiRequest {
+        id: "fixture-request".into(),
+        method: method.into(),
+        params,
+    };
+    let first = dispatcher
+        .handle_request(request(
+            METHOD_WORKSPACES_CANDIDATES_SPAWN,
+            spawn_params.clone(),
+        ))
+        .await;
+    assert!(first.is_success(), "{:?}", first.error);
+    let first = first.result.unwrap();
+    let winner_id = first["candidates"][0]["id"].as_str().unwrap().to_string();
+    let candidate = std::path::PathBuf::from(first["candidates"][0]["path"].as_str().unwrap());
+    let second = make_dispatcher()
+        .handle_request(request(
+            METHOD_WORKSPACES_CANDIDATES_SPAWN,
+            spawn_params.clone(),
+        ))
+        .await;
+    assert!(second.is_success(), "{:?}", second.error);
+    assert_eq!(second.result.unwrap()["candidates"][0]["id"], winner_id);
+    assert_eq!(store.list_workspaces().await.unwrap().len(), 2);
+    let mut different = spawn_params;
+    different["count"] = serde_json::json!(2);
+    assert!(!dispatcher
+        .handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, different))
+        .await
+        .is_success());
+    std::fs::write(candidate.join("file.txt"), "candidate").unwrap();
+    git(&candidate, &["add", "."]);
+    git(&candidate, &["commit", "-m", "candidate"]);
+    let before = git(&repo, &["rev-parse", "HEAD"]);
+    assert!(!dispatcher
+        .handle_request(request(
+            METHOD_WORKSPACES_INTEGRATE,
+            serde_json::json!({"winner_workspace_id": winner_id})
+        ))
+        .await
+        .is_success());
+    let preview = dispatcher
+        .handle_request(request(
+            METHOD_WORKSPACES_INTEGRATE,
+            serde_json::json!({"winner_workspace_id": winner_id, "preview": true}),
+        ))
+        .await;
+    assert!(preview.is_success(), "{:?}", preview.error);
+    let preview = preview.result.unwrap();
+    assert_eq!(
+        git(&repo, &["rev-parse", "HEAD"]),
+        before,
+        "preview must not merge"
+    );
+    let apply = serde_json::json!({"winner_workspace_id": winner_id, "expected_target_head": preview["current_target_head"], "expected_winner_head": preview["winner_head"]});
+    let mut stale = apply.clone();
+    stale["expected_winner_head"] = serde_json::json!("stale");
+    assert!(!dispatcher
+        .handle_request(request(METHOD_WORKSPACES_INTEGRATE, stale))
+        .await
+        .is_success());
+    let integrated = dispatcher
+        .handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone()))
+        .await;
+    assert!(integrated.is_success(), "{:?}", integrated.error);
+    assert_eq!(integrated.result.unwrap()["merge_success"], true);
+    let merged_head = git(&repo, &["rev-parse", "HEAD"]);
+    assert_ne!(merged_head, before);
+    let repeated = make_dispatcher()
+        .handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone()))
+        .await;
+    assert!(repeated.is_success());
+    assert_eq!(repeated.result.unwrap()["merge_success"], true);
+    assert_eq!(git(&repo, &["rev-parse", "HEAD"]), merged_head);
+    let mut interrupted = store
+        .get_workspace(&custos_domain::WorkspaceId::new(&winner_id))
+        .await
+        .unwrap()
+        .unwrap();
+    interrupted.metadata["integration"]
+        .as_object_mut()
+        .unwrap()
+        .remove("result");
+    store.save_workspace(&interrupted).await.unwrap();
+    // Recovery follows the recorded target even when the user switches checkout.
+    git(&repo, &["checkout", "-b", "unrelated", &before]);
+    let reconciled = make_dispatcher()
+        .handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply))
+        .await;
+    assert!(reconciled.is_success());
+    assert_eq!(
+        reconciled.result.unwrap()["merge_status"],
+        "merged_reconciled"
+    );
+    assert_eq!(git(&repo, &["rev-parse", "main"]), merged_head);
+    assert_eq!(
+        git(&repo, &["rev-parse", "HEAD"]),
+        before,
+        "recovery must not change the user's checkout"
+    );
+    assert!(
+        candidate.exists(),
+        "integration never removes candidate checkout"
+    );
+}
 
-        let dispatcher = LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone())
-            .with_workspace(coordinator.clone());
+#[tokio::test]
+async fn two_worktree_concurrent_isolation_and_stale_base_rejection() {
+    use custos_core::contracts::WorkspaceRepository;
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("main_repo");
+    std::fs::create_dir(&repo).unwrap();
+    let git = |path: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .current_dir(path)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .args([
+                "-c",
+                "user.name=Custos Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{:?}: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
+    git(&repo, &["init", "-b", "main"]);
+    std::fs::write(repo.join("README.md"), "# Initial Main\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "initial commit"]);
+    git(&repo, &["config", "user.name", "Custos Test"]);
+    git(&repo, &["config", "user.email", "test@example.invalid"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
 
-        // Spawn 2 candidate worktrees concurrently
-        let spawn_params = serde_json::json!({
-            "task_id": task.id,
-            "base_workspace_id": "base",
-            "count": 2,
-            "command_id": "two-worktree-spawn"
-        });
-        let spawn_res = dispatcher
+    let store = Arc::new(
+        custos_persistence::SqliteTaskStore::new(&temp.path().join("two_wt.db").to_string_lossy())
+            .unwrap(),
+    );
+    let service = Arc::new(TaskService::new(store.clone()));
+    let task = service
+        .execute_create(CreateTask {
+            title: "Two worktree isolation test".into(),
+            metadata: None,
+            contract: None,
+        })
+        .await
+        .unwrap()
+        .0;
+    let sessions = Arc::new(SessionManager::new());
+    let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+        store.clone(),
+        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+    ));
+    let mut base = custos_domain::ExecutionWorkspace::new(
+        custos_domain::WorkspaceId::new("base"),
+        "base",
+        custos_domain::WorkspaceKind::Git {
+            repo_path: repo.to_string_lossy().into(),
+            branch: "main".into(),
+            base_commit: None,
+        },
+        repo.to_string_lossy().to_string(),
+    );
+    base.status = custos_domain::WorkspaceStatus::Ready;
+    store.save_workspace(&base).await.unwrap();
+
+    let dispatcher = LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone())
+        .with_workspace(coordinator.clone());
+
+    // Spawn 2 candidate worktrees concurrently
+    let spawn_params = serde_json::json!({
+        "task_id": task.id,
+        "base_workspace_id": "base",
+        "count": 2,
+        "command_id": "two-worktree-spawn"
+    });
+    let spawn_res = dispatcher
+        .handle_request(ApiRequest {
+            id: "spawn-two-wt".into(),
+            method: METHOD_WORKSPACES_CANDIDATES_SPAWN.into(),
+            params: spawn_params,
+        })
+        .await;
+    assert!(spawn_res.is_success(), "{:?}", spawn_res.error);
+    let candidates = spawn_res.result.unwrap()["candidates"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        candidates.len(),
+        2,
+        "Must spawn exactly 2 candidate worktrees"
+    );
+
+    let wt_a_id = candidates[0]["id"].as_str().unwrap().to_string();
+    let wt_a_path = std::path::PathBuf::from(candidates[0]["path"].as_str().unwrap());
+    let wt_b_id = candidates[1]["id"].as_str().unwrap().to_string();
+    let wt_b_path = std::path::PathBuf::from(candidates[1]["path"].as_str().unwrap());
+
+    assert_ne!(wt_a_id, wt_b_id, "Worktree IDs must be distinct");
+    assert_ne!(wt_a_path, wt_b_path, "Worktree file paths must be isolated");
+
+    // 1. Mutate Worktree A
+    std::fs::write(wt_a_path.join("feature_a.txt"), "implemented A").unwrap();
+    git(&wt_a_path, &["add", "."]);
+    git(&wt_a_path, &["commit", "-m", "feature A"]);
+
+    // Verify Worktree B is completely isolated from A's changes
+    assert!(
+        !wt_b_path.join("feature_a.txt").exists(),
+        "Worktree B must not contain Worktree A uncommitted/committed files"
+    );
+    let wt_b_status = git(&wt_b_path, &["status", "--porcelain"]);
+    assert!(
+        wt_b_status.is_empty(),
+        "Worktree B must remain completely clean after Worktree A commit"
+    );
+
+    // 2. Mutate Worktree B
+    std::fs::write(wt_b_path.join("feature_b.txt"), "implemented B").unwrap();
+    git(&wt_b_path, &["add", "."]);
+    git(&wt_b_path, &["commit", "-m", "feature B"]);
+
+    // Verify Worktree A is isolated from B's changes
+    assert!(
+        !wt_a_path.join("feature_b.txt").exists(),
+        "Worktree A must not contain Worktree B files"
+    );
+
+    // 3. Integrate Worktree A into main
+    let prev_target_head = git(&repo, &["rev-parse", "HEAD"]);
+    let preview_a = dispatcher
+        .handle_request(ApiRequest {
+            id: "preview-a".into(),
+            method: METHOD_WORKSPACES_INTEGRATE.into(),
+            params: serde_json::json!({
+                "winner_workspace_id": wt_a_id,
+                "preview": true
+            }),
+        })
+        .await;
+    assert!(preview_a.is_success(), "{:?}", preview_a.error);
+    let preview_a_val = preview_a.result.unwrap();
+
+    let integrate_a = dispatcher
+        .handle_request(ApiRequest {
+            id: "integrate-a".into(),
+            method: METHOD_WORKSPACES_INTEGRATE.into(),
+            params: serde_json::json!({
+                "winner_workspace_id": wt_a_id,
+                "expected_target_head": preview_a_val["current_target_head"],
+                "expected_winner_head": preview_a_val["winner_head"]
+            }),
+        })
+        .await;
+    assert!(integrate_a.is_success(), "{:?}", integrate_a.error);
+    assert_eq!(integrate_a.result.unwrap()["merge_success"], true);
+
+    let new_target_head = git(&repo, &["rev-parse", "HEAD"]);
+    assert_ne!(
+        new_target_head, prev_target_head,
+        "Target HEAD must advance after merging Worktree A"
+    );
+    assert!(repo.join("feature_a.txt").exists());
+
+    // 4. Attempt to integrate Worktree B directly: MUST fail due to stale base commit!
+    // Worktree B was branched from prev_target_head, but repo is now at new_target_head.
+    let integrate_b_preview = dispatcher
+        .handle_request(ApiRequest {
+            id: "preview-b".into(),
+            method: METHOD_WORKSPACES_INTEGRATE.into(),
+            params: serde_json::json!({
+                "winner_workspace_id": wt_b_id,
+                "preview": true
+            }),
+        })
+        .await;
+    assert!(
+        !integrate_b_preview.is_success(),
+        "Integrating Worktree B with stale base must fail closed"
+    );
+    let error_msg = integrate_b_preview.error.unwrap_or_default();
+    assert!(
+        error_msg.contains("stale") || error_msg.contains("does not match target HEAD"),
+        "Error message must clearly identify stale base drift: {error_msg}"
+    );
+}
+
+#[tokio::test]
+async fn candidate_comparison_rejects_mixed_scope_and_reports_inspection_failure() {
+    use custos_core::contracts::WorkspaceRepository;
+    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let service = Arc::new(TaskService::new(store.clone()));
+    let sessions = Arc::new(SessionManager::new());
+    let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+        store.clone(),
+        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+    ));
+    let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_workspace(coordinator);
+    let make = |id: &str, task: &str, base: &str, repo: &str| {
+        let mut workspace = custos_domain::ExecutionWorkspace::new(
+            custos_domain::WorkspaceId::new(id),
+            id.to_string(),
+            custos_domain::WorkspaceKind::Git {
+                repo_path: repo.into(),
+                branch: id.into(),
+                base_commit: Some(base.into()),
+            },
+            format!("/missing/candidate/{id}"),
+        );
+        workspace.status = custos_domain::WorkspaceStatus::Ready;
+        workspace.owner_task_id = Some(task.into());
+        workspace.base_commit_hash = Some(base.into());
+        workspace
+    };
+    for workspace in [
+        make("a", "task-a", "base-a", "/repo-a"),
+        make("b", "task-b", "base-a", "/repo-a"),
+        make("c", "task-a", "base-c", "/repo-a"),
+        make("d", "task-a", "base-a", "/repo-d"),
+    ] {
+        store.save_workspace(&workspace).await.unwrap();
+    }
+    for ids in [
+        serde_json::json!(["a", "missing"]),
+        serde_json::json!(["a", "b"]),
+        serde_json::json!(["a", "c"]),
+        serde_json::json!(["a", "d"]),
+        serde_json::json!(["a", "a"]),
+        serde_json::json!(["a", 42]),
+    ] {
+        let response = dispatcher
             .handle_request(ApiRequest {
-                id: "spawn-two-wt".into(),
-                method: METHOD_WORKSPACES_CANDIDATES_SPAWN.into(),
-                params: spawn_params,
+                id: "compare".into(),
+                method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(),
+                params: serde_json::json!({"workspace_ids": ids}),
             })
             .await;
-        assert!(spawn_res.is_success(), "{:?}", spawn_res.error);
-        let candidates = spawn_res.result.unwrap()["candidates"]
-            .as_array()
-            .unwrap()
-            .clone();
-        assert_eq!(candidates.len(), 2, "Must spawn exactly 2 candidate worktrees");
-
-        let wt_a_id = candidates[0]["id"].as_str().unwrap().to_string();
-        let wt_a_path = std::path::PathBuf::from(candidates[0]["path"].as_str().unwrap());
-        let wt_b_id = candidates[1]["id"].as_str().unwrap().to_string();
-        let wt_b_path = std::path::PathBuf::from(candidates[1]["path"].as_str().unwrap());
-
-        assert_ne!(wt_a_id, wt_b_id, "Worktree IDs must be distinct");
-        assert_ne!(wt_a_path, wt_b_path, "Worktree file paths must be isolated");
-
-        // 1. Mutate Worktree A
-        std::fs::write(wt_a_path.join("feature_a.txt"), "implemented A").unwrap();
-        git(&wt_a_path, &["add", "."]);
-        git(&wt_a_path, &["commit", "-m", "feature A"]);
-
-        // Verify Worktree B is completely isolated from A's changes
         assert!(
-            !wt_b_path.join("feature_a.txt").exists(),
-            "Worktree B must not contain Worktree A uncommitted/committed files"
-        );
-        let wt_b_status = git(&wt_b_path, &["status", "--porcelain"]);
-        assert!(
-            wt_b_status.is_empty(),
-            "Worktree B must remain completely clean after Worktree A commit"
-        );
-
-        // 2. Mutate Worktree B
-        std::fs::write(wt_b_path.join("feature_b.txt"), "implemented B").unwrap();
-        git(&wt_b_path, &["add", "."]);
-        git(&wt_b_path, &["commit", "-m", "feature B"]);
-
-        // Verify Worktree A is isolated from B's changes
-        assert!(
-            !wt_a_path.join("feature_b.txt").exists(),
-            "Worktree A must not contain Worktree B files"
-        );
-
-        // 3. Integrate Worktree A into main
-        let prev_target_head = git(&repo, &["rev-parse", "HEAD"]);
-        let preview_a = dispatcher
-            .handle_request(ApiRequest {
-                id: "preview-a".into(),
-                method: METHOD_WORKSPACES_INTEGRATE.into(),
-                params: serde_json::json!({
-                    "winner_workspace_id": wt_a_id,
-                    "preview": true
-                }),
-            })
-            .await;
-        assert!(preview_a.is_success(), "{:?}", preview_a.error);
-        let preview_a_val = preview_a.result.unwrap();
-
-        let integrate_a = dispatcher
-            .handle_request(ApiRequest {
-                id: "integrate-a".into(),
-                method: METHOD_WORKSPACES_INTEGRATE.into(),
-                params: serde_json::json!({
-                    "winner_workspace_id": wt_a_id,
-                    "expected_target_head": preview_a_val["current_target_head"],
-                    "expected_winner_head": preview_a_val["winner_head"]
-                }),
-            })
-            .await;
-        assert!(integrate_a.is_success(), "{:?}", integrate_a.error);
-        assert_eq!(integrate_a.result.unwrap()["merge_success"], true);
-
-        let new_target_head = git(&repo, &["rev-parse", "HEAD"]);
-        assert_ne!(
-            new_target_head, prev_target_head,
-            "Target HEAD must advance after merging Worktree A"
-        );
-        assert!(repo.join("feature_a.txt").exists());
-
-        // 4. Attempt to integrate Worktree B directly: MUST fail due to stale base commit!
-        // Worktree B was branched from prev_target_head, but repo is now at new_target_head.
-        let integrate_b_preview = dispatcher
-            .handle_request(ApiRequest {
-                id: "preview-b".into(),
-                method: METHOD_WORKSPACES_INTEGRATE.into(),
-                params: serde_json::json!({
-                    "winner_workspace_id": wt_b_id,
-                    "preview": true
-                }),
-            })
-            .await;
-        assert!(
-            !integrate_b_preview.is_success(),
-            "Integrating Worktree B with stale base must fail closed"
-        );
-        let error_msg = integrate_b_preview.error.unwrap_or_default();
-        assert!(
-            error_msg.contains("stale") || error_msg.contains("does not match target HEAD"),
-            "Error message must clearly identify stale base drift: {error_msg}"
+            !response.is_success(),
+            "comparison must reject mismatched or invalid candidates"
         );
     }
+    let response = dispatcher
+        .handle_request(ApiRequest {
+            id: "inspect".into(),
+            method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(),
+            params: serde_json::json!({"workspace_ids": ["a"]}),
+        })
+        .await;
+    assert!(response.is_success());
+    let candidate = &response.result.unwrap()["candidates"][0];
+    assert_eq!(candidate["is_ready_for_integration"], false);
+    assert!(candidate["inspection_error"].is_string());
+}
 
+#[tokio::test]
+async fn test_candidate_race_api_validation() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = Arc::new(
+        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+            .unwrap(),
+    );
+    let service = Arc::new(TaskService::new(store.clone()));
+    let sessions = Arc::new(SessionManager::new());
+    let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+        store.clone(),
+        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+    ));
+    let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new());
+    let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
+        .with_workspace(coordinator)
+        .with_workflow(workflow);
 
-    #[tokio::test]
-    async fn candidate_comparison_rejects_mixed_scope_and_reports_inspection_failure() {
-        use custos_core::contracts::WorkspaceRepository;
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
-        let service = Arc::new(TaskService::new(store.clone()));
-        let sessions = Arc::new(SessionManager::new());
-        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
-        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_workspace(coordinator);
-        let make = |id: &str, task: &str, base: &str, repo: &str| {
-            let mut workspace = custos_domain::ExecutionWorkspace::new(custos_domain::WorkspaceId::new(id), id.to_string(),
-                custos_domain::WorkspaceKind::Git { repo_path: repo.into(), branch: id.into(), base_commit: Some(base.into()) },
-                format!("/missing/candidate/{id}"));
-            workspace.status = custos_domain::WorkspaceStatus::Ready;
-            workspace.owner_task_id = Some(task.into()); workspace.base_commit_hash = Some(base.into()); workspace
-        };
-        for workspace in [make("a", "task-a", "base-a", "/repo-a"), make("b", "task-b", "base-a", "/repo-a"), make("c", "task-a", "base-c", "/repo-a"), make("d", "task-a", "base-a", "/repo-d")] {
-            store.save_workspace(&workspace).await.unwrap();
-        }
-        for ids in [serde_json::json!(["a", "missing"]), serde_json::json!(["a", "b"]), serde_json::json!(["a", "c"]), serde_json::json!(["a", "d"]), serde_json::json!(["a", "a"]), serde_json::json!(["a", 42])] {
-            let response = dispatcher.handle_request(ApiRequest { id: "compare".into(), method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(), params: serde_json::json!({"workspace_ids": ids}) }).await;
-            assert!(!response.is_success(), "comparison must reject mismatched or invalid candidates");
-        }
-        let response = dispatcher.handle_request(ApiRequest { id: "inspect".into(), method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(), params: serde_json::json!({"workspace_ids": ["a"]}) }).await;
-        assert!(response.is_success());
-        let candidate = &response.result.unwrap()["candidates"][0];
-        assert_eq!(candidate["is_ready_for_integration"], false);
-        assert!(candidate["inspection_error"].is_string());
-    }
-
-    #[tokio::test]
-    async fn test_candidate_race_api_validation() {
-        let temp = tempfile::tempdir().unwrap();
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy()).unwrap());
-        let service = Arc::new(TaskService::new(store.clone()));
-        let sessions = Arc::new(SessionManager::new());
-        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
-        let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new());
-        let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
-            .with_workspace(coordinator)
-            .with_workflow(workflow);
-
-        // Missing task_id
-        let resp = dispatcher.handle_request(ApiRequest {
+    // Missing task_id
+    let resp = dispatcher
+        .handle_request(ApiRequest {
             id: "race-missing-task".into(),
             method: METHOD_WORKSPACES_CANDIDATES_RACE.into(),
             params: serde_json::json!({}),
-        }).await;
-        assert!(!resp.is_success());
-        assert!(resp.error.as_deref().unwrap().contains("Missing 'task_id'"));
+        })
+        .await;
+    assert!(!resp.is_success());
+    assert!(resp.error.as_deref().unwrap().contains("Missing 'task_id'"));
 
-        // Non-existent task
-        let resp = dispatcher.handle_request(ApiRequest {
+    // Non-existent task
+    let resp = dispatcher
+        .handle_request(ApiRequest {
             id: "race-nonexistent-task".into(),
             method: METHOD_WORKSPACES_CANDIDATES_RACE.into(),
             params: serde_json::json!({"task_id": "nonexistent"}),
-        }).await;
-        assert!(!resp.is_success());
-        assert!(resp.error.as_deref().unwrap().contains("not found"));
+        })
+        .await;
+    assert!(!resp.is_success());
+    assert!(resp.error.as_deref().unwrap().contains("not found"));
 
-        // Valid task with no candidates spawned yet
-        let task = service.execute_create(CreateTask { title: "Candidate race test".into(), metadata: None, contract: None }).await.unwrap().0;
-        let resp = dispatcher.handle_request(ApiRequest {
+    // Valid task with no candidates spawned yet
+    let task = service
+        .execute_create(CreateTask {
+            title: "Candidate race test".into(),
+            metadata: None,
+            contract: None,
+        })
+        .await
+        .unwrap()
+        .0;
+    let resp = dispatcher
+        .handle_request(ApiRequest {
             id: "race-no-cands".into(),
             method: METHOD_WORKSPACES_CANDIDATES_RACE.into(),
             params: serde_json::json!({"task_id": task.id}),
-        }).await;
-        assert!(!resp.is_success());
-        assert!(resp.error.as_deref().unwrap().contains("No ready candidate worktrees found"));
-    }
+        })
+        .await;
+    assert!(!resp.is_success());
+    assert!(resp
+        .error
+        .as_deref()
+        .unwrap()
+        .contains("No ready candidate worktrees found"));
+}
 
-    #[tokio::test]
-    async fn test_candidate_race_end_to_end_trial() {
-        let temp = tempfile::tempdir().unwrap();
-        let repo = temp.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
+#[tokio::test]
+async fn test_candidate_race_end_to_end_trial() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
 
-        let git = |dir: &std::path::Path, args: &[&str]| {
-            let output = std::process::Command::new("git")
-                .current_dir(dir)
-                .args(args)
-                .output()
-                .unwrap();
-            assert!(output.status.success(), "git {:?} failed: {}", args, String::from_utf8_lossy(&output.stderr));
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        };
-
-        git(&repo, &["init", "-b", "main"]);
-        git(&repo, &["config", "user.name", "Custos Tester"]);
-        git(&repo, &["config", "user.email", "tester@custos.dev"]);
-        git(&repo, &["config", "commit.gpgsign", "false"]);
-
-        // Create base file and a test script
-        std::fs::write(repo.join("math.txt"), "0").unwrap();
-        let test_script = "#!/bin/sh\nif grep -q \"10\" math.txt; then\n  echo \"test result: ok. 5 passed; 0 failed\"\n  exit 0\nelse\n  echo \"test result: FAILED. 0 passed; 1 failed\"\n  exit 1\nfi\n";
-        std::fs::write(repo.join("run_tests.sh"), test_script).unwrap();
-        let _ = std::process::Command::new("chmod").args(["+x", repo.join("run_tests.sh").to_str().unwrap()]).output();
-
-        git(&repo, &["add", "."]);
-        git(&repo, &["commit", "-m", "initial commit"]);
-
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy()).unwrap());
-        let service = Arc::new(TaskService::new(store.clone()));
-        let sessions = Arc::new(SessionManager::new());
-        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
-        let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new().with_workspace_coordinator(coordinator.clone()));
-        let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
-            .with_workspace(coordinator.clone())
-            .with_workflow(workflow);
-
-        // 1. Create Task
-        let task = service.execute_create(CreateTask { title: "E2E Race Trial".into(), metadata: None, contract: None }).await.unwrap().0;
-
-        // 2. Register base workspace
-        let mut base_ws = custos_domain::ExecutionWorkspace::new(
-            custos_domain::WorkspaceId::new("base_ws"),
-            "base_ws",
-            custos_domain::WorkspaceKind::Git { repo_path: repo.to_string_lossy().into(), branch: "main".into(), base_commit: None },
-            repo.to_string_lossy().to_string(),
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
         );
-        base_ws.status = custos_domain::WorkspaceStatus::Ready;
-        store.save_workspace(&base_ws).await.unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
 
-        // 3. Spawn 2 Candidates via API
-        let spawn_resp = dispatcher.handle_request(ApiRequest {
+    git(&repo, &["init", "-b", "main"]);
+    git(&repo, &["config", "user.name", "Custos Tester"]);
+    git(&repo, &["config", "user.email", "tester@custos.dev"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
+
+    // Create base file and a test script
+    std::fs::write(repo.join("math.txt"), "0").unwrap();
+    let test_script = "#!/bin/sh\nif grep -q \"10\" math.txt; then\n  echo \"test result: ok. 5 passed; 0 failed\"\n  exit 0\nelse\n  echo \"test result: FAILED. 0 passed; 1 failed\"\n  exit 1\nfi\n";
+    std::fs::write(repo.join("run_tests.sh"), test_script).unwrap();
+    let _ = std::process::Command::new("chmod")
+        .args(["+x", repo.join("run_tests.sh").to_str().unwrap()])
+        .output();
+
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "initial commit"]);
+
+    let store = Arc::new(
+        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+            .unwrap(),
+    );
+    let service = Arc::new(TaskService::new(store.clone()));
+    let sessions = Arc::new(SessionManager::new());
+    let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+        store.clone(),
+        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+    ));
+    let workflow = Arc::new(
+        custos_runtime::workflow::TaskRuntime::new()
+            .with_workspace_coordinator(coordinator.clone()),
+    );
+    let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
+        .with_workspace(coordinator.clone())
+        .with_workflow(workflow);
+
+    // 1. Create Task
+    let task = service
+        .execute_create(CreateTask {
+            title: "E2E Race Trial".into(),
+            metadata: None,
+            contract: None,
+        })
+        .await
+        .unwrap()
+        .0;
+
+    // 2. Register base workspace
+    let mut base_ws = custos_domain::ExecutionWorkspace::new(
+        custos_domain::WorkspaceId::new("base_ws"),
+        "base_ws",
+        custos_domain::WorkspaceKind::Git {
+            repo_path: repo.to_string_lossy().into(),
+            branch: "main".into(),
+            base_commit: None,
+        },
+        repo.to_string_lossy().to_string(),
+    );
+    base_ws.status = custos_domain::WorkspaceStatus::Ready;
+    store.save_workspace(&base_ws).await.unwrap();
+
+    // 3. Spawn 2 Candidates via API
+    let spawn_resp = dispatcher
+        .handle_request(ApiRequest {
             id: "spawn_candidates".into(),
             method: METHOD_WORKSPACES_CANDIDATES_SPAWN.into(),
             params: serde_json::json!({
@@ -623,27 +824,29 @@ use custos_core::contracts::WorkspaceRepository;
                 "base_workspace_id": "base_ws",
                 "count": 2,
             }),
-        }).await;
-        assert!(spawn_resp.is_success(), "{:?}", spawn_resp.error);
-        let spawned = spawn_resp.result.unwrap();
-        let candidates_arr = spawned["candidates"].as_array().unwrap();
-        assert_eq!(candidates_arr.len(), 2);
+        })
+        .await;
+    assert!(spawn_resp.is_success(), "{:?}", spawn_resp.error);
+    let spawned = spawn_resp.result.unwrap();
+    let candidates_arr = spawned["candidates"].as_array().unwrap();
+    assert_eq!(candidates_arr.len(), 2);
 
-        let cand_1_path = std::path::PathBuf::from(candidates_arr[0]["path"].as_str().unwrap());
-        let cand_2_path = std::path::PathBuf::from(candidates_arr[1]["path"].as_str().unwrap());
+    let cand_1_path = std::path::PathBuf::from(candidates_arr[0]["path"].as_str().unwrap());
+    let cand_2_path = std::path::PathBuf::from(candidates_arr[1]["path"].as_str().unwrap());
 
-        // 4. Simulate Candidate 1 solving the task (writes "10" to math.txt)
-        std::fs::write(cand_1_path.join("math.txt"), "10").unwrap();
-        git(&cand_1_path, &["add", "math.txt"]);
-        git(&cand_1_path, &["commit", "-m", "fix: math solved to 10"]);
+    // 4. Simulate Candidate 1 solving the task (writes "10" to math.txt)
+    std::fs::write(cand_1_path.join("math.txt"), "10").unwrap();
+    git(&cand_1_path, &["add", "math.txt"]);
+    git(&cand_1_path, &["commit", "-m", "fix: math solved to 10"]);
 
-        // Simulate Candidate 2 failing the task (writes "99" to math.txt)
-        std::fs::write(cand_2_path.join("math.txt"), "99").unwrap();
-        git(&cand_2_path, &["add", "math.txt"]);
-        git(&cand_2_path, &["commit", "-m", "attempt: wrong value 99"]);
+    // Simulate Candidate 2 failing the task (writes "99" to math.txt)
+    std::fs::write(cand_2_path.join("math.txt"), "99").unwrap();
+    git(&cand_2_path, &["add", "math.txt"]);
+    git(&cand_2_path, &["commit", "-m", "attempt: wrong value 99"]);
 
-        // 5. Execute Candidate Race with Test Oracle
-        let race_resp = dispatcher.handle_request(ApiRequest {
+    // 5. Execute Candidate Race with Test Oracle
+    let race_resp = dispatcher
+        .handle_request(ApiRequest {
             id: "run_race".into(),
             method: METHOD_WORKSPACES_CANDIDATES_RACE.into(),
             params: serde_json::json!({
@@ -652,39 +855,43 @@ use custos_core::contracts::WorkspaceRepository;
                 "test_command": "./run_tests.sh",
                 "timeout_seconds": 30,
             }),
-        }).await;
-        assert!(race_resp.is_success(), "{:?}", race_resp.error);
-        let race_result = race_resp.result.unwrap();
+        })
+        .await;
+    assert!(race_resp.is_success(), "{:?}", race_resp.error);
+    let race_result = race_resp.result.unwrap();
 
-        let reports = race_result["candidate_reports"].as_array().unwrap();
-        assert_eq!(reports.len(), 2);
+    let reports = race_result["candidate_reports"].as_array().unwrap();
+    assert_eq!(reports.len(), 2);
 
-        // Candidate 1 passed tests (5 passed)
-        assert_eq!(reports[0]["test_passed"], true);
-        assert_eq!(reports[0]["tests_succeeded"], 5);
-        assert_eq!(reports[0]["tests_failed"], 0);
+    // Candidate 1 passed tests (5 passed)
+    assert_eq!(reports[0]["test_passed"], true);
+    assert_eq!(reports[0]["tests_succeeded"], 5);
+    assert_eq!(reports[0]["tests_failed"], 0);
 
-        // Candidate 2 failed tests
-        assert_eq!(reports[1]["test_passed"], false);
-        assert_eq!(reports[1]["tests_failed"], 1);
+    // Candidate 2 failed tests
+    assert_eq!(reports[1]["test_passed"], false);
+    assert_eq!(reports[1]["tests_failed"], 1);
 
-        // Winner MUST be candidate 1
-        let winner_id = race_result["winner_candidate_id"].as_str().unwrap();
-        assert_eq!(winner_id, reports[0]["candidate_id"].as_str().unwrap());
+    // Winner MUST be candidate 1
+    let winner_id = race_result["winner_candidate_id"].as_str().unwrap();
+    assert_eq!(winner_id, reports[0]["candidate_id"].as_str().unwrap());
 
-        // 6. Integrate winner into main branch! (2-phase: preview then apply)
-        let preview_resp = dispatcher.handle_request(ApiRequest {
+    // 6. Integrate winner into main branch! (2-phase: preview then apply)
+    let preview_resp = dispatcher
+        .handle_request(ApiRequest {
             id: "preview_winner".into(),
             method: METHOD_WORKSPACES_INTEGRATE.into(),
             params: serde_json::json!({
                 "winner_workspace_id": candidates_arr[0]["id"].as_str().unwrap(),
                 "preview": true,
             }),
-        }).await;
-        assert!(preview_resp.is_success(), "{:?}", preview_resp.error);
-        let preview = preview_resp.result.unwrap();
+        })
+        .await;
+    assert!(preview_resp.is_success(), "{:?}", preview_resp.error);
+    let preview = preview_resp.result.unwrap();
 
-        let integrate_resp = dispatcher.handle_request(ApiRequest {
+    let integrate_resp = dispatcher
+        .handle_request(ApiRequest {
             id: "integrate_winner".into(),
             method: METHOD_WORKSPACES_INTEGRATE.into(),
             params: serde_json::json!({
@@ -693,16 +900,16 @@ use custos_core::contracts::WorkspaceRepository;
                 "expected_target_head": preview["current_target_head"],
                 "expected_winner_head": preview["winner_head"],
             }),
-        }).await;
-        assert!(integrate_resp.is_success(), "{:?}", integrate_resp.error);
-        let integrate_result = integrate_resp.result.unwrap();
-        assert_eq!(integrate_result["merge_success"], true);
+        })
+        .await;
+    assert!(integrate_resp.is_success(), "{:?}", integrate_resp.error);
+    let integrate_result = integrate_resp.result.unwrap();
+    assert_eq!(integrate_result["merge_success"], true);
 
-        // Verify base repository now contains Candidate 1's fix
-        let merged_math = std::fs::read_to_string(repo.join("math.txt")).unwrap();
-        assert_eq!(merged_math.trim(), "10");
-    }
-
+    // Verify base repository now contains Candidate 1's fix
+    let merged_math = std::fs::read_to_string(repo.join("math.txt")).unwrap();
+    assert_eq!(merged_math.trim(), "10");
+}
 
 #[cfg(test)]
 mod git_and_github_workspace_detection_tests {
@@ -710,14 +917,20 @@ mod git_and_github_workspace_detection_tests {
 
     #[test]
     fn github_status_requires_successful_verified_viewer_and_never_exposes_secrets() {
-        for (success, body) in [(false, br#"{"login":"someone","token":"secret"}"#.as_slice()),
-            (true, b"not json".as_slice()), (true, br#"{"login":""}"#.as_slice()),
-            (true, br#"{"message":"Bad credentials"}"#.as_slice())] {
+        for (success, body) in [
+            (false, br#"{"login":"someone","token":"secret"}"#.as_slice()),
+            (true, b"not json".as_slice()),
+            (true, br#"{"login":""}"#.as_slice()),
+            (true, br#"{"message":"Bad credentials"}"#.as_slice()),
+        ] {
             let result = github_auth_metadata(success, body);
             assert_eq!(result["authenticated"], false);
             assert!(result.get("token").is_none());
         }
-        let result = github_auth_metadata(true, br#"{"login":"verified","name":"Human","token":"secret","other":"private"}"#);
+        let result = github_auth_metadata(
+            true,
+            br#"{"login":"verified","name":"Human","token":"secret","other":"private"}"#,
+        );
         assert_eq!(result["authenticated"], true);
         assert_eq!(result["user"]["login"], "verified");
         assert!(!result.to_string().contains("secret"));
@@ -736,28 +949,51 @@ mod git_and_github_workspace_detection_tests {
             custos_adapters::terminal::NativePtyDriver,
         ));
         let command = github_login_command(&fake_gh);
-        let session = terminal.spawn("github-auth", directory.path(), Some(&command), 100, 28).await.unwrap();
+        let session = terminal
+            .spawn("github-auth", directory.path(), Some(&command), 100, 28)
+            .await
+            .unwrap();
         let mut output = String::new();
         let mut seq = 0;
         for _ in 0..100 {
-            let chunk = terminal.read_output(session.id.as_str(), seq, 16384).await.unwrap();
+            let chunk = terminal
+                .read_output(session.id.as_str(), seq, 16384)
+                .await
+                .unwrap();
             seq = chunk.next_seq;
             output.push_str(&chunk.data);
-            if output.contains("Press Enter") { break; }
+            if output.contains("Press Enter") {
+                break;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
-        assert!(output.contains("TEST-CODE"), "Real PTY should expose the device code");
+        assert!(
+            output.contains("TEST-CODE"),
+            "Real PTY should expose the device code"
+        );
         terminal.write(session.id.as_str(), b"\r").await.unwrap();
         for _ in 0..100 {
-            let chunk = terminal.read_output(session.id.as_str(), seq, 16384).await.unwrap();
+            let chunk = terminal
+                .read_output(session.id.as_str(), seq, 16384)
+                .await
+                .unwrap();
             seq = chunk.next_seq;
             output.push_str(&chunk.data);
-            if output.contains("Browser approval pending") { break; }
+            if output.contains("Browser approval pending") {
+                break;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
         assert!(output.contains("Browser approval pending"));
         terminal.terminate(session.id.as_str()).await.unwrap();
-        assert!(matches!(terminal.get_session(session.id.as_str()).await.unwrap().status, custos_domain::TerminalSessionStatus::Terminated));
+        assert!(matches!(
+            terminal
+                .get_session(session.id.as_str())
+                .await
+                .unwrap()
+                .status,
+            custos_domain::TerminalSessionStatus::Terminated
+        ));
     }
 
     #[test]
@@ -778,7 +1014,8 @@ mod git_and_github_workspace_detection_tests {
         assert_eq!(avatar.as_deref(), Some("https://github.com/civi0411.png"));
 
         // HTTPS style
-        let (host, owner, repo, avatar) = parse_github_remote("https://github.com/civi0411/AgentHub.git");
+        let (host, owner, repo, avatar) =
+            parse_github_remote("https://github.com/civi0411/AgentHub.git");
         assert_eq!(host.as_deref(), Some("github.com"));
         assert_eq!(owner.as_deref(), Some("civi0411"));
         assert_eq!(repo.as_deref(), Some("AgentHub"));
@@ -791,7 +1028,8 @@ mod git_and_github_workspace_detection_tests {
         assert_eq!(repo.as_deref(), Some("react"));
 
         // Enterprise GitHub
-        let (host, owner, repo, avatar) = parse_github_remote("git@ghe.corporate.com:ai-team/core-model.git");
+        let (host, owner, repo, avatar) =
+            parse_github_remote("git@ghe.corporate.com:ai-team/core-model.git");
         assert_eq!(host.as_deref(), Some("ghe.corporate.com"));
         assert_eq!(owner.as_deref(), Some("ai-team"));
         assert_eq!(repo.as_deref(), Some("core-model"));
@@ -819,10 +1057,14 @@ mod git_and_github_workspace_detection_tests {
         tokio::fs::create_dir_all(&wt_path).await.unwrap();
         let wt_gitdir = dot_git_dir.join("worktrees/child-1");
         tokio::fs::create_dir_all(&wt_gitdir).await.unwrap();
-        tokio::fs::write(wt_gitdir.join("commondir"), "../..\n").await.unwrap();
+        tokio::fs::write(wt_gitdir.join("commondir"), "../..\n")
+            .await
+            .unwrap();
 
         let dot_git_file = wt_path.join(".git");
-        tokio::fs::write(&dot_git_file, format!("gitdir: {}\n", wt_gitdir.display())).await.unwrap();
+        tokio::fs::write(&dot_git_file, format!("gitdir: {}\n", wt_gitdir.display()))
+            .await
+            .unwrap();
 
         let wt_res = resolve_deep_git_paths(&wt_path).await;
         assert!(wt_res.is_some());
@@ -853,7 +1095,7 @@ mod git_and_github_workspace_detection_tests {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("ws-detect.db");
         let runtime = crate::runtime::CustosRuntime::bootstrap(db.to_str().unwrap()).unwrap();
-        
+
         // Test with empty path string
         let req1 = ApiRequest {
             id: "ws-det-1".into(),
@@ -885,8 +1127,8 @@ mod git_and_github_workspace_detection_tests {
         let service = Arc::new(TaskService::new(store.clone()));
         let sessions = Arc::new(SessionManager::with_store(store.clone()));
         let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
-            .with_sqlite_store(store.clone());
+        let dispatcher =
+            LocalApiDispatcher::new(service, sessions, bridge).with_sqlite_store(store.clone());
 
         let cmd_id = "cmd_stable_12345";
         let req1 = ApiRequest {
@@ -933,8 +1175,13 @@ mod git_and_github_workspace_detection_tests {
         let service = Arc::new(TaskService::new(store.clone()));
         let sessions = Arc::new(SessionManager::with_store(store.clone()));
         let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_sqlite_store(store.clone());
-        let request = ApiRequest::new("first", "v1.tasks.create", serde_json::json!({"command_id":"error_once"}));
+        let dispatcher =
+            LocalApiDispatcher::new(service, sessions, bridge).with_sqlite_store(store.clone());
+        let request = ApiRequest::new(
+            "first",
+            "v1.tasks.create",
+            serde_json::json!({"command_id":"error_once"}),
+        );
         let first = dispatcher.handle_request(request.clone()).await;
         assert!(first.error.is_some());
         let mut retry = request;
@@ -942,10 +1189,27 @@ mod git_and_github_workspace_detection_tests {
         let replay = dispatcher.handle_request(retry).await;
         assert_eq!(first.error, replay.error);
         assert_eq!(replay.id, "retry");
-        assert!(store.command_ledger().get_command("error_once").unwrap().unwrap().result_json.contains("custos_command_response"));
+        assert!(store
+            .command_ledger()
+            .get_command("error_once")
+            .unwrap()
+            .unwrap()
+            .result_json
+            .contains("custos_command_response"));
 
-        store.db().lock().unwrap().execute("DROP TABLE command_ledger", []).unwrap();
-        let denied = dispatcher.handle_request(ApiRequest::new("denied", "v1.tasks.create", serde_json::json!({"title":"Must not exist","command_id":"deny_me"}))).await;
+        store
+            .db()
+            .lock()
+            .unwrap()
+            .execute("DROP TABLE command_ledger", [])
+            .unwrap();
+        let denied = dispatcher
+            .handle_request(ApiRequest::new(
+                "denied",
+                "v1.tasks.create",
+                serde_json::json!({"title":"Must not exist","command_id":"deny_me"}),
+            ))
+            .await;
         assert!(denied.error.unwrap().contains("Command admission failed"));
         assert!(store.list_tasks().unwrap().is_empty());
     }
@@ -956,8 +1220,8 @@ mod git_and_github_workspace_detection_tests {
         let service = Arc::new(TaskService::new(store.clone()));
         let sessions = Arc::new(SessionManager::new());
         let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
-            .with_sqlite_store(store.clone());
+        let dispatcher =
+            LocalApiDispatcher::new(service, sessions, bridge).with_sqlite_store(store.clone());
 
         // 1. List compute targets -> must return Colab, Kaggle, Rented GPU / SSH
         let targets_resp = dispatcher
@@ -1055,7 +1319,11 @@ mod git_and_github_workspace_detection_tests {
 
         // Register MCP server in federation hub
         let client = Arc::new(custos_adapters::mcp::CustosMcpClient::new("kaggle-cluster"));
-        dispatcher.mcp_hub().register_server("kaggle", client).await.unwrap();
+        dispatcher
+            .mcp_hub()
+            .register_server("kaggle", client)
+            .await
+            .unwrap();
 
         // 1. Create task first
         let create_task_resp = dispatcher
@@ -1066,7 +1334,10 @@ mod git_and_github_workspace_detection_tests {
             })
             .await;
         assert!(create_task_resp.is_success());
-        let task_id = create_task_resp.result.unwrap()["id"].as_str().unwrap().to_string();
+        let task_id = create_task_resp.result.unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         // 2. Enqueue outbox item targeting mcp://kaggle/run_notebook
         let create_outbox_resp = dispatcher
@@ -1081,14 +1352,23 @@ mod git_and_github_workspace_detection_tests {
                 }),
             })
             .await;
-        assert!(create_outbox_resp.is_success(), "{:?}", create_outbox_resp.error);
-        let outbox_entry_id = create_outbox_resp.result.unwrap()["id"].as_str().unwrap().to_string();
+        assert!(
+            create_outbox_resp.is_success(),
+            "{:?}",
+            create_outbox_resp.error
+        );
+        let outbox_entry_id = create_outbox_resp.result.unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
-        let approved = dispatcher.handle_request(ApiRequest {
-            id: "ob_approve_1".into(),
-            method: METHOD_ASSISTANT_OUTBOX_APPROVE.into(),
-            params: serde_json::json!({"id":outbox_entry_id}),
-        }).await;
+        let approved = dispatcher
+            .handle_request(ApiRequest {
+                id: "ob_approve_1".into(),
+                method: METHOD_ASSISTANT_OUTBOX_APPROVE.into(),
+                params: serde_json::json!({"id":outbox_entry_id}),
+            })
+            .await;
         assert!(approved.is_success(), "{:?}", approved.error);
 
         // 3. Dispatch outbox item

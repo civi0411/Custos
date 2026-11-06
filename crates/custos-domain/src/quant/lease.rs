@@ -80,7 +80,11 @@ pub struct LeaseGuard {
 }
 
 impl LeaseGuard {
-    pub fn new(owner_id: impl Into<String>, strategy_id: impl Into<String>, deadline_ms: i64) -> Self {
+    pub fn new(
+        owner_id: impl Into<String>,
+        strategy_id: impl Into<String>,
+        deadline_ms: i64,
+    ) -> Self {
         Self {
             owner_id: owner_id.into(),
             strategy_id: strategy_id.into(),
@@ -142,10 +146,14 @@ impl StrategyCommand {
         let idempotency_key = idempotency_key.into();
 
         if strategy_id.trim().is_empty() {
-            return Err(DomainError::Validation("Strategy ID cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Strategy ID cannot be empty".into(),
+            ));
         }
         if idempotency_key.trim().is_empty() {
-            return Err(DomainError::Validation("Idempotency key cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Idempotency key cannot be empty".into(),
+            ));
         }
 
         Ok(Self {
@@ -165,7 +173,12 @@ impl StrategyCommand {
         })
     }
 
-    pub fn claim(&mut self, worker_id: impl Into<String>, lease_ttl_ms: i64, now_ms: i64) -> Result<(), DomainError> {
+    pub fn claim(
+        &mut self,
+        worker_id: impl Into<String>,
+        lease_ttl_ms: i64,
+        now_ms: i64,
+    ) -> Result<(), DomainError> {
         if self.status != StrategyCommandStatus::Pending
             && (self.status != StrategyCommandStatus::Processing
                 || self.lease_expires_at_ms.unwrap_or(0) >= now_ms)
@@ -218,8 +231,14 @@ mod tests {
 
     #[test]
     fn test_lease_record_lifecycle() {
-        let mut lease = LeaseRecord::new("strat_01", LeaseTier::StrategyRuntime, "worker_a", 30_000, 1000)
-            .expect("valid lease");
+        let mut lease = LeaseRecord::new(
+            "strat_01",
+            LeaseTier::StrategyRuntime,
+            "worker_a",
+            30_000,
+            1000,
+        )
+        .expect("valid lease");
 
         assert!(lease.is_valid_at(20_000));
         assert!(!lease.is_valid_at(32_000));
@@ -239,8 +258,14 @@ mod tests {
 
     #[test]
     fn test_strategy_command_claim_and_recovery() {
-        let mut cmd = StrategyCommand::new("strat_01", StrategyCommandType::Start, "idemp_1", "{}", 1000)
-            .expect("valid command");
+        let mut cmd = StrategyCommand::new(
+            "strat_01",
+            StrategyCommandType::Start,
+            "idemp_1",
+            "{}",
+            1000,
+        )
+        .expect("valid command");
 
         // Worker 1 claims command with 5s lease
         cmd.claim("worker_1", 5000, 1000).expect("claim");
@@ -251,7 +276,8 @@ mod tests {
         assert!(cmd.claim("worker_2", 5000, 4000).is_err());
 
         // Worker 2 CAN claim after lease expires at 6001ms (Crash recovery)
-        cmd.claim("worker_2", 5000, 6001).expect("recover abandoned command");
+        cmd.claim("worker_2", 5000, 6001)
+            .expect("recover abandoned command");
         assert_eq!(cmd.claimed_by, Some("worker_2".to_string()));
         assert_eq!(cmd.attempts, 2);
 

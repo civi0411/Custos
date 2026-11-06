@@ -114,11 +114,7 @@ impl MemoryPort for InMemoryMemoryStore {
         scope: &MemoryScope,
     ) -> Result<Vec<MemoryEntry>, MemoryError> {
         let facts = self
-            .recall_scoped(
-                MemoryTier::Semantic,
-                scope.project.as_deref(),
-                &query.text,
-            )
+            .recall_scoped(MemoryTier::Semantic, scope.project.as_deref(), &query.text)
             .await
             .map_err(|e| MemoryError::Backend(e.to_string()))?;
 
@@ -314,7 +310,10 @@ mod tests {
             source: "bench".into(),
         };
 
-        let err = store.remember(MemoryTier::Working, extra_fact).await.unwrap_err();
+        let err = store
+            .remember(MemoryTier::Working, extra_fact)
+            .await
+            .unwrap_err();
         assert!(matches!(err, DomainError::BudgetExceeded(_)));
     }
 }

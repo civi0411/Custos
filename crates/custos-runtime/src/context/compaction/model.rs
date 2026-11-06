@@ -67,9 +67,9 @@ impl CompactionModel for ProviderModel {
 mod tests {
     use super::*;
     use custos_domain::DomainError;
+    use custos_provider::events::ProviderEvent;
     use custos_provider::port::ModelProvider;
     use custos_provider::request::{ModelResponse, ProviderRequest};
-    use custos_provider::events::ProviderEvent;
     use tokio::sync::mpsc;
 
     struct DummyModelProvider;
@@ -81,7 +81,11 @@ mod tests {
         }
 
         async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
-            Ok(ModelResponse::text(format!("compacted: {}", req.prompt), &req.model, 42))
+            Ok(ModelResponse::text(
+                format!("compacted: {}", req.prompt),
+                &req.model,
+                42,
+            ))
         }
 
         async fn stream(
@@ -99,10 +103,15 @@ mod tests {
         let compaction_model = ProviderModel::from_model_provider(dummy, model_config);
 
         let messages = vec![Message::user().with_text("history to compact")];
-        let (msg, usage) = compaction_model.complete("summarize", &messages).await.unwrap();
+        let (msg, usage) = compaction_model
+            .complete("summarize", &messages)
+            .await
+            .unwrap();
 
-        assert_eq!(msg.content[0].as_text().unwrap(), "compacted: System: summarize\n\nUser: history to compact\n");
+        assert_eq!(
+            msg.content[0].as_text().unwrap(),
+            "compacted: System: summarize\n\nUser: history to compact\n"
+        );
         assert_eq!(usage.model, "test-compact-model");
     }
 }
-

@@ -4,10 +4,7 @@ use crate::api::*;
 use custos_core::contracts::terminal::TerminalPort;
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_workspaces_github(
-        &self,
-        req: ApiRequest,
-    ) -> ApiResponse {
+    pub(crate) async fn handle_workspaces_github(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_GITHUB_ACCOUNTS => {
                 let gh = match resolve_gh_binary() {

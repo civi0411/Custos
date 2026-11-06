@@ -35,9 +35,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0010_harden_outbox_and_effects.sql"
     ))?;
     conn.execute_batch(include_str!("../migrations/0011_runs_and_worker_runs.sql"))?;
-    let has_run_version = conn.prepare("PRAGMA table_info(runs)")?
+    let has_run_version = conn
+        .prepare("PRAGMA table_info(runs)")?
         .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<Vec<_>, _>>()?.iter().any(|column| column == "state_version");
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .any(|column| column == "state_version");
     if !has_run_version {
         let transaction = conn.unchecked_transaction()?;
         transaction.execute_batch(include_str!("../migrations/0040_run_state_versions.sql"))?;
@@ -103,16 +106,25 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0027_dispatch_claims_and_fencing.sql"
     ))?;
 
-    conn.execute_batch(include_str!("../migrations/0028_secure_provider_credentials.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0029_provider_account_routing.sql"))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0028_secure_provider_credentials.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0029_provider_account_routing.sql"
+    ))?;
     conn.execute_batch(include_str!("../migrations/0030_assistant_drafts.sql"))?;
     conn.execute_batch(include_str!("../migrations/0031_daemon_settings.sql"))?;
     let catalog_columns = conn
         .prepare("PRAGMA table_info(provider_model_catalog)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
-    if !catalog_columns.iter().any(|column| column == "capabilities_json") {
-        conn.execute_batch(include_str!("../migrations/0032_provider_model_capabilities.sql"))?;
+    if !catalog_columns
+        .iter()
+        .any(|column| column == "capabilities_json")
+    {
+        conn.execute_batch(include_str!(
+            "../migrations/0032_provider_model_capabilities.sql"
+        ))?;
     }
     conn.execute_batch(include_str!("../migrations/0033_local_models.sql"))?;
     conn.execute_batch(include_str!(
@@ -122,8 +134,13 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .prepare("PRAGMA table_info(research_execution_records)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
-    if !execution_columns.iter().any(|column| column == "record_json") {
-        conn.execute_batch(include_str!("../migrations/0035_research_execution_snapshot.sql"))?;
+    if !execution_columns
+        .iter()
+        .any(|column| column == "record_json")
+    {
+        conn.execute_batch(include_str!(
+            "../migrations/0035_research_execution_snapshot.sql"
+        ))?;
     }
     conn.execute_batch(include_str!("../migrations/0036_command_ledger.sql"))?;
     let ledger_columns = conn
@@ -139,13 +156,18 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     if !outbox_columns.iter().any(|column| column == "payload_json") {
-        conn.execute_batch(include_str!("../migrations/0039_outbox_dispatch_intent.sql"))?;
+        conn.execute_batch(include_str!(
+            "../migrations/0039_outbox_dispatch_intent.sql"
+        ))?;
     }
     let notebook_columns = conn
         .prepare("PRAGMA table_info(notebook_cells)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
-    if !notebook_columns.iter().any(|column| column == "notebook_id") {
+    if !notebook_columns
+        .iter()
+        .any(|column| column == "notebook_id")
+    {
         conn.execute_batch(include_str!(
             "../migrations/0041_notebook_document_binding.sql"
         ))?;
@@ -155,9 +177,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
     if quant_tables.is_empty() {
-        conn.execute_batch(include_str!(
-            "../migrations/0042_quant_live_pipeline.sql"
-        ))?;
+        conn.execute_batch(include_str!("../migrations/0042_quant_live_pipeline.sql"))?;
     }
     conn.execute_batch(include_str!("../migrations/0043_package_inventory.sql"))?;
     conn.execute_batch(include_str!(

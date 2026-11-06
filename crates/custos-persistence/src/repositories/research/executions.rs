@@ -207,27 +207,47 @@ impl ResearchRepository {
         let snapshot = serde_json::to_string(record)
             .map_err(|error| DomainError::Validation(error.to_string()))?;
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
-        let previous: Option<String> = tx.query_row(
-            "SELECT record_json FROM research_execution_records WHERE id = ?1",
-            params![record.id], |row| row.get(0),
-        ).optional().map_err(|error| DomainError::Validation(error.to_string()))?.flatten();
+        let tx = conn
+            .transaction()
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        let previous: Option<String> = tx
+            .query_row(
+                "SELECT record_json FROM research_execution_records WHERE id = ?1",
+                params![record.id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| DomainError::Validation(error.to_string()))?
+            .flatten();
         let is_new = previous.is_none();
         if let Some(previous) = previous {
-            let previous: ExecutionRecord = serde_json::from_str(&previous)
-                .map_err(|error| DomainError::Validation(format!("Invalid stored execution snapshot: {error}")))?;
-            if previous.latest_protected_checkpoint_step.is_some_and(|step|
-                record.latest_protected_checkpoint_step.is_none_or(|next| next < step))
-                || previous.latest_observed_step.is_some_and(|step|
-                    record.latest_observed_step.is_none_or(|next| next < step))
-                || previous.latest_local_checkpoint_step.is_some_and(|step|
-                    record.latest_local_checkpoint_step.is_none_or(|next| next < step))
+            let previous: ExecutionRecord = serde_json::from_str(&previous).map_err(|error| {
+                DomainError::Validation(format!("Invalid stored execution snapshot: {error}"))
+            })?;
+            if previous
+                .latest_protected_checkpoint_step
+                .is_some_and(|step| {
+                    record
+                        .latest_protected_checkpoint_step
+                        .is_none_or(|next| next < step)
+                })
+                || previous
+                    .latest_observed_step
+                    .is_some_and(|step| record.latest_observed_step.is_none_or(|next| next < step))
+                || previous.latest_local_checkpoint_step.is_some_and(|step| {
+                    record
+                        .latest_local_checkpoint_step
+                        .is_none_or(|next| next < step)
+                })
                 || (previous.backend.is_some() && previous.backend != record.backend)
                 || previous.resume_from_attempt_id != record.resume_from_attempt_id
                 || previous.resumed_from_checkpoint_id != record.resumed_from_checkpoint_id
                 || previous.output_namespace != record.output_namespace
             {
-                return Err(DomainError::Conflict("Execution lineage, output namespace and protected progress cannot be reset".into()));
+                return Err(DomainError::Conflict(
+                    "Execution lineage, output namespace and protected progress cannot be reset"
+                        .into(),
+                ));
             }
         }
         if let Some(parent_id) = record.resume_from_attempt_id.as_ref().filter(|_| is_new) {
@@ -235,14 +255,22 @@ impl ResearchRepository {
                 "SELECT record_json FROM research_execution_records WHERE id = ?1 AND recipe_id = ?2",
                 params![parent_id, record.recipe_id], |row| row.get(0),
             ).optional().map_err(|error| DomainError::Validation(error.to_string()))?.flatten();
-            let parent: ExecutionRecord = serde_json::from_str(&parent.ok_or_else(||
-                DomainError::Validation("Continuation parent snapshot was not found for this recipe".into()))?)
-                .map_err(|error| DomainError::Validation(error.to_string()))?;
-            let checkpoint = parent.checkpoint.as_ref().ok_or_else(||
-                DomainError::Validation("Continuation parent has no checkpoint".into()))?;
+            let parent: ExecutionRecord = serde_json::from_str(&parent.ok_or_else(|| {
+                DomainError::Validation(
+                    "Continuation parent snapshot was not found for this recipe".into(),
+                )
+            })?)
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+            let checkpoint = parent.checkpoint.as_ref().ok_or_else(|| {
+                DomainError::Validation("Continuation parent has no checkpoint".into())
+            })?;
             checkpoint.validate_for_state_resume()?;
-            if record.resumed_from_checkpoint_id.as_deref() != Some(checkpoint.checkpoint_id.as_str())
-                || record.output_namespace.as_ref().is_none_or(|ns| ns.trim().is_empty())
+            if record.resumed_from_checkpoint_id.as_deref()
+                != Some(checkpoint.checkpoint_id.as_str())
+                || record
+                    .output_namespace
+                    .as_ref()
+                    .is_none_or(|ns| ns.trim().is_empty())
                 || record.output_namespace == parent.output_namespace
             {
                 return Err(DomainError::Validation("Continuation must select the parent's protected checkpoint and an isolated output namespace".into()));
@@ -259,8 +287,9 @@ impl ResearchRepository {
         let artifacts_json = serde_json::to_string(&record.artifacts)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let affected = tx.execute(
-            "INSERT INTO research_execution_records (
+        let affected = tx
+            .execute(
+                "INSERT INTO research_execution_records (
                 id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
                 started_at, ended_at, artifacts_json, record_json
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
@@ -275,38 +304,50 @@ impl ResearchRepository {
                 record_json = excluded.record_json
             WHERE research_execution_records.recipe_id = excluded.recipe_id
               AND research_execution_records.session_id IS excluded.session_id",
+                params![
+                    record.id,
+                    record.recipe_id,
+                    record.session_id,
+                    status_str,
+                    record.exit_code,
+                    record.stdout_cas_uri,
+                    record.stderr_cas_uri,
+                    record.started_at.timestamp(),
+                    record.ended_at.map(|dt| dt.timestamp()),
+                    artifacts_json,
+                    snapshot,
+                ],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        if affected != 1 {
+            return Err(DomainError::Conflict(
+                "Execution recipe and session identities are immutable".into(),
+            ));
+        }
+        tx.execute(
+            "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                record.id,
-                record.recipe_id,
-                record.session_id,
-                status_str,
-                record.exit_code,
-                record.stdout_cas_uri,
-                record.stderr_cas_uri,
-                record.started_at.timestamp(),
-                record.ended_at.map(|dt| dt.timestamp()),
-                artifacts_json,
-                snapshot,
+                custos_domain::new_id("exec_event"),
+                "research.execution.saved",
+                serde_json::json!({"execution_id": record.id, "recipe_id": record.recipe_id,
+                    "protected_step": record.latest_protected_checkpoint_step})
+                .to_string(),
+                Utc::now().timestamp()
             ],
         )
-        .map_err(|e| DomainError::Validation(e.to_string()))?;
-        if affected != 1 {
-            return Err(DomainError::Conflict("Execution recipe and session identities are immutable".into()));
-        }
-        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![custos_domain::new_id("exec_event"), "research.execution.saved",
-                serde_json::json!({"execution_id": record.id, "recipe_id": record.recipe_id,
-                    "protected_step": record.latest_protected_checkpoint_step}).to_string(), Utc::now().timestamp()])
+        .map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit()
             .map_err(|error| DomainError::Validation(error.to_string()))?;
-        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(())
     }
 
     fn decode_execution_snapshot(snapshot: &str) -> rusqlite::Result<ExecutionRecord> {
-        let record: ExecutionRecord = serde_json::from_str(snapshot)
-            .map_err(|error| rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error)))?;
-        record.validate_compute_state()
-            .map_err(|error| rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error)))?;
+        let record: ExecutionRecord = serde_json::from_str(snapshot).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error))
+        })?;
+        record.validate_compute_state().map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error))
+        })?;
         Ok(record)
     }
 
@@ -324,8 +365,10 @@ impl ResearchRepository {
             .query_map(params![id], |row| {
                 if let Some(snapshot) = row.get::<_, Option<String>>(10)? {
                     let record = Self::decode_execution_snapshot(&snapshot)?;
-                    if record.id != row.get::<_, String>(0)? || record.recipe_id != row.get::<_, String>(1)?
-                        || record.session_id != row.get::<_, Option<String>>(2)? {
+                    if record.id != row.get::<_, String>(0)?
+                        || record.recipe_id != row.get::<_, String>(1)?
+                        || record.session_id != row.get::<_, Option<String>>(2)?
+                    {
                         return Err(rusqlite::Error::InvalidQuery);
                     }
                     return Ok(record);
@@ -343,9 +386,10 @@ impl ResearchRepository {
                 let started_ts: i64 = row.get(7)?;
                 let ended_ts: Option<i64> = row.get(8)?;
                 let artifacts_json: String = row.get(9)?;
-                let artifacts: Vec<ExecutionArtifact> =
-                    serde_json::from_str(&artifacts_json).map_err(|error|
-                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error)))?;
+                let artifacts: Vec<ExecutionArtifact> = serde_json::from_str(&artifacts_json)
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error))
+                    })?;
 
                 Ok(ExecutionRecord {
                     id: row.get(0)?,
@@ -395,8 +439,10 @@ impl ResearchRepository {
             .query_map(params![recipe_id], |row| {
                 if let Some(snapshot) = row.get::<_, Option<String>>(10)? {
                     let record = Self::decode_execution_snapshot(&snapshot)?;
-                    if record.id != row.get::<_, String>(0)? || record.recipe_id != row.get::<_, String>(1)?
-                        || record.session_id != row.get::<_, Option<String>>(2)? {
+                    if record.id != row.get::<_, String>(0)?
+                        || record.recipe_id != row.get::<_, String>(1)?
+                        || record.session_id != row.get::<_, Option<String>>(2)?
+                    {
                         return Err(rusqlite::Error::InvalidQuery);
                     }
                     return Ok(record);
@@ -414,9 +460,10 @@ impl ResearchRepository {
                 let started_ts: i64 = row.get(7)?;
                 let ended_ts: Option<i64> = row.get(8)?;
                 let artifacts_json: String = row.get(9)?;
-                let artifacts: Vec<ExecutionArtifact> =
-                    serde_json::from_str(&artifacts_json).map_err(|error|
-                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error)))?;
+                let artifacts: Vec<ExecutionArtifact> = serde_json::from_str(&artifacts_json)
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error))
+                    })?;
 
                 Ok(ExecutionRecord {
                     id: row.get(0)?,

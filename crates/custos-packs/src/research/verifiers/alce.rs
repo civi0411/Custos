@@ -3,10 +3,10 @@
 //! Provides Natural Language Inference (NLI) and factual grounding verification
 //! for scientific research claims against cryptographically anchored source passages.
 
+use custos_domain::error::DomainError;
 use custos_domain::evidence::{
     AssessmentStatus, ClaimAssessmentRecord, EntailmentVerdict, PassageAnchor, ResearchClaim,
 };
-use custos_domain::error::DomainError;
 
 pub struct AlceEntailmentEngine {
     evaluator_id: String,
@@ -55,7 +55,10 @@ impl AlceEntailmentEngine {
         }
 
         // Extract key terms (tokens with len > 3, excluding stop words)
-        let stop_words = ["that", "this", "with", "from", "have", "were", "been", "their", "which", "there", "about"];
+        let stop_words = [
+            "that", "this", "with", "from", "have", "were", "been", "their", "which", "there",
+            "about",
+        ];
         let h_tokens: Vec<&str> = h
             .split_whitespace()
             .filter(|w| w.len() > 3 && !stop_words.contains(w))
@@ -78,7 +81,16 @@ impl AlceEntailmentEngine {
         let overlap_ratio = (matched as f32) / (h_tokens.len() as f32);
 
         // Check for direct polarity contradiction
-        let negations = ["not", "never", "fails", "refutes", "contradicts", "opposite", "decreases", "no evidence"];
+        let negations = [
+            "not",
+            "never",
+            "fails",
+            "refutes",
+            "contradicts",
+            "opposite",
+            "decreases",
+            "no evidence",
+        ];
         let p_has_neg = negations.iter().any(|&neg| p.contains(neg));
         let h_has_neg = negations.iter().any(|&neg| h.contains(neg));
 
@@ -95,12 +107,18 @@ impl AlceEntailmentEngine {
         if overlap_ratio >= 0.70 {
             EntailmentVerdict::Entailed {
                 confidence: (overlap_ratio * 0.95).min(0.95),
-                rationale: format!("Substantive conceptual overlap ({:.1}%) establishes premise entailment", overlap_ratio * 100.0),
+                rationale: format!(
+                    "Substantive conceptual overlap ({:.1}%) establishes premise entailment",
+                    overlap_ratio * 100.0
+                ),
             }
         } else if overlap_ratio >= 0.40 {
             EntailmentVerdict::Neutral {
                 confidence: overlap_ratio * 0.8,
-                rationale: format!("Partial topical overlap ({:.1}%) insufficient for rigorous verification", overlap_ratio * 100.0),
+                rationale: format!(
+                    "Partial topical overlap ({:.1}%) insufficient for rigorous verification",
+                    overlap_ratio * 100.0
+                ),
             }
         } else {
             EntailmentVerdict::Neutral {
@@ -130,7 +148,9 @@ impl AlceEntailmentEngine {
         let status = match verdict {
             // Lexical overlap is a heuristic signal; emit Passed (provisional lexical match),
             // never Verified without downstream semantic review.
-            EntailmentVerdict::Entailed { confidence, .. } if confidence >= self.confidence_threshold => {
+            EntailmentVerdict::Entailed { confidence, .. }
+                if confidence >= self.confidence_threshold =>
+            {
                 AssessmentStatus::Passed
             }
             EntailmentVerdict::Contradicted { .. } => AssessmentStatus::Rejected,
@@ -186,9 +206,10 @@ mod tests {
     #[test]
     fn test_alce_claim_assessment_lifecycle() {
         let engine = AlceEntailmentEngine::new();
-        let mut claim = ResearchClaimProposal::new("FlashAttention achieves linear memory scaling", 1)
-            .unwrap()
-            .into_unverified_claim();
+        let mut claim =
+            ResearchClaimProposal::new("FlashAttention achieves linear memory scaling", 1)
+                .unwrap()
+                .into_unverified_claim();
 
         let anchor = PassageAnchor {
             id: "anchor_fa_01".into(),

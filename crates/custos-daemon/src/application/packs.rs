@@ -3,25 +3,32 @@
 use super::*;
 
 impl LocalApiDispatcher {
-    pub(crate) fn require_pack_enabled(&self, pack_id: &str, req_id: &str) -> Result<(), ApiResponse> {
+    pub(crate) fn require_pack_enabled(
+        &self,
+        pack_id: &str,
+        req_id: &str,
+    ) -> Result<(), ApiResponse> {
         let canonical = match pack_id {
             "quant" => "quant",
             "research" => "research",
             "coding" | "engineering" => "engineering",
             "assistant" | "copilot" => "assistant",
-            _ => return Err(ApiResponse::error(req_id, format!("Unknown pack: {pack_id}"))),
+            _ => {
+                return Err(ApiResponse::error(
+                    req_id,
+                    format!("Unknown pack: {pack_id}"),
+                ))
+            }
         };
         // Check dynamic enablement in persistent store first
         if let Some(store) = self.sqlite_store.as_ref() {
             if let Ok(enabled_components) = store.packages().list_enabled_components() {
-                let is_enabled = enabled_components.iter().any(|c| {
-                    match c.as_str() {
-                        "quant" if canonical == "quant" => true,
-                        "research" if canonical == "research" => true,
-                        "coding" | "engineering" if canonical == "engineering" => true,
-                        "assistant" | "copilot" if canonical == "assistant" => true,
-                        other => other == canonical,
-                    }
+                let is_enabled = enabled_components.iter().any(|c| match c.as_str() {
+                    "quant" if canonical == "quant" => true,
+                    "research" if canonical == "research" => true,
+                    "coding" | "engineering" if canonical == "engineering" => true,
+                    "assistant" | "copilot" if canonical == "assistant" => true,
+                    other => other == canonical,
                 });
                 if !is_enabled {
                     return Err(ApiResponse::error(
@@ -43,7 +50,9 @@ impl LocalApiDispatcher {
 
     pub(crate) async fn handle_packs(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
-            "packages.list_inventory" | "v1.packages.list_inventory" | "custos.packages.list_inventory" => {
+            "packages.list_inventory"
+            | "v1.packages.list_inventory"
+            | "custos.packages.list_inventory" => {
                 let store = match self.sqlite_store.as_ref() {
                     Some(s) => s,
                     None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
@@ -80,15 +89,35 @@ impl LocalApiDispatcher {
                     Some(id) => id,
                     None => return ApiResponse::error(req.id, "Missing 'component_id' parameter"),
                 };
-                let version = req.params.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0");
-                let platform = req.params.get("platform").and_then(|v| v.as_str()).unwrap_or(std::env::consts::OS);
+                let version = req
+                    .params
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("0.1.0");
+                let platform = req
+                    .params
+                    .get("platform")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(std::env::consts::OS);
                 let source_url = req.params.get("source_url").and_then(|v| v.as_str());
                 let expected_digest = req.params.get("expected_digest").and_then(|v| v.as_str());
-                let command_id = format!("cmd_install_{}_{}", component_id, custos_domain::new_id("inst"));
+                let command_id = format!(
+                    "cmd_install_{}_{}",
+                    component_id,
+                    custos_domain::new_id("inst")
+                );
 
                 // 1. Record activation intent
-                if let Err(e) = store.packages().record_activation_intent(component_id, version, platform, &command_id) {
-                    return ApiResponse::error(req.id, format!("Failed to record activation intent: {e}"));
+                if let Err(e) = store.packages().record_activation_intent(
+                    component_id,
+                    version,
+                    platform,
+                    &command_id,
+                ) {
+                    return ApiResponse::error(
+                        req.id,
+                        format!("Failed to record activation intent: {e}"),
+                    );
                 }
 
                 let root_dir = dirs::home_dir()
@@ -96,25 +125,46 @@ impl LocalApiDispatcher {
                     .unwrap_or_else(|| std::path::PathBuf::from(".custos"));
 
                 // 2. Physical transfer & validation
-                let (installed_path_str, actual_digest_str) = if let (Some(url), Some(digest)) = (source_url, expected_digest) {
-                    let adapter = custos_adapters::packages::LocalPackageTransferAdapter::new(&root_dir);
+                let (installed_path_str, actual_digest_str) = if let (Some(url), Some(digest)) =
+                    (source_url, expected_digest)
+                {
+                    let adapter =
+                        custos_adapters::packages::LocalPackageTransferAdapter::new(&root_dir);
                     use custos_core::contracts::packages::PackageTransferPort;
                     let staged = match adapter.download_to_staging(url, component_id, None).await {
                         Ok(staged) => staged,
                         Err(e) => {
-                            let _ = store.packages().mark_failed(component_id, version, platform, &e.to_string());
+                            let _ = store.packages().mark_failed(
+                                component_id,
+                                version,
+                                platform,
+                                &e.to_string(),
+                            );
                             return ApiResponse::error(req.id, format!("Download failed: {e}"));
                         }
                     };
                     if let Err(e) = adapter.verify_staged(&staged, digest).await {
-                        let _ = store.packages().mark_failed(component_id, version, platform, &e.to_string());
-                        return ApiResponse::error(req.id, format!("Digest verification failed: {e}"));
+                        let _ = store.packages().mark_failed(
+                            component_id,
+                            version,
+                            platform,
+                            &e.to_string(),
+                        );
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Digest verification failed: {e}"),
+                        );
                     }
                     let actual_digest = staged.actual_digest.clone();
                     match adapter.promote_staged(staged, component_id, version).await {
                         Ok(installed) => (installed.0.display().to_string(), Some(actual_digest)),
                         Err(e) => {
-                            let _ = store.packages().mark_failed(component_id, version, platform, &e.to_string());
+                            let _ = store.packages().mark_failed(
+                                component_id,
+                                version,
+                                platform,
+                                &e.to_string(),
+                            );
                             return ApiResponse::error(req.id, format!("Promotion failed: {e}"));
                         }
                     }
@@ -138,8 +188,16 @@ impl LocalApiDispatcher {
                         let bytes = match std::fs::read(&file_path) {
                             Ok(b) => b,
                             Err(e) => {
-                                let _ = store.packages().mark_failed(component_id, version, platform, &e.to_string());
-                                return ApiResponse::error(req.id, format!("Failed reading verified local artifact: {e}"));
+                                let _ = store.packages().mark_failed(
+                                    component_id,
+                                    version,
+                                    platform,
+                                    &e.to_string(),
+                                );
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!("Failed reading verified local artifact: {e}"),
+                                );
                             }
                         };
                         use sha2::{Digest, Sha256};
@@ -152,7 +210,10 @@ impl LocalApiDispatcher {
                             "Cannot install package '{component_id}': no source URL or digest specified and no verified local package found in {}",
                             target_dir.display()
                         );
-                        let _ = store.packages().mark_failed(component_id, version, platform, &reason);
+                        let _ =
+                            store
+                                .packages()
+                                .mark_failed(component_id, version, platform, &reason);
                         return ApiResponse::error(req.id, reason);
                     }
                 };
@@ -165,18 +226,26 @@ impl LocalApiDispatcher {
                     actual_digest_str.as_deref(),
                     &installed_path_str,
                 ) {
-                    return ApiResponse::error(req.id, format!("Failed to commit package installation: {e}"));
+                    return ApiResponse::error(
+                        req.id,
+                        format!("Failed to commit package installation: {e}"),
+                    );
                 }
 
-                ApiResponse::success(req.id, serde_json::json!({
-                    "status": "installed",
-                    "component_id": component_id,
-                    "version": version,
-                    "command_id": command_id,
-                    "installed_path": installed_path_str,
-                }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "status": "installed",
+                        "component_id": component_id,
+                        "version": version,
+                        "command_id": command_id,
+                        "installed_path": installed_path_str,
+                    }),
+                )
             }
-            "packages.cancel_install" | "v1.packages.cancel_install" | "custos.packages.cancel_install" => {
+            "packages.cancel_install"
+            | "v1.packages.cancel_install"
+            | "custos.packages.cancel_install" => {
                 let store = match self.sqlite_store.as_ref() {
                     Some(s) => s,
                     None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
@@ -185,12 +254,28 @@ impl LocalApiDispatcher {
                     Some(id) => id,
                     None => return ApiResponse::error(req.id, "Missing 'component_id' parameter"),
                 };
-                let version = req.params.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0");
-                let platform = req.params.get("platform").and_then(|v| v.as_str()).unwrap_or(std::env::consts::OS);
-                if let Err(e) = store.packages().mark_failed(component_id, version, platform, "Installation cancelled by user") {
+                let version = req
+                    .params
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("0.1.0");
+                let platform = req
+                    .params
+                    .get("platform")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(std::env::consts::OS);
+                if let Err(e) = store.packages().mark_failed(
+                    component_id,
+                    version,
+                    platform,
+                    "Installation cancelled by user",
+                ) {
                     return ApiResponse::error(req.id, e.to_string());
                 }
-                ApiResponse::success(req.id, serde_json::json!({ "status": "cancelled", "component_id": component_id }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({ "status": "cancelled", "component_id": component_id }),
+                )
             }
             "packages.enable" | "v1.packages.enable" | "custos.packages.enable" => {
                 let store = match self.sqlite_store.as_ref() {
@@ -204,7 +289,10 @@ impl LocalApiDispatcher {
                 if let Err(e) = store.packages().enable(component_id) {
                     return ApiResponse::error(req.id, e.to_string());
                 }
-                ApiResponse::success(req.id, serde_json::json!({ "status": "enabled", "component_id": component_id }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({ "status": "enabled", "component_id": component_id }),
+                )
             }
             "packages.disable" | "v1.packages.disable" | "custos.packages.disable" => {
                 let store = match self.sqlite_store.as_ref() {
@@ -218,9 +306,14 @@ impl LocalApiDispatcher {
                 if let Err(e) = store.packages().disable(component_id) {
                     return ApiResponse::error(req.id, e.to_string());
                 }
-                ApiResponse::success(req.id, serde_json::json!({ "status": "disabled", "component_id": component_id }))
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({ "status": "disabled", "component_id": component_id }),
+                )
             }
-            METHOD_PACKS_MANIFESTS_LIST | "packs.manifests.list" | "custos.packs.manifests.list" => {
+            METHOD_PACKS_MANIFESTS_LIST
+            | "packs.manifests.list"
+            | "custos.packs.manifests.list" => {
                 let manifests = self.pack_registry.list_packs();
                 match serde_json::to_value(&manifests) {
                     Ok(val) => ApiResponse::success(req.id, val),
@@ -247,7 +340,8 @@ impl LocalApiDispatcher {
                                     || fl.eq_ignore_ascii_case("chat")
                             }
                             custos_domain::WorkbenchLens::Quant => {
-                                fl.eq_ignore_ascii_case("quant") || fl.eq_ignore_ascii_case("trading")
+                                fl.eq_ignore_ascii_case("quant")
+                                    || fl.eq_ignore_ascii_case("trading")
                             }
                         };
                         if !matches_lens {

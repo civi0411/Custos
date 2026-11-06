@@ -146,7 +146,8 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         let ignored_set: HashSet<&str> = IGNORED_DIRS.iter().copied().collect();
 
         // Breadth-first traversal with bounded capacity
-        let mut queue: std::collections::VecDeque<(PathBuf, usize)> = std::collections::VecDeque::new();
+        let mut queue: std::collections::VecDeque<(PathBuf, usize)> =
+            std::collections::VecDeque::new();
         queue.push_back((start_dir.clone(), 0));
 
         while let Some((curr_dir, depth)) = queue.pop_front() {
@@ -283,7 +284,9 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         })?;
         let mut bytes = Vec::with_capacity(limit.min(file_len).saturating_add(1));
         file.take(limit.saturating_add(1) as u64)
-            .read_to_end(&mut bytes).await.map_err(|e| {
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|e| {
                 DomainError::Validation(format!("Failed to read file '{}': {}", relative_path, e))
             })?;
 
@@ -292,7 +295,9 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         let sample = &bytes[..bytes.len().min(8192)];
         let is_binary = bytes.starts_with(b"%PDF-")
             || sample.contains(&0)
-            || std::str::from_utf8(&bytes).err().is_some_and(|error| error.error_len().is_some());
+            || std::str::from_utf8(&bytes)
+                .err()
+                .is_some_and(|error| error.error_len().is_some());
 
         if is_binary {
             use base64::Engine;
@@ -661,16 +666,31 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
     ) -> Result<String, DomainError> {
         let base_dir = Path::new(&workspace.path);
         if message.trim().is_empty() {
-            return Err(DomainError::Validation("Commit message cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Commit message cannot be empty".into(),
+            ));
         }
 
-        let staged = Command::new("git").current_dir(base_dir)
-            .args(["diff", "--cached", "--quiet"]).status().await
-            .map_err(|error| DomainError::Validation(format!("Cannot inspect staged changes: {error}")))?;
+        let staged = Command::new("git")
+            .current_dir(base_dir)
+            .args(["diff", "--cached", "--quiet"])
+            .status()
+            .await
+            .map_err(|error| {
+                DomainError::Validation(format!("Cannot inspect staged changes: {error}"))
+            })?;
         match staged.code() {
-            Some(1) => {},
-            Some(0) => return Err(DomainError::Validation("No staged changes. Stage the intended files before committing.".into())),
-            _ => return Err(DomainError::Validation("Cannot inspect staged changes".into())),
+            Some(1) => {}
+            Some(0) => {
+                return Err(DomainError::Validation(
+                    "No staged changes. Stage the intended files before committing.".into(),
+                ))
+            }
+            _ => {
+                return Err(DomainError::Validation(
+                    "Cannot inspect staged changes".into(),
+                ))
+            }
         }
 
         let out = Command::new("git")
@@ -684,7 +704,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
-            return Err(DomainError::Validation(format!("git commit failed: {}", err)));
+            return Err(DomainError::Validation(format!(
+                "git commit failed: {}",
+                err
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -796,7 +819,9 @@ mod tests {
         // 4. Test binary file read encodes base64
         let binary_path = test_dir.join("sample.bin");
         let sample_bytes = vec![0u8, 1, 2, 3, 255, 0, 42];
-        fs::write(&binary_path, &sample_bytes).await.expect("write binary");
+        fs::write(&binary_path, &sample_bytes)
+            .await
+            .expect("write binary");
         let read_bin = coord
             .read_file(&ws, "sample.bin", None)
             .await
@@ -804,22 +829,44 @@ mod tests {
         assert!(read_bin.is_binary);
         assert!(!read_bin.content.is_empty());
         use base64::Engine;
-        let decoded = base64::engine::general_purpose::STANDARD.decode(&read_bin.content).expect("valid base64");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&read_bin.content)
+            .expect("valid base64");
         assert_eq!(decoded, sample_bytes);
 
         // An ASCII PDF header and non-UTF8 binary must survive byte-for-byte.
-        for (name, bytes) in [("paper.pdf", b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF".as_slice()),
-                              ("non-null.bin", &[0xff, 0xfe, 0x80, 1, 2])] {
+        for (name, bytes) in [
+            (
+                "paper.pdf",
+                b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF".as_slice(),
+            ),
+            ("non-null.bin", &[0xff, 0xfe, 0x80, 1, 2]),
+        ] {
             fs::write(test_dir.join(name), bytes).await.unwrap();
             let read = coord.read_file(&ws, name, None).await.unwrap();
             assert!(read.is_binary, "{name}");
-            assert_eq!(base64::engine::general_purpose::STANDARD.decode(read.content).unwrap(), bytes);
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(read.content)
+                    .unwrap(),
+                bytes
+            );
         }
-        fs::write(test_dir.join("large.pdf"), b"%PDF-1.7\ntruncated payload").await.unwrap();
+        fs::write(test_dir.join("large.pdf"), b"%PDF-1.7\ntruncated payload")
+            .await
+            .unwrap();
         let limited = coord.read_file(&ws, "large.pdf", Some(8)).await.unwrap();
         assert!(limited.truncated && limited.is_binary);
-        assert_eq!(base64::engine::general_purpose::STANDARD.decode(limited.content).unwrap().len(), 8);
-        fs::write(test_dir.join("utf8.txt"), "abcédef").await.unwrap();
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(limited.content)
+                .unwrap()
+                .len(),
+            8
+        );
+        fs::write(test_dir.join("utf8.txt"), "abcédef")
+            .await
+            .unwrap();
         let utf8 = coord.read_file(&ws, "utf8.txt", Some(4)).await.unwrap();
         assert!(!utf8.is_binary && utf8.truncated);
         assert_eq!(utf8.content, "abc");

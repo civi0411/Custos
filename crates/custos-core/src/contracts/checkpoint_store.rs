@@ -55,7 +55,11 @@ pub trait CheckpointStorePort: Send + Sync {
     async fn get_blob(&self, prefix: &str, name: &str) -> Result<Option<Vec<u8>>, DomainError>;
 
     /// Probes metadata for a blob in an attempt prefix
-    async fn head_blob(&self, prefix: &str, name: &str) -> Result<Option<BlobMetadata>, DomainError>;
+    async fn head_blob(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Result<Option<BlobMetadata>, DomainError>;
 
     /// Publishes an immutable manifest for an attempt checkpoint
     async fn publish_manifest(

@@ -100,7 +100,11 @@ impl Skill for AxTreeAuditSkill {
 
             // 2. Check for missing accessible name/label
             if is_interactive {
-                let has_name = node.name.as_ref().map(|n| !n.trim().is_empty()).unwrap_or(false);
+                let has_name = node
+                    .name
+                    .as_ref()
+                    .map(|n| !n.trim().is_empty())
+                    .unwrap_or(false);
                 if !has_name {
                     violations.push(json!({
                         "severity": "critical",

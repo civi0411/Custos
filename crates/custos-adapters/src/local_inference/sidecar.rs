@@ -86,12 +86,24 @@ pub async fn is_sidecar_healthy() -> bool {
 /// Returns the currently loaded sidecar instance, if active and running.
 pub async fn get_loaded_sidecar_instance() -> Option<LoadedModelInstance> {
     let manager = get_manager();
-    let (model_name, model_path, context_size, loaded_at, profile_revision, gpu_layers, generation_verified) = {
+    let (
+        model_name,
+        model_path,
+        context_size,
+        loaded_at,
+        profile_revision,
+        gpu_layers,
+        generation_verified,
+    ) = {
         let guard = manager.lock().await;
         let active = guard.as_ref()?;
         (
-            active.model_name.clone(), active.model_path.clone(), active.context_size,
-            active.loaded_at, active.profile_revision, active.gpu_layers,
+            active.model_name.clone(),
+            active.model_path.clone(),
+            active.context_size,
+            active.loaded_at,
+            active.profile_revision,
+            active.gpu_layers,
             active.generation_verified,
         )
     };
@@ -133,7 +145,11 @@ pub async fn start_sidecar(
         "max" => Some(u32::MAX),
         "off" => Some(0),
         "manual" => profile.gpu_layers,
-        other => return Err(ProviderError::ExecutionError(format!("Unsupported GPU mode: {other}"))),
+        other => {
+            return Err(ProviderError::ExecutionError(format!(
+                "Unsupported GPU mode: {other}"
+            )))
+        }
     };
     let binary = find_llama_server_binary().ok_or_else(|| {
         ProviderError::ExecutionError(
@@ -192,7 +208,11 @@ pub async fn start_sidecar(
         .arg("1")
         .kill_on_drop(true);
     if let Some(layers) = gpu_layers {
-        cmd.arg("-ngl").arg(if layers == u32::MAX { "999".to_string() } else { layers.to_string() });
+        cmd.arg("-ngl").arg(if layers == u32::MAX {
+            "999".to_string()
+        } else {
+            layers.to_string()
+        });
     }
     if let Some(batch) = profile.eval_batch_size {
         cmd.arg("-b").arg(batch.to_string());
@@ -201,7 +221,8 @@ pub async fn start_sidecar(
         cmd.arg("-t").arg(threads.to_string());
     }
     if let Some(flash_attention) = profile.flash_attention {
-        cmd.arg("-fa").arg(if flash_attention { "on" } else { "off" });
+        cmd.arg("-fa")
+            .arg(if flash_attention { "on" } else { "off" });
     }
     if !profile.mmap {
         cmd.arg("--no-mmap");
@@ -223,7 +244,11 @@ pub async fn start_sidecar(
         tokio::spawn(drain_diagnostics(stdout, "stdout", None));
     }
     if let Some(stderr) = child.stderr.take() {
-        tokio::spawn(drain_diagnostics(stderr, "stderr", Some(stderr_buffer.clone())));
+        tokio::spawn(drain_diagnostics(
+            stderr,
+            "stderr",
+            Some(stderr_buffer.clone()),
+        ));
     }
 
     // 3. Poll health check until model finishes loading into GPU
@@ -293,7 +318,11 @@ pub async fn start_sidecar(
         &custos_domain::digest(model_name.as_bytes())[..12]
     );
 
-    let reported_gpu_layers = if matches!(profile.gpu_mode.as_str(), "manual" | "off") { gpu_layers } else { None };
+    let reported_gpu_layers = if matches!(profile.gpu_mode.as_str(), "manual" | "off") {
+        gpu_layers
+    } else {
+        None
+    };
     let instance = LoadedModelInstance {
         instance_id,
         model_name: model_name.clone(),
@@ -394,12 +423,11 @@ pub async fn verify_sidecar_generation(model_name: &str) -> Result<String, Provi
         "max_tokens": 2,
         "stream": false
     });
-    let res = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| ProviderError::ExecutionError(format!("Failed to connect to sidecar for verification: {e}")))?;
+    let res = client.post(&url).json(&body).send().await.map_err(|e| {
+        ProviderError::ExecutionError(format!(
+            "Failed to connect to sidecar for verification: {e}"
+        ))
+    })?;
     let status = res.status();
     if !status.is_success() {
         let err_text = res.text().await.unwrap_or_default();
@@ -407,10 +435,11 @@ pub async fn verify_sidecar_generation(model_name: &str) -> Result<String, Provi
             "Sidecar verification probe failed (HTTP {status}): {err_text}"
         )));
     }
-    let json = res
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| ProviderError::ExecutionError(format!("Failed to parse sidecar verification response: {e}")))?;
+    let json = res.json::<serde_json::Value>().await.map_err(|e| {
+        ProviderError::ExecutionError(format!(
+            "Failed to parse sidecar verification response: {e}"
+        ))
+    })?;
     let content = json
         .pointer("/choices/0/message/content")
         .and_then(|v| v.as_str())

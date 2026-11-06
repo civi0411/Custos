@@ -31,12 +31,20 @@ impl ExternalJobRef {
         job_id: impl Into<String>,
         version_id: impl Into<String>,
     ) -> Result<Self, DomainError> {
-        let r = Self { account_ref: account_ref.into(), job_id: job_id.into(), version_id: version_id.into() };
+        let r = Self {
+            account_ref: account_ref.into(),
+            job_id: job_id.into(),
+            version_id: version_id.into(),
+        };
         let bad = |s: &str| s.trim().is_empty();
-        if bad(&r.account_ref) || bad(&r.job_id) || bad(&r.version_id)
+        if bad(&r.account_ref)
+            || bad(&r.job_id)
+            || bad(&r.version_id)
             || r.version_id.trim().eq_ignore_ascii_case("latest")
         {
-            return Err(invalid("External job ref needs account, job and a pinned (non-'latest') version"));
+            return Err(invalid(
+                "External job ref needs account, job and a pinned (non-'latest') version",
+            ));
         }
         Ok(r)
     }
@@ -153,7 +161,9 @@ impl ExecutionAttempt {
             (S::Submitting, E::SubmitAcked(_)) => S::Submitted,
             (S::Submitting, E::SubmitRejected) => S::Failed,
             (S::Submitted, E::ObservedRunning) => S::Running,
-            (S::Submitting | S::Submitted | S::Running | S::Stopping, E::ConnectionLost) => S::Uncertain,
+            (S::Submitting | S::Submitted | S::Running | S::Stopping, E::ConnectionLost) => {
+                S::Uncertain
+            }
             (S::Uncertain, E::ReconciledRunning) => S::Running,
             (S::Uncertain, E::ReconciledCompleted) => S::Completed,
             (S::Uncertain, E::ReconciledFailed) => S::Failed,
@@ -248,7 +258,9 @@ impl ProgressTriplet {
         let l = self.local.unwrap_or(0);
         let p = self.protected.unwrap_or(0);
         if p > l || l > o {
-            return Err(invalid("Progress must satisfy protected <= local <= observed"));
+            return Err(invalid(
+                "Progress must satisfy protected <= local <= observed",
+            ));
         }
         Ok(())
     }
@@ -284,8 +296,13 @@ pub fn protection_status(
     if inflight_uploads > policy.max_inflight_uploads {
         return ProtectionStatus::Degraded;
     }
-    let gap = progress.observed.unwrap_or(0).saturating_sub(progress.protected.unwrap_or(0));
-    if gap > policy.max_unprotected_steps || (gap > 0 && secs_since_protected > policy.max_unprotected_secs) {
+    let gap = progress
+        .observed
+        .unwrap_or(0)
+        .saturating_sub(progress.protected.unwrap_or(0));
+    if gap > policy.max_unprotected_steps
+        || (gap > 0 && secs_since_protected > policy.max_unprotected_secs)
+    {
         ProtectionStatus::AtRisk
     } else {
         ProtectionStatus::Protected
@@ -345,7 +362,10 @@ impl VerificationReport {
     }
 
     pub fn unverified(&self) -> Vec<&Check> {
-        self.checks.iter().filter(|c| c.status == CheckStatus::Unverified).collect()
+        self.checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Unverified)
+            .collect()
     }
 }
 
@@ -360,11 +380,17 @@ pub struct TargetCaps {
 #[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum ResumeVerdict {
     /// Only for the verified engine profile; never a general guarantee.
-    StateResumeSupported { profile: String },
+    StateResumeSupported {
+        profile: String,
+    },
     /// Recipe/environment deltas; optimizer dynamics may differ.
-    AdaptedContinuation { deltas: Vec<String> },
+    AdaptedContinuation {
+        deltas: Vec<String>,
+    },
     WeightsOnlyWarmStart,
-    Unsupported { reasons: Vec<String> },
+    Unsupported {
+        reasons: Vec<String>,
+    },
 }
 
 fn has_weights(m: &TrainingCheckpointManifest) -> bool {
@@ -382,7 +408,9 @@ pub fn classify(
     caps: TargetCaps,
 ) -> ResumeVerdict {
     use CheckGroup as G;
-    let unsupported = |r: &str| ResumeVerdict::Unsupported { reasons: vec![r.into()] };
+    let unsupported = |r: &str| ResumeVerdict::Unsupported {
+        reasons: vec![r.into()],
+    };
 
     if let Err(e) = manifest.validate() {
         return unsupported(&e.to_string());
@@ -407,7 +435,9 @@ pub fn classify(
         && report.all_pass(G::DataContinuity);
 
     if state_ok && report.all_pass(G::Environment) {
-        return ResumeVerdict::StateResumeSupported { profile: report.profile.clone() };
+        return ResumeVerdict::StateResumeSupported {
+            profile: report.profile.clone(),
+        };
     }
     if state_ok && report.any_fail(G::Environment) {
         let deltas = report
@@ -428,47 +458,78 @@ mod tests {
     use super::*;
     use crate::compute::{CheckpointFileEntry, ResumabilityLevel};
 
-    fn digest() -> String { "a".repeat(64) }
+    fn digest() -> String {
+        "a".repeat(64)
+    }
 
     fn file(path: &str, req: bool) -> CheckpointFileEntry {
-        CheckpointFileEntry { path: path.into(), size_bytes: 1, digest: digest(), required_for_state_resume: req }
+        CheckpointFileEntry {
+            path: path.into(),
+            size_bytes: 1,
+            digest: digest(),
+            required_for_state_resume: req,
+        }
     }
 
     fn manifest() -> TrainingCheckpointManifest {
         let mut m = TrainingCheckpointManifest::new("ck1", 50, 0.5, "file:///ck/1", digest())
             .with_commit_status(CheckpointCommitStatus::CommittedProtected)
             .with_full_state("m@r", "e@r", "cursor50");
-        for (p, r) in [("model.safetensors", true), ("optimizer.pt", true), ("scheduler.pt", true),
-                       ("rng_state.pth", true), ("trainer_state.json", true)] {
+        for (p, r) in [
+            ("model.safetensors", true),
+            ("optimizer.pt", true),
+            ("scheduler.pt", true),
+            ("rng_state.pth", true),
+            ("trainer_state.json", true),
+        ] {
             m = m.add_file(file(p, r));
         }
         m
     }
 
     fn check(id: &str, g: CheckGroup, s: CheckStatus) -> Check {
-        Check { id: id.into(), group: g, status: s, evidence: String::new() }
+        Check {
+            id: id.into(),
+            group: g,
+            status: s,
+            evidence: String::new(),
+        }
     }
 
     fn report(statuses: [(CheckGroup, CheckStatus); 5]) -> VerificationReport {
         VerificationReport {
             profile: "hf-trainer/cpu".into(),
-            checks: statuses.iter().enumerate().map(|(i, (g, s))| check(&format!("c{i}"), *g, *s)).collect(),
+            checks: statuses
+                .iter()
+                .enumerate()
+                .map(|(i, (g, s))| check(&format!("c{i}"), *g, *s))
+                .collect(),
         }
     }
 
     use CheckGroup as G;
     use CheckStatus::{Fail, Pass, Unverified};
-    const CAPS: TargetCaps = TargetCaps { supports_state_restore: true };
+    const CAPS: TargetCaps = TargetCaps {
+        supports_state_restore: true,
+    };
 
     fn all_pass() -> VerificationReport {
-        report([(G::Identity, Pass), (G::Integrity, Pass), (G::State, Pass), (G::DataContinuity, Pass), (G::Environment, Pass)])
+        report([
+            (G::Identity, Pass),
+            (G::Integrity, Pass),
+            (G::State, Pass),
+            (G::DataContinuity, Pass),
+            (G::Environment, Pass),
+        ])
     }
 
     fn attempt() -> ExecutionAttempt {
         ExecutionAttempt::new("exp", "rcp", ComputeBackendKind::Local, None)
     }
 
-    fn job() -> ExternalJobRef { ExternalJobRef::new("acct", "job", "v3").unwrap() }
+    fn job() -> ExternalJobRef {
+        ExternalJobRef::new("acct", "job", "v3").unwrap()
+    }
 
     #[test]
     fn external_ref_rejects_latest_and_blanks() {
@@ -481,8 +542,14 @@ mod tests {
     #[test]
     fn happy_path_and_resource_axis_are_independent() {
         let mut a = attempt();
-        for e in [ExecEvent::PreflightOk, ExecEvent::SubmitStarted, ExecEvent::SubmitAcked(job()),
-                  ExecEvent::ObservedRunning, ExecEvent::StopRequested, ExecEvent::StopConfirmed] {
+        for e in [
+            ExecEvent::PreflightOk,
+            ExecEvent::SubmitStarted,
+            ExecEvent::SubmitAcked(job()),
+            ExecEvent::ObservedRunning,
+            ExecEvent::StopRequested,
+            ExecEvent::StopConfirmed,
+        ] {
             a.apply(e).unwrap();
         }
         // Stopped, but compute still held and possibly billing.
@@ -533,36 +600,88 @@ mod tests {
 
     #[test]
     fn progress_ordering_and_recovery_point() {
-        let p = ProgressTriplet { observed: Some(920), local: Some(900), protected: Some(850) };
+        let p = ProgressTriplet {
+            observed: Some(920),
+            local: Some(900),
+            protected: Some(850),
+        };
         p.validate().unwrap();
         assert_eq!(p.recovery_point(), Some(850));
-        assert!(ProgressTriplet { observed: Some(10), local: Some(20), protected: None }.validate().is_err());
-        assert!(ProgressTriplet { observed: Some(20), local: Some(10), protected: Some(15) }.validate().is_err());
+        assert!(ProgressTriplet {
+            observed: Some(10),
+            local: Some(20),
+            protected: None
+        }
+        .validate()
+        .is_err());
+        assert!(ProgressTriplet {
+            observed: Some(20),
+            local: Some(10),
+            protected: Some(15)
+        }
+        .validate()
+        .is_err());
     }
 
     #[test]
     fn protection_status_boundaries() {
-        let pol = ProtectionPolicy { max_unprotected_steps: 100, max_unprotected_secs: 600, max_inflight_uploads: 2 };
-        let at = |o, p| ProgressTriplet { observed: Some(o), local: Some(o), protected: Some(p) };
-        assert_eq!(protection_status(&at(950, 850), &pol, 10, 0), ProtectionStatus::Protected);
-        assert_eq!(protection_status(&at(951, 850), &pol, 10, 0), ProtectionStatus::AtRisk);
-        assert_eq!(protection_status(&at(860, 850), &pol, 601, 0), ProtectionStatus::AtRisk);
+        let pol = ProtectionPolicy {
+            max_unprotected_steps: 100,
+            max_unprotected_secs: 600,
+            max_inflight_uploads: 2,
+        };
+        let at = |o, p| ProgressTriplet {
+            observed: Some(o),
+            local: Some(o),
+            protected: Some(p),
+        };
+        assert_eq!(
+            protection_status(&at(950, 850), &pol, 10, 0),
+            ProtectionStatus::Protected
+        );
+        assert_eq!(
+            protection_status(&at(951, 850), &pol, 10, 0),
+            ProtectionStatus::AtRisk
+        );
+        assert_eq!(
+            protection_status(&at(860, 850), &pol, 601, 0),
+            ProtectionStatus::AtRisk
+        );
         // Nothing unprotected: age alone does not alarm.
-        assert_eq!(protection_status(&at(850, 850), &pol, 9999, 0), ProtectionStatus::Protected);
-        assert_eq!(protection_status(&at(850, 850), &pol, 0, 3), ProtectionStatus::Degraded);
+        assert_eq!(
+            protection_status(&at(850, 850), &pol, 9999, 0),
+            ProtectionStatus::Protected
+        );
+        assert_eq!(
+            protection_status(&at(850, 850), &pol, 0, 3),
+            ProtectionStatus::Degraded
+        );
     }
 
     #[test]
     fn verdict_state_resume_requires_every_group_to_pass() {
-        assert_eq!(classify(&manifest(), &all_pass(), CAPS),
-            ResumeVerdict::StateResumeSupported { profile: "hf-trainer/cpu".into() });
+        assert_eq!(
+            classify(&manifest(), &all_pass(), CAPS),
+            ResumeVerdict::StateResumeSupported {
+                profile: "hf-trainer/cpu".into()
+            }
+        );
     }
 
     #[test]
     fn verdict_unverified_is_never_pass() {
         // D6: production cannot prove cursor continuity -> must not claim state resume.
-        let r = report([(G::Identity, Pass), (G::Integrity, Pass), (G::State, Pass), (G::DataContinuity, Unverified), (G::Environment, Pass)]);
-        assert_eq!(classify(&manifest(), &r, CAPS), ResumeVerdict::WeightsOnlyWarmStart);
+        let r = report([
+            (G::Identity, Pass),
+            (G::Integrity, Pass),
+            (G::State, Pass),
+            (G::DataContinuity, Unverified),
+            (G::Environment, Pass),
+        ]);
+        assert_eq!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::WeightsOnlyWarmStart
+        );
         assert_eq!(r.unverified().len(), 1);
     }
 
@@ -571,35 +690,84 @@ mod tests {
         // D5: nothing in classify inspects optimizer norms; engine reports State=Pass.
         let mut r = all_pass();
         r.checks[2].evidence = "SGD without momentum: optimizer state has no tensors".into();
-        assert!(matches!(classify(&manifest(), &r, CAPS), ResumeVerdict::StateResumeSupported { .. }));
+        assert!(matches!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::StateResumeSupported { .. }
+        ));
     }
 
     #[test]
     fn verdict_integrity_or_identity_failure_is_unsupported() {
-        let r = report([(G::Identity, Pass), (G::Integrity, Fail), (G::State, Pass), (G::DataContinuity, Pass), (G::Environment, Pass)]);
-        assert!(matches!(classify(&manifest(), &r, CAPS), ResumeVerdict::Unsupported { .. }));
-        let r = report([(G::Identity, Fail), (G::Integrity, Pass), (G::State, Pass), (G::DataContinuity, Pass), (G::Environment, Pass)]);
-        assert!(matches!(classify(&manifest(), &r, CAPS), ResumeVerdict::Unsupported { .. }));
+        let r = report([
+            (G::Identity, Pass),
+            (G::Integrity, Fail),
+            (G::State, Pass),
+            (G::DataContinuity, Pass),
+            (G::Environment, Pass),
+        ]);
+        assert!(matches!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::Unsupported { .. }
+        ));
+        let r = report([
+            (G::Identity, Fail),
+            (G::Integrity, Pass),
+            (G::State, Pass),
+            (G::DataContinuity, Pass),
+            (G::Environment, Pass),
+        ]);
+        assert!(matches!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::Unsupported { .. }
+        ));
         // Missing integrity group entirely is also not trusted.
-        let r = VerificationReport { profile: "p".into(), checks: vec![check("i", G::Identity, Pass)] };
-        assert!(matches!(classify(&manifest(), &r, CAPS), ResumeVerdict::Unsupported { .. }));
+        let r = VerificationReport {
+            profile: "p".into(),
+            checks: vec![check("i", G::Identity, Pass)],
+        };
+        assert!(matches!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::Unsupported { .. }
+        ));
     }
 
     #[test]
     fn verdict_environment_delta_is_adapted_not_equivalent() {
-        let r = report([(G::Identity, Pass), (G::Integrity, Pass), (G::State, Pass), (G::DataContinuity, Pass), (G::Environment, Fail)]);
-        assert_eq!(classify(&manifest(), &r, CAPS), ResumeVerdict::AdaptedContinuation { deltas: vec!["c4".into()] });
+        let r = report([
+            (G::Identity, Pass),
+            (G::Integrity, Pass),
+            (G::State, Pass),
+            (G::DataContinuity, Pass),
+            (G::Environment, Fail),
+        ]);
+        assert_eq!(
+            classify(&manifest(), &r, CAPS),
+            ResumeVerdict::AdaptedContinuation {
+                deltas: vec!["c4".into()]
+            }
+        );
     }
 
     #[test]
     fn verdict_downgrades_without_target_support_or_protection() {
-        let no_restore = TargetCaps { supports_state_restore: false };
-        assert_eq!(classify(&manifest(), &all_pass(), no_restore), ResumeVerdict::WeightsOnlyWarmStart);
+        let no_restore = TargetCaps {
+            supports_state_restore: false,
+        };
+        assert_eq!(
+            classify(&manifest(), &all_pass(), no_restore),
+            ResumeVerdict::WeightsOnlyWarmStart
+        );
         let local_only = manifest().with_commit_status(CheckpointCommitStatus::LocalStaged);
-        assert!(matches!(classify(&local_only, &all_pass(), CAPS), ResumeVerdict::Unsupported { .. }));
+        assert!(matches!(
+            classify(&local_only, &all_pass(), CAPS),
+            ResumeVerdict::Unsupported { .. }
+        ));
         let mut weights_less = manifest();
         weights_less.files.retain(|f| f.path != "model.safetensors");
         weights_less.resumability_level = ResumabilityLevel::ExportOnly;
-        assert!(matches!(classify(&weights_less, &all_pass(), CAPS), ResumeVerdict::Unsupported { .. }));
+        assert!(matches!(
+            classify(&weights_less, &all_pass(), CAPS),
+            ResumeVerdict::Unsupported { .. }
+        ));
     }
 }

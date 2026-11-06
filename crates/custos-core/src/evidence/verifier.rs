@@ -174,10 +174,7 @@ impl Verifier for CitationVerifier {
                 DomainError::Validation("Missing or invalid 'citations' array in proof".into())
             })?;
 
-        let base_path = bundle
-            .proof
-            .get("base_path")
-            .and_then(|v| v.as_str());
+        let base_path = bundle.proof.get("base_path").and_then(|v| v.as_str());
 
         let mut results = Vec::new();
         let mut all_passed = true;

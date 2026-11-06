@@ -22,24 +22,33 @@ pub mod review;
 pub mod risk;
 
 pub use backtest::{calculate_dsr, normal_cdf, probit, BacktestTearsheet, MonthlyReturn};
-pub use pbo::{calculate_pbo_cscv, PboResult};
 pub use contracts::{
-    ExchangeOrderAdapter, ExecutionStatus, FillSnapshot, LimitThenMarketExecutor, MarketOrderExecutor,
-    MarketType, OrderExecutionStrategy, OrderIntent, OrderSide, PositionSnapshot, RestingLimitExecutor,
+    ExchangeOrderAdapter, ExecutionStatus, FillSnapshot, LimitThenMarketExecutor,
+    MarketOrderExecutor, MarketType, OrderExecutionStrategy, OrderIntent, OrderSide,
+    PositionSnapshot, RestingLimitExecutor,
 };
-pub use engine::{BacktestConfig, DualMovingAverageRule, NativeBacktestEngine, OhlcvBar, SignalAction, StrategyRule};
-pub use factor::{compute_rank_ic, detect_lookahead_bias, AlphaFactor, BenjaminiHochberg, FactorClassification};
+pub use engine::{
+    BacktestConfig, DualMovingAverageRule, NativeBacktestEngine, OhlcvBar, SignalAction,
+    StrategyRule,
+};
+pub use factor::{
+    compute_rank_ic, detect_lookahead_bias, AlphaFactor, BenjaminiHochberg, FactorClassification,
+};
 pub use gate::{DecisionContext, GateOutcome, PreTradeDecisionGate};
-pub use grid::{GridCell, GridConfig, GridMode, GridOrderAction, GridStatusSummary, NativeGridEngine};
+pub use grid::{
+    GridCell, GridConfig, GridMode, GridOrderAction, GridStatusSummary, NativeGridEngine,
+};
 pub use lease::{
     LeaseGuard, LeaseRecord, LeaseTier, StrategyCommand, StrategyCommandStatus, StrategyCommandType,
 };
 pub use metrics::{
     calculate_capture_ratios, calculate_cvar, calculate_downside_deviation, calculate_dual_beta,
-    calculate_omega_ratio, calculate_sortino_ratio, compute_institutional_suite, InstitutionalMetrics,
+    calculate_omega_ratio, calculate_sortino_ratio, compute_institutional_suite,
+    InstitutionalMetrics,
 };
 pub use order::{OrderDirection, OrderTicket, OrderTicketStatus, OrderType};
 pub use orderbook::{OrderBookLevel, OrderBookSnapshot};
+pub use pbo::{calculate_pbo_cscv, PboResult};
 pub use portal::{BarTimeframe, BollingerBandsResult, MacdResult, NativeDataPortal};
 pub use review::{
     DiagnosticCheck, ExitReasonCohort, HoldingCohort, PostTradeAnalyzer, PostTradeReviewReport,
@@ -51,12 +60,14 @@ pub use risk::{ProtectionSpec, ProtectionState, RiskBreach, RiskPermitConfig};
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_deflated_sharpe_ratio_math_and_extreme_value_theory() {
         // Single trial, Sharpe 1.5, T=252 days -> DSR should be very high (> 0.99)
         let dsr_single = calculate_dsr(1.5, 1, 252, 0.0, 3.0, 1.0);
-        assert!(dsr_single > 0.99, "Expected high DSR for single trial, got {dsr_single}");
+        assert!(
+            dsr_single > 0.99,
+            "Expected high DSR for single trial, got {dsr_single}"
+        );
 
         // 100 trials with same Sharpe 1.5, T=252 -> DSR drops due to multiple testing
         let dsr_multi = calculate_dsr(1.5, 100, 252, 0.0, 3.0, 1.0);
@@ -90,7 +101,10 @@ mod tests {
         assert!(!factor.is_viable(), "Initial factor should not be viable");
 
         let evaluated = factor.with_metrics(0.045, 0.05, true);
-        assert!(evaluated.is_viable(), "Factor with IC=0.045, IR=0.9 and clean lookahead must be viable");
+        assert!(
+            evaluated.is_viable(),
+            "Factor with IC=0.045, IR=0.9 and clean lookahead must be viable"
+        );
 
         // Validation failures
         assert!(AlphaFactor::new("", "hyp", "formula", "univ", 5).is_err());
@@ -103,10 +117,24 @@ mod tests {
         let sheet = BacktestTearsheet::new("momentum_v1", 1.85, 0.12, 0.35)
             .expect("valid tearsheet")
             .with_deflated_sharpe(1.2)
-            .with_extended_metrics(0.15, 0.58, 1.9, 2.4, vec![
-                MonthlyReturn { year: 2026, month: 1, return_pct: 0.035 },
-                MonthlyReturn { year: 2026, month: 2, return_pct: 0.041 },
-            ]);
+            .with_extended_metrics(
+                0.15,
+                0.58,
+                1.9,
+                2.4,
+                vec![
+                    MonthlyReturn {
+                        year: 2026,
+                        month: 1,
+                        return_pct: 0.035,
+                    },
+                    MonthlyReturn {
+                        year: 2026,
+                        month: 2,
+                        return_pct: 0.041,
+                    },
+                ],
+            );
 
         assert!(sheet.is_passing_hurdle(1.0, 0.15));
         assert!(!sheet.is_passing_hurdle(2.0, 0.15));
@@ -220,7 +248,14 @@ mod tests {
         let mut price = 100.0;
         for i in 0..50 {
             price += if i % 2 == 0 { 1.5 } else { -0.5 };
-            bars.push(OhlcvBar::new(i as i64 * 86400, price - 0.2, price + 0.5, price - 0.5, price, 1000.0));
+            bars.push(OhlcvBar::new(
+                i as i64 * 86400,
+                price - 0.2,
+                price + 0.5,
+                price - 0.5,
+                price,
+                1000.0,
+            ));
         }
 
         let config = BacktestConfig {
@@ -232,10 +267,14 @@ mod tests {
         };
 
         let rule = Box::new(DualMovingAverageRule::new(3, 8, 1.0));
-        let sheet = NativeBacktestEngine::run("trend_follow_v1", &bars, &config, rule).expect("simulation succeeded");
+        let sheet = NativeBacktestEngine::run("trend_follow_v1", &bars, &config, rule)
+            .expect("simulation succeeded");
 
         assert_eq!(sheet.strategy_id, "trend_follow_v1");
-        assert!(sheet.total_return > 0.0, "Trend-following on trending bars must generate positive return");
+        assert!(
+            sheet.total_return > 0.0,
+            "Trend-following on trending bars must generate positive return"
+        );
         assert!(sheet.max_drawdown >= 0.0);
         assert!(sheet.sortino_ratio != 0.0);
         assert!(sheet.omega_ratio > 0.0);
@@ -243,10 +282,12 @@ mod tests {
 
     #[test]
     fn test_native_grid_engine_arithmetic_and_geometric() {
-        let arith_levels = NativeGridEngine::generate_levels(100.0, 200.0, 5, GridMode::Arithmetic).unwrap();
+        let arith_levels =
+            NativeGridEngine::generate_levels(100.0, 200.0, 5, GridMode::Arithmetic).unwrap();
         assert_eq!(arith_levels, vec![100.0, 125.0, 150.0, 175.0, 200.0]);
 
-        let geo_levels = NativeGridEngine::generate_levels(100.0, 400.0, 3, GridMode::Geometric).unwrap();
+        let geo_levels =
+            NativeGridEngine::generate_levels(100.0, 400.0, 3, GridMode::Geometric).unwrap();
         assert_eq!(geo_levels, vec![100.0, 200.0, 400.0]);
 
         let cfg = GridConfig::new("BTCUSDT", 100.0, 200.0, 5, GridMode::Arithmetic, 10_000.0)
@@ -264,7 +305,9 @@ mod tests {
         let actions = engine.evaluate_price(99.0);
         assert_eq!(actions.len(), 1);
         match &actions[0] {
-            GridOrderAction::PlaceLimit { side, cell_index, .. } => {
+            GridOrderAction::PlaceLimit {
+                side, cell_index, ..
+            } => {
                 assert_eq!(*side, OrderDirection::Buy);
                 assert_eq!(*cell_index, 0);
             }
@@ -275,7 +318,9 @@ mod tests {
         let actions_exit = engine.evaluate_price(126.0);
         assert_eq!(actions_exit.len(), 1);
         match &actions_exit[0] {
-            GridOrderAction::PlaceLimit { side, cell_index, .. } => {
+            GridOrderAction::PlaceLimit {
+                side, cell_index, ..
+            } => {
                 assert_eq!(*side, OrderDirection::Sell);
                 assert_eq!(*cell_index, 0);
             }
@@ -336,7 +381,10 @@ mod tests {
 
         // At T = 3599: Bar 0 has not closed yet! Visible slice must be empty
         let slice_0 = portal.slice_point_in_time(3599);
-        assert!(slice_0.is_empty(), "No bar can be visible before it fully closes");
+        assert!(
+            slice_0.is_empty(),
+            "No bar can be visible before it fully closes"
+        );
         assert!(portal.current_closed_bar(3599).is_none());
 
         // At T = 3600: Bar 0 has exactly closed! Visible slice has 1 bar
@@ -373,14 +421,18 @@ mod tests {
         assert!((0.0..=100.0).contains(&rsi));
 
         // Bollinger Bands test
-        let bb = portal.calculate_bollinger_bands(18000, 3, 2.0).expect("bb calculated");
+        let bb = portal
+            .calculate_bollinger_bands(18000, 3, 2.0)
+            .expect("bb calculated");
         assert_eq!(bb.middle, sma);
         assert!(bb.upper > bb.middle);
         assert!(bb.lower < bb.middle);
         assert!(bb.bandwidth > 0.0);
 
         // MACD test
-        let macd = portal.calculate_macd(18000, 2, 4, 2).expect("macd calculated");
+        let macd = portal
+            .calculate_macd(18000, 2, 4, 2)
+            .expect("macd calculated");
         assert!(!macd.macd.is_nan());
         assert!(!macd.signal.is_nan());
 
@@ -391,4 +443,3 @@ mod tests {
         assert!(vwap > 90.0 && vwap < 120.0);
     }
 }
-
