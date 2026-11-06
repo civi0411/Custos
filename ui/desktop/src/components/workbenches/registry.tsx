@@ -19,6 +19,7 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
     icon: Code2,
     shortcut: '⌥1',
     builtin: true,
+    color: '#38bdf8',
     description: 'Autonomous software engineering, Git worktrees, tests, and AST codebase intelligence.',
     supportedTabTypes: [
       'files',
@@ -32,6 +33,15 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
       'terminal',
       'fleet',
     ],
+    panes: [
+      { id: 'files', title: 'Files & Changes', position: 'main', defaultWidth: 'full' },
+      { id: 'activity', title: 'Activity', position: 'main', defaultWidth: 'half' },
+      { id: 'terminal', title: 'Terminal', position: 'bottom', defaultWidth: 'full' },
+      { id: 'worktrees', title: 'Worktree Manager', position: 'main', defaultWidth: 'full' },
+      { id: 'agents', title: 'Agents & Harnesses', position: 'main', defaultWidth: 'full' },
+      { id: 'dag', title: 'Workflow DAG', position: 'main', defaultWidth: 'full' },
+      { id: 'evidence', title: 'Evidence & Reviews', position: 'main', defaultWidth: 'full' },
+    ],
   },
   {
     id: 'research',
@@ -40,6 +50,7 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
     icon: FlaskConical,
     shortcut: '⌥2',
     builtin: false,
+    color: '#a78bfa',
     description: 'Literature synthesis, reproducible experiments, notebooks, and citation verification.',
     supportedTabTypes: [
       'literature',
@@ -53,6 +64,15 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
       'synthesis',
       'artifacts',
     ],
+    panes: [
+      { id: 'notebook', title: 'Notebook', position: 'main', defaultWidth: 'full' },
+      { id: 'literature', title: 'Literature', position: 'main', defaultWidth: 'half' },
+      { id: 'findings', title: 'Findings & Claims', position: 'main', defaultWidth: 'half' },
+      { id: 'artifacts', title: 'Artifacts', position: 'main', defaultWidth: 'full' },
+      { id: 'synthesis', title: 'Synthesis', position: 'main', defaultWidth: 'full' },
+      { id: 'runs', title: 'Runs Ledger', position: 'bottom', defaultWidth: 'full' },
+      { id: 'training', title: 'Training Runs', position: 'bottom', defaultWidth: 'full' },
+    ],
   },
   {
     id: 'copilot',
@@ -61,8 +81,15 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
     icon: Bot,
     shortcut: '⌥3',
     builtin: true,
+    color: '#34d399',
     description: 'Personal agenda triage, communication drafting, and revocable grant automation.',
     supportedTabTypes: ['drafts', 'outbox', 'contacts', 'calendar', 'notes'],
+    panes: [
+      { id: 'conversation', title: 'Conversation', position: 'main', defaultWidth: 'full' },
+      { id: 'drafts', title: 'Drafts', position: 'side', defaultWidth: 'third' },
+      { id: 'outbox', title: 'Outbox', position: 'side', defaultWidth: 'third' },
+      { id: 'contacts', title: 'Contacts & Calendar', position: 'side', defaultWidth: 'third' },
+    ],
   },
   {
     id: 'quant',
@@ -71,6 +98,7 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
     icon: TrendingUp,
     shortcut: '⌥4',
     builtin: false,
+    color: '#fbbf24',
     description: 'Algorithmic alpha discovery, backtesting simulations, and financial risk audits.',
     supportedTabTypes: [
       'alpha',
@@ -79,6 +107,12 @@ export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
       'risk_audit',
       'riskaudit',
       'execution',
+    ],
+    panes: [
+      { id: 'alphastudio', title: 'Alpha Studio', position: 'main', defaultWidth: 'half' },
+      { id: 'tearsheet', title: 'Tearsheet', position: 'main', defaultWidth: 'half' },
+      { id: 'risk_audit', title: 'Risk Audit', position: 'bottom', defaultWidth: 'half' },
+      { id: 'execution', title: 'Execution', position: 'bottom', defaultWidth: 'half' },
     ],
   },
 ];
