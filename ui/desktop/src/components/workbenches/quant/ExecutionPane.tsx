@@ -50,24 +50,7 @@ import { VERIFIED_HISTORICAL_BENCHMARK_BARS } from './quantBenchmarkData';
 export function ExecutionPane({ onShowToast }: ExecutionPaneProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [orders, setOrders] = useState<OrderTicketItem[]>([]);
-  const [positions, setPositions] = useState<PositionItem[]>([
-    {
-      symbol: 'NVDA',
-      direction: 'long',
-      quantity: 500,
-      entryPrice: 130.0,
-      markPrice: 135.5,
-      unrealizedPnl: 2750.0,
-    },
-    {
-      symbol: 'MSFT',
-      direction: 'short',
-      quantity: 200,
-      entryPrice: 425.0,
-      markPrice: 420.25,
-      unrealizedPnl: 950.0,
-    },
-  ]);
+  const [positions, setPositions] = useState<PositionItem[]>([]);
 
   // Order Ticket Form State
   const [ticketSymbol, setTicketSymbol] = useState<string>('NVDA');
@@ -448,6 +431,20 @@ export function ExecutionPane({ onShowToast }: ExecutionPaneProps) {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: 'approved' } : o))
       );
+      const approvedOrder = orders.find((o) => o.id === orderId);
+      if (approvedOrder) {
+        setPositions((prev) => [
+          ...prev.filter((p) => p.symbol !== approvedOrder.symbol),
+          {
+            symbol: approvedOrder.symbol,
+            direction: approvedOrder.direction.includes('short') ? 'short' : 'long',
+            quantity: approvedOrder.quantity,
+            entryPrice: ticketPrice,
+            markPrice: ticketPrice,
+            unrealizedPnl: 0,
+          },
+        ]);
+      }
       onShowToast?.(`Order ${orderId} approved and recorded to Outbox`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
