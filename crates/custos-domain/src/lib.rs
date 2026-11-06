@@ -136,7 +136,9 @@ pub use experiment_attempt::{
     VerificationReport,
 };
 pub use fact::Fact;
-pub use ids::{canonical_json, digest, new_id, TaskId};
+pub use ids::{
+    canonical_json, digest, new_id, HarnessId, JobId, PaneId, TaskId, WorkflowNodeId,
+};
 pub use memory::{
     FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt,
     ProposalStatus, RecallQuery, WorkerRunId,

@@ -2,6 +2,7 @@
 //!
 //! Provides deterministic IDs, SHA-256 digests, and canonical JSON representations.
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -12,6 +13,174 @@ pub fn new_id(prefix: &str) -> String {
 
 /// Task identifier
 pub type TaskId = String;
+
+/// Strongly-typed identifier for a workflow execution node
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct WorkflowNodeId(pub String);
+
+impl WorkflowNodeId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn generate() -> Self {
+        Self(new_id("node"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for WorkflowNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for WorkflowNodeId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for WorkflowNodeId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for WorkflowNodeId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+/// Strongly-typed identifier for a desktop workbench pane
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct PaneId(pub String);
+
+impl PaneId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn generate() -> Self {
+        Self(new_id("pane"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for PaneId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for PaneId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for PaneId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for PaneId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+/// Strongly-typed identifier for an asynchronous or headless job
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct JobId(pub String);
+
+impl JobId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn generate() -> Self {
+        Self(new_id("job"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for JobId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for JobId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for JobId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for JobId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+/// Strongly-typed identifier for an execution harness or test harness instance
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct HarnessId(pub String);
+
+impl HarnessId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn generate() -> Self {
+        Self(new_id("harness"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for HarnessId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for HarnessId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for HarnessId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for HarnessId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
 
 /// Computes a hex-encoded SHA-256 digest of arbitrary bytes
 pub fn digest(data: &[u8]) -> String {
@@ -57,6 +226,27 @@ mod tests {
         let id = new_id("task");
         assert!(id.starts_with("task_"));
         assert_eq!(id.len(), 5 + 32);
+    }
+
+    #[test]
+    fn test_typed_identifiers() {
+        let node_id = WorkflowNodeId::generate();
+        assert!(node_id.as_str().starts_with("node_"));
+        assert_eq!(format!("{}", node_id), node_id.as_str());
+
+        let pane_id = PaneId::new("quant_execution");
+        assert_eq!(pane_id.as_str(), "quant_execution");
+
+        let job_id = JobId::generate();
+        assert!(job_id.as_str().starts_with("job_"));
+
+        let harness_id = HarnessId::new("cargo_test_harness");
+        assert_eq!(harness_id.as_ref(), "cargo_test_harness");
+
+        // Serde roundtrip
+        let serialized = serde_json::to_string(&node_id).unwrap();
+        let deserialized: WorkflowNodeId = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(node_id, deserialized);
     }
 
     #[test]
