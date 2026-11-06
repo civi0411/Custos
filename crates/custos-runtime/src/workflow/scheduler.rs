@@ -29,6 +29,18 @@ impl std::fmt::Display for ScheduledJobId {
     }
 }
 
+impl From<custos_domain::JobId> for ScheduledJobId {
+    fn from(id: custos_domain::JobId) -> Self {
+        Self(id.0)
+    }
+}
+
+impl From<ScheduledJobId> for custos_domain::JobId {
+    fn from(id: ScheduledJobId) -> Self {
+        Self(id.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobRecurrence {
