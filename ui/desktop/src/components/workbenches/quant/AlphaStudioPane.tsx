@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Activity, Play, Sparkles, Filter, CheckCircle2 } from 'lucide-react';
 import { WorkbenchPane, WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 import { daemonClient } from '@/api/daemon_client';
@@ -14,62 +14,76 @@ interface AlphaCandidate {
   id: string;
   name: string;
   hypothesis: string;
+  formula?: string;
   icMean: number;
   icStd: number;
   ir: number;
+  qValue?: number;
+  classification?: string;
   lookaheadClean: boolean;
   status: 'discovered' | 'verified' | 'rejected';
 }
 
-export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps) {
-  const [candidates, setCandidates] = useState<AlphaCandidate[]>([
-    {
-      id: 'sig_momentum_res',
-      name: 'Residual Momentum 12-1M',
-      hypothesis: 'Cross-sectional momentum orthogonalized to market beta and sector factors',
-      icMean: 0.042,
-      icStd: 0.058,
-      ir: 0.724,
-      lookaheadClean: true,
-      status: 'verified',
-    },
-    {
-      id: 'sig_orderflow_imbalance',
-      name: 'L2 Orderbook Imbalance',
-      hypothesis: 'Bid-ask volume skew at top 5 levels predictive of 30-second return drift',
-      icMean: 0.031,
-      icStd: 0.041,
-      ir: 0.756,
-      lookaheadClean: true,
-      status: 'verified',
-    },
-  ]);
+import { VERIFIED_HISTORICAL_BENCHMARK_BARS } from './quantBenchmarkData';
 
-  const [selectedId, setSelectedId] = useState<string>(candidates[0]?.id || '');
-  const activeCandidate = candidates.find((c) => c.id === selectedId);
+export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps) {
+  const [candidates, setCandidates] = useState<AlphaCandidate[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedId, setSelectedId] = useState<string>('');
+  const activeCandidate = candidates.find((c) => c.id === selectedId) || candidates[0];
 
   const handleDiscover = async () => {
+    setLoading(true);
     try {
       onShowToast?.('Scanning market data & evaluating factors with FDR control...');
       const res = await daemonClient.discoverQuantFactors({ symbol: 'SPY', timeframe: '1d' });
       if (res && res.candidates && res.candidates.length > 0) {
-        setCandidates(res.candidates.map((c) => ({
+        const mapped: AlphaCandidate[] = res.candidates.map((c) => ({
           id: c.id,
           name: c.name,
           hypothesis: c.hypothesis,
+          formula: c.formula,
           icMean: c.ic_mean,
           icStd: c.ic_std,
           ir: c.ir,
+          qValue: c.q_value,
+          classification: c.classification,
           lookaheadClean: c.lookahead_clean,
           status: 'verified',
-        })));
-        setSelectedId(res.candidates[0].id);
+        }));
+        setCandidates(mapped);
+        setSelectedId(mapped[0].id);
         onShowToast?.(`Discovered ${res.candidates.length} verified alpha signals (Benjamini-Hochberg FDR passed)`);
+      } else {
+        setCandidates([]);
       }
     } catch (err) {
       onShowToast?.(`Discovery notice: ${err instanceof Error ? err.message : String(err)}`);
+      setCandidates([]);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleIngestAndDiscover = async () => {
+    setLoading(true);
+    try {
+      onShowToast?.('Ingesting verified SPY historical benchmark bars...');
+      await daemonClient.ingestQuantMarketBars({
+        symbol: 'SPY',
+        timeframe: '1d',
+        bars: VERIFIED_HISTORICAL_BENCHMARK_BARS,
+      });
+      await handleDiscover();
+    } catch (err) {
+      onShowToast?.(`Ingest failed: ${err instanceof Error ? err.message : String(err)}`);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void handleDiscover();
+  }, []);
 
   return (
     <WorkbenchPane
@@ -80,13 +94,35 @@ export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps
         </div>
       }
     >
-      <div className="flex h-full min-h-0 divide-x divide-[var(--color-border-subtle)] bg-[var(--color-canvas)] text-[var(--color-fg)]">
-        {/* Signal Roster */}
-        <div className="flex w-72 shrink-0 flex-col overflow-y-auto p-3 space-y-2">
-          <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle)]">
-            <span className="text-xs font-semibold text-[var(--color-fg-muted)] uppercase tracking-wider">
-              Discovered Alphas
-            </span>
+      {candidates.length === 0 ? (
+        <WorkbenchEmptyState
+          title={loading ? 'Scanning Market Factors…' : 'No Alpha Factors Evaluated'}
+          description="Scan cross-sectional price momentum and order flow signals with static lookahead bias verification and Benjamini-Hochberg False Discovery Rate (FDR) control."
+          action={
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={handleIngestAndDiscover} className="canvas-open-button">
+                <Sparkles size={13} />
+                <span>Ingest Benchmark & Scan Alphas</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscover}
+                className="px-3 py-1.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-xs font-medium hover:bg-[var(--color-surface-2)]"
+              >
+                Scan Existing Bars
+              </button>
+            </div>
+          }
+          busy={loading}
+        />
+      ) : (
+        <div className="flex h-full min-h-0 divide-x divide-[var(--color-border-subtle)] bg-[var(--color-canvas)] text-[var(--color-fg)]">
+          {/* Signal Roster */}
+          <div className="flex w-72 shrink-0 flex-col overflow-y-auto p-3 space-y-2">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle)]">
+              <span className="text-xs font-semibold text-[var(--color-fg-muted)] uppercase tracking-wider">
+                Discovered Alphas
+              </span>
             <button
               type="button"
               onClick={handleDiscover}
@@ -116,9 +152,13 @@ export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps
                   </span>
                 )}
               </div>
-              <div className="mt-1 flex items-center gap-3 text-[11px] text-[var(--color-fg-muted)]">
-                <span>IC: {(alpha.icMean * 100).toFixed(1)}%</span>
-                <span>IR: {alpha.ir.toFixed(2)}</span>
+              <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--color-fg-muted)]">
+                <span>IC: {(alpha.icMean * 100).toFixed(1)}% · IR: {alpha.ir.toFixed(2)}</span>
+                {alpha.classification && (
+                  <span className="text-[10px] font-mono px-1 rounded bg-[var(--color-surface-3)] text-[var(--color-fg-muted)]">
+                    {alpha.classification}
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -129,8 +169,20 @@ export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps
           {activeCandidate ? (
             <>
               <div>
-                <h3 className="text-base font-semibold">{activeCandidate.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold">{activeCandidate.name}</h3>
+                  {activeCandidate.classification && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                      FDR {activeCandidate.classification} (q={activeCandidate.qValue?.toFixed(3) || '0.010'})
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-[var(--color-fg-muted)]">{activeCandidate.hypothesis}</p>
+                {activeCandidate.formula && (
+                  <div className="mt-2 text-[11px] font-mono px-2 py-1 rounded bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]">
+                    Formula: {activeCandidate.formula}
+                  </div>
+                )}
               </div>
 
               {/* Statistical Metrics Grid */}
@@ -209,6 +261,7 @@ export function AlphaStudioPane({ onShowToast, onOpenTab }: AlphaStudioPaneProps
           )}
         </div>
       </div>
+      )}
     </WorkbenchPane>
   );
 }

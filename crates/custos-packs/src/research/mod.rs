@@ -234,4 +234,24 @@ impl DomainPack for ResearchPack {
         tracing::info!("Initialized Research Domain Pack with Literature & Citation Verifiers");
         Ok(())
     }
+
+    fn tool_declarations(&self) -> Vec<serde_json::Value> {
+        vec![
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "search_literature",
+                    "description": "Search scientific papers, ArXiv, and research document corpuses",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string", "description": "Research search query" },
+                            "limit": { "type": "integer", "description": "Max number of citations to return" }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            }),
+        ]
+    }
 }

@@ -7,6 +7,12 @@ import { ActivityPane } from './engineering/ActivityPane';
 import { RemoteFleetWorkbenchPane } from './shared/RemoteFleetWorkbenchPane';
 import type { Session } from '@/types';
 import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import { useAppContext } from '@/context/AppContext';
+import {
+  getWorkbenchForTabType,
+  canonicalWorkbenchId,
+  WorkbenchNotInstalledPlaceholder,
+} from './registry';
 import { findScopedResourceTab, getTabType, synthesisClaimFromUrl, urlFor, useResourceCatalog, workbenchResourceIds, type OrcaTab, type OrcaTabId, type ResourceDefinition, type ResourceTabsState } from './workbenchResources';
 
 const TasksPane = React.lazy(() => import('@/components/tasks/TasksPane').then(module => ({ default: module.TasksPane })));
@@ -106,6 +112,7 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   onCancelTask,
   onRefreshTasks,
 }) => {
+  const { installedWorkbenches, setIsWorkbenchLibraryOpen } = useAppContext();
   const { resources, retry } = useResourceCatalog(catalog);
   const [renderAttempt, setRenderAttempt] = React.useState(0);
   const [initialAgentWorkspaceId, setInitialAgentWorkspaceId] = React.useState<string | undefined>();
@@ -205,11 +212,71 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
       </div>
     );
 
+    // Workbench installation check: render placeholder if domain pack is not installed
+    const responsibleWorkbench = getWorkbenchForTabType(tabType);
+    if (responsibleWorkbench) {
+      const isInstalled = (installedWorkbenches || []).some(
+        (id) => canonicalWorkbenchId(id) === responsibleWorkbench
+      );
+      if (!isInstalled) {
+        return (
+          <WorkbenchNotInstalledPlaceholder
+            workbenchId={responsibleWorkbench}
+            onOpenLibrary={() => setIsWorkbenchLibraryOpen(true)}
+          />
+        );
+      }
+    }
+
     // Core Conversation Peer Mapping
     if (tabType === 'conversation' || tabType === 'chat') {
-      const tabSession = (tab.sessionId && allSessions?.find((s) => s.id === tab.sessionId)) ||
-        (tab.sessionId && session?.id === tab.sessionId ? session : null) ||
-        session;
+      const explicitSessionId = tab.sessionId;
+      const resolvedExplicit = explicitSessionId
+        ? (allSessions?.find((s) => s.id === explicitSessionId) || (session?.id === explicitSessionId ? session : null))
+        : null;
+
+      if (explicitSessionId && !resolvedExplicit) {
+        return frameTabResource(
+          <WorkbenchEmptyState
+            title="Conversation Unavailable"
+            description={`The conversation session "${explicitSessionId}" could not be found or has been closed.`}
+            action={
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                  onClick={() => {
+                    resourceTabs.setTabs((prev) => {
+                      const filtered = prev.filter((t) => t.id !== tab.id);
+                      if (resourceTabs.activeTabId === tab.id && filtered.length > 0) {
+                        resourceTabs.setActiveTabId(filtered[0].id);
+                      }
+                      return filtered;
+                    });
+                  }}
+                >
+                  Close Tab
+                </button>
+                {session?.id && (
+                  <button
+                    type="button"
+                    className="px-3 py-1 text-xs rounded bg-workbench-accent/20 hover:bg-workbench-accent/30 text-workbench-accent border border-workbench-accent/30 transition cursor-pointer"
+                    onClick={() => {
+                      resourceTabs.setTabs((prev) =>
+                        prev.map((t) => (t.id === tab.id ? { ...t, sessionId: session.id } : t))
+                      );
+                    }}
+                  >
+                    Rebind to Current Conversation
+                  </button>
+                )}
+              </div>
+            }
+          />
+        );
+      }
+
+      const tabSession = resolvedExplicit || session;
       const tabBoundTask = tabSession?.taskId ? (tasks?.find((t) => t.id === tabSession.taskId) ?? null) : boundTask;
       return frameTabResource(
         <ConversationPane

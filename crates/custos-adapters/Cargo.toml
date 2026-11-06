@@ -17,9 +17,8 @@ memory-server = []
 mlx = []
 hf-hub = []
 roaming = ["dep:iroh", "dep:iroh-relay"]
-# Local native inference via llama-cpp is a core adapter capability.
-# llama-cpp-2 and llama-cpp-sys-2 are mandatory dependencies for native local model execution.
-local-inference-native = []
+# Local native inference via llama-cpp is an optional adapter capability (A07).
+local-inference-native = ["dep:llama-cpp-2", "dep:llama-cpp-sys-2"]
 local-inference-hf = ["hf-hub"]
 local-inference-mlx = ["mlx"]
 safemlx = []
@@ -66,8 +65,8 @@ minijinja = "2.7"
 fs2 = { workspace = true }
 iroh = { workspace = true, features = ["tls-aws-lc-rs"], optional = true }
 iroh-relay = { workspace = true, optional = true }
-llama-cpp-2 = { workspace = true }
-llama-cpp-sys-2 = { workspace = true }
+llama-cpp-2 = { workspace = true, optional = true }
+llama-cpp-sys-2 = { workspace = true, optional = true }
 etcetera = { workspace = true }
 include_dir = { workspace = true }
 once_cell = { workspace = true }

@@ -1,0 +1,1 @@
+export { researchContribution } from '../registry';

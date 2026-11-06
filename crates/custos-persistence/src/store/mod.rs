@@ -1,9 +1,10 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
     AssistantRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
-    ExperimentAttemptRepository, FleetAutomationRepository, OutboxRepository, ProviderRepository,
-    QuantRepository, ReplanRepository, ResearchRepository, RunRepository, SessionRepository,
-    SpanRepository, TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
+    ExperimentAttemptRepository, FleetAutomationRepository, OutboxRepository, PackageRepository,
+    ProviderRepository, QuantRepository, ReplanRepository, ResearchRepository, RunRepository,
+    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
+    WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
@@ -43,6 +44,7 @@ pub struct SqliteTaskStore {
     command_ledger_repo: CommandLedgerRepository,
     experiment_attempt_repo: ExperimentAttemptRepository,
     quant_repo: QuantRepository,
+    package_repo: PackageRepository,
 }
 
 impl SqliteTaskStore {
@@ -66,6 +68,7 @@ impl SqliteTaskStore {
         let command_ledger_repo = CommandLedgerRepository::new(db.clone());
         let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let quant_repo = QuantRepository::new(db.clone());
+        let package_repo = PackageRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -85,6 +88,7 @@ impl SqliteTaskStore {
             command_ledger_repo,
             experiment_attempt_repo,
             quant_repo,
+            package_repo,
         };
         Ok(store)
     }
@@ -109,6 +113,7 @@ impl SqliteTaskStore {
         let command_ledger_repo = CommandLedgerRepository::new(db.clone());
         let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let quant_repo = QuantRepository::new(db.clone());
+        let package_repo = PackageRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -128,12 +133,17 @@ impl SqliteTaskStore {
             command_ledger_repo,
             experiment_attempt_repo,
             quant_repo,
+            package_repo,
         };
         Ok(store)
     }
 
     pub fn db(&self) -> &DbConnection {
         &self.db
+    }
+
+    pub fn packages(&self) -> &PackageRepository {
+        &self.package_repo
     }
 
     pub fn experiment_attempts(&self) -> &ExperimentAttemptRepository {

@@ -39,9 +39,10 @@ async fn test_quant_pack_manifest_roles_jobs_and_verifiers() {
     assert!(jobs.iter().any(|j| j.job_id == "quant__execution_plan"));
 
     let verifiers = pack.verifiers();
-    assert_eq!(verifiers.len(), 2);
+    assert_eq!(verifiers.len(), 3);
     assert!(verifiers.iter().any(|v| v.verifier_id() == "deflated_sharpe_verifier"));
     assert!(verifiers.iter().any(|v| v.verifier_id() == "lookahead_bias_checker"));
+    assert!(verifiers.iter().any(|v| v.verifier_id() == "pbo_overfitting_verifier"));
 }
 
 #[tokio::test]

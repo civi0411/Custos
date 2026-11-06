@@ -16,7 +16,7 @@ pub struct AlceEntailmentEngine {
 impl Default for AlceEntailmentEngine {
     fn default() -> Self {
         Self {
-            evaluator_id: "alce_nli_engine_v1".to_string(),
+            evaluator_id: "alce_lexical_signal_v1".to_string(),
             confidence_threshold: 0.70,
         }
     }
@@ -29,7 +29,7 @@ impl AlceEntailmentEngine {
 
     pub fn with_threshold(threshold: f32) -> Self {
         Self {
-            evaluator_id: "alce_nli_engine_v1".to_string(),
+            evaluator_id: "alce_lexical_signal_v1".to_string(),
             confidence_threshold: threshold,
         }
     }
@@ -128,8 +128,10 @@ impl AlceEntailmentEngine {
         };
 
         let status = match verdict {
+            // Lexical overlap is a heuristic signal; emit Passed (provisional lexical match),
+            // never Verified without downstream semantic review.
             EntailmentVerdict::Entailed { confidence, .. } if confidence >= self.confidence_threshold => {
-                AssessmentStatus::Verified
+                AssessmentStatus::Passed
             }
             EntailmentVerdict::Contradicted { .. } => AssessmentStatus::Rejected,
             _ => AssessmentStatus::Uncertain,
@@ -204,7 +206,7 @@ mod tests {
             .assess_claim(&claim, Some(&anchor), Some("sha256:source_v1"), 100)
             .unwrap();
 
-        assert_eq!(assessment.status, AssessmentStatus::Verified);
+        assert_eq!(assessment.status, AssessmentStatus::Passed);
         assert!(assessment.is_valid_and_fresh());
 
         // Elevate claim in Domain OOP model

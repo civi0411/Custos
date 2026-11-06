@@ -159,5 +159,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             "../migrations/0042_quant_live_pipeline.sql"
         ))?;
     }
+    conn.execute_batch(include_str!("../migrations/0043_package_inventory.sql"))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0044_universal_resource_registry.sql"
+    ))?;
     Ok(())
 }

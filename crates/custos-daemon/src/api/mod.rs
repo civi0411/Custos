@@ -48,7 +48,7 @@ pub use crate::custos_local_api::{
     METHOD_QUANT_MARKET_BARS_INGEST, METHOD_QUANT_MARKET_BARS_GET, METHOD_PIPELINE_STATUS,
     METHOD_PIPELINE_STRUCTURE_DETECT, METHOD_PIPELINE_RUN, METHOD_QUANT_INDICATORS_COMPUTE,
     METHOD_QUANT_GATE_EVALUATE, METHOD_QUANT_REVIEW_COMPUTE, METHOD_QUANT_ORDERBOOK_GET,
-    METHOD_QUANT_KILL_SWITCH, METHOD_QUANT_GRID_EVALUATE,
+    METHOD_QUANT_PBO_COMPUTE, METHOD_QUANT_KILL_SWITCH, METHOD_QUANT_GRID_EVALUATE,
     METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
     METHOD_WORKSPACE_GIT_COMMIT, METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
@@ -122,13 +122,26 @@ pub struct LocalApiDispatcher {
     pub(crate) outbox: Option<Arc<OutboxRepository>>,
     pub(crate) sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
     pub(crate) mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
+    pub(crate) admission_coordinator: Option<Arc<custos_runtime::compute::WorkloadAdmissionCoordinator>>,
+}
+
+/// Concrete coordinators and registries injected by daemon composition root (A02).
+pub struct LocalApiDependencies {
+    pub terminal: Arc<TerminalCoordinator>,
+    pub files: Arc<dyn WorkspaceFilesPort>,
+    pub harnesses: Arc<HarnessRegistry>,
+    pub python_kernel: Option<Arc<PythonKernelCoordinator>>,
+    pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
+    pub mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
 }
 
 impl LocalApiDispatcher {
-    pub fn new(
+    /// Production constructor: receives explicit graph dependencies instantiated by the composition root.
+    pub fn with_dependencies(
         task_service: Arc<TaskService>,
         session_manager: Arc<SessionManager>,
         bridge_service: Arc<BridgeService>,
+        deps: LocalApiDependencies,
     ) -> Self {
         Self {
             task_service,
@@ -141,24 +154,63 @@ impl LocalApiDispatcher {
             research: None,
             providers: None,
             credentials: None,
-            terminal: Arc::new(TerminalCoordinator::new(Arc::new(
-                custos_adapters::terminal::NativePtyDriver,
-            ))),
-            files: Arc::new(WorkspaceFilesCoordinator::new()),
-            harnesses: Arc::new(HarnessRegistry::new()),
-            python_kernel: Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
-                custos_adapters::notebook::LocalPythonDriver,
-            )))),
+            terminal: deps.terminal,
+            files: deps.files,
+            harnesses: deps.harnesses,
+            python_kernel: deps.python_kernel,
             fleet_automation: None,
             model_availability: Default::default(),
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
             oauth_callback_server: None,
-            pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
+            pack_registry: deps.pack_registry,
             assistant: None,
             outbox: None,
             sqlite_store: None,
-            mcp_hub: Arc::new(custos_adapters::mcp::McpFederationHub::new()),
+            mcp_hub: deps.mcp_hub,
+            admission_coordinator: None,
         }
+    }
+
+    /// Legacy constructor for test fixtures. Production should use `with_dependencies`.
+    pub fn new(
+        task_service: Arc<TaskService>,
+        session_manager: Arc<SessionManager>,
+        bridge_service: Arc<BridgeService>,
+    ) -> Self {
+        Self::with_dependencies(
+            task_service,
+            session_manager,
+            bridge_service,
+            LocalApiDependencies {
+                terminal: Arc::new(TerminalCoordinator::new(Arc::new(
+                    custos_adapters::terminal::NativePtyDriver,
+                ))),
+                files: Arc::new(WorkspaceFilesCoordinator::new()),
+                harnesses: Arc::new(HarnessRegistry::new()),
+                python_kernel: Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
+                    custos_adapters::notebook::LocalPythonDriver,
+                )))),
+                pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
+                mcp_hub: Arc::new(custos_adapters::mcp::McpFederationHub::new()),
+            },
+        )
+    }
+
+    #[cfg(test)]
+    pub fn for_test(
+        task_service: Arc<TaskService>,
+        session_manager: Arc<SessionManager>,
+        bridge_service: Arc<BridgeService>,
+    ) -> Self {
+        Self::new(task_service, session_manager, bridge_service)
+    }
+
+    pub fn with_admission_coordinator(
+        mut self,
+        admission_coordinator: Arc<custos_runtime::compute::WorkloadAdmissionCoordinator>,
+    ) -> Self {
+        self.admission_coordinator = Some(admission_coordinator);
+        self
     }
 
     pub fn with_mcp_hub(mut self, hub: Arc<custos_adapters::mcp::McpFederationHub>) -> Self {
@@ -244,6 +296,11 @@ impl LocalApiDispatcher {
         self.credentials = Some(credentials);
         self
     }
+
+    pub fn with_pack_registry(mut self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
+        self.pack_registry = pack_registry;
+        self
+    }
     pub(crate) fn credential_service(&self) -> Result<&Arc<crate::credentials::ProviderCredentials>, DomainError> {
         self.credentials.as_ref().ok_or_else(|| DomainError::Validation(
             "secure_storage_unavailable: Credential service is not configured".into()))
@@ -280,9 +337,9 @@ impl LocalApiDispatcher {
         self
     }
 
-    pub fn with_packs(mut self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
-        self.pack_registry = pack_registry;
-        self
+    #[deprecated(note = "use with_pack_registry instead (A02 deduplication)")]
+    pub fn with_packs(self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
+        self.with_pack_registry(pack_registry)
     }
 
     pub(crate) async fn resolve_workspace_for_dispatch(

@@ -54,6 +54,7 @@ pub use session::automation;
 pub use shared::budget;
 pub use shared::error;
 pub use shared::ids;
+pub use shared::packages;
 pub use shared::packet;
 pub use shared::span;
 pub use shared::types;

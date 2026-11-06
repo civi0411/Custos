@@ -57,6 +57,10 @@ interface AppContextType {
   setCurrentTab: (tab: MainTab) => void;
   activeWorkbench: ActiveWorkbench;
   setActiveWorkbench: (wb: ActiveWorkbench) => void;
+  installedWorkbenches: string[];
+  refreshInstalledWorkbenches: () => Promise<void>;
+  isWorkbenchLibraryOpen: boolean;
+  setIsWorkbenchLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;
   activeScreenId: string;
   setActiveScreenId: React.Dispatch<React.SetStateAction<string>>;
   initScreenTabs: (screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => void;
@@ -463,7 +467,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved === 'research') return 'research';
       if (saved === 'quant') return 'quant';
     } catch { }
-    return 'engineering';
+    return 'copilot';
   });
 
   const setActiveWorkbench = useCallback((wb: ActiveWorkbench) => {
@@ -472,6 +476,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('custos.workspace.mode.v2', wb);
     } catch { }
   }, []);
+
+  const [installedWorkbenches, setInstalledWorkbenches] = useState<string[]>([
+    'assistant',
+    'copilot',
+    'coding',
+    'engineering',
+  ]);
+  const [isWorkbenchLibraryOpen, setIsWorkbenchLibraryOpen] = useState<boolean>(false);
+
+  const refreshInstalledWorkbenches = useCallback(async () => {
+    try {
+      const inv = await daemonClient.listPackageInventory();
+      if (inv && Array.isArray(inv.items)) {
+        const enabled = inv.items
+          .filter((i) => i.state === 'builtin' || i.state === 'installed')
+          .map((i) => i.component_id);
+        const allAliases = new Set<string>([
+          'assistant',
+          'copilot',
+          'coding',
+          'engineering',
+        ]);
+        for (const id of enabled) {
+          allAliases.add(id);
+          if (id === 'assistant') allAliases.add('copilot');
+          if (id === 'copilot') allAliases.add('assistant');
+          if (id === 'coding') allAliases.add('engineering');
+          if (id === 'engineering') allAliases.add('coding');
+        }
+        setInstalledWorkbenches(Array.from(allAliases));
+      }
+    } catch {
+      // Offline or daemon unavailable - maintain base builtin packs
+      setInstalledWorkbenches((prev) =>
+        prev.length === 0
+          ? ['assistant', 'copilot', 'coding', 'engineering']
+          : prev
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshInstalledWorkbenches();
+  }, [refreshInstalledWorkbenches]);
 
   const [isSessionsCollapsed, setIsSessionsCollapsed] = useState<boolean>(false);
   const [isRightExplorerOpen, setIsRightExplorerOpen] = useState<boolean>(true);
@@ -2337,6 +2385,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentTab,
         activeWorkbench,
         setActiveWorkbench,
+        installedWorkbenches,
+        refreshInstalledWorkbenches,
+        isWorkbenchLibraryOpen,
+        setIsWorkbenchLibraryOpen,
         activeScreenId,
         setActiveScreenId,
         initScreenTabs,

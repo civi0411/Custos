@@ -151,4 +151,9 @@ pub trait DomainPack: Send + Sync {
 
     /// Asynchronous bootstrap hook during daemon startup
     async fn initialize(&self) -> Result<(), DomainError>;
+
+    /// Tool declarations exposed by this pack for governed agent runtime disclosure
+    fn tool_declarations(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
 }

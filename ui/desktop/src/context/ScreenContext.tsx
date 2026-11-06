@@ -510,21 +510,19 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const selectScreen = useCallback((screenId: string) => {
     setActiveScreenId(screenId);
     setAppActiveScreenId(screenId);
-    setScreens((prev) => {
-      const found = prev.find((s) => s.id === screenId);
-      if (found) {
-        if (found.homeWorkbench) {
-          setActiveWorkbench(found.homeWorkbench);
-        }
-        const screenTabs = found.tabs && found.tabs.length > 0
-          ? found.tabs
-          : defaultTabsForScreen(found);
-        const activeTab = found.activeTabId || screenTabs[0]?.id || '';
-        initScreenTabs(screenId, screenTabs, activeTab);
+    const found = screens.find((s) => s.id === screenId);
+    if (found) {
+      if (found.homeWorkbench) {
+        setActiveWorkbench(found.homeWorkbench);
       }
-      return prev.map((s) => (s.id === screenId ? { ...s, lastUsedAt: Date.now() } : s));
-    });
-  }, [setAppActiveScreenId, setActiveWorkbench, initScreenTabs]);
+      const screenTabs = found.tabs && found.tabs.length > 0
+        ? found.tabs
+        : defaultTabsForScreen(found);
+      const activeTab = found.activeTabId || screenTabs[0]?.id || '';
+      initScreenTabs(screenId, screenTabs, activeTab);
+    }
+    setScreens((prev) => prev.map((s) => (s.id === screenId ? { ...s, lastUsedAt: Date.now() } : s)));
+  }, [screens, setAppActiveScreenId, setActiveWorkbench, initScreenTabs]);
 
   const createScreen = useCallback((preset?: ScreenPreset) => {
     const newId = `screen-${Date.now()}`;
@@ -578,24 +576,27 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [screens.length, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, currentWb, initScreenTabs, setAppActiveScreenId, setActiveWorkbench]);
 
   const closeScreen = useCallback((screenId: string) => {
+    if (screensForWorkbench(screens, currentWb).length <= 1) return;
+
+    if (activeScreenId === screenId) {
+      const remaining = screens.filter((s) => s.id !== screenId);
+      const nextScreen = screensForWorkbench(remaining, currentWb)
+        .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
+      if (nextScreen) {
+        setActiveScreenId(nextScreen.id);
+        setAppActiveScreenId(nextScreen.id);
+        const nextTabs = nextScreen.tabs && nextScreen.tabs.length > 0
+          ? nextScreen.tabs
+          : defaultTabsForScreen(nextScreen);
+        initScreenTabs(nextScreen.id, nextTabs, nextScreen.activeTabId || nextTabs[0]?.id || '');
+      }
+    }
+
     setScreens((prev) => {
       if (screensForWorkbench(prev, currentWb).length <= 1) return prev;
-      const filtered = prev.filter((s) => s.id !== screenId);
-      if (activeScreenId === screenId) {
-        const nextScreen = screensForWorkbench(filtered, currentWb)
-          .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
-        if (nextScreen) {
-          setActiveScreenId(nextScreen.id);
-          setAppActiveScreenId(nextScreen.id);
-          const nextTabs = nextScreen.tabs && nextScreen.tabs.length > 0
-            ? nextScreen.tabs
-            : defaultTabsForScreen(nextScreen);
-          initScreenTabs(nextScreen.id, nextTabs, nextScreen.activeTabId || nextTabs[0]?.id || '');
-        }
-      }
-      return filtered;
+      return prev.filter((s) => s.id !== screenId);
     });
-  }, [activeScreenId, currentWb, setAppActiveScreenId, initScreenTabs]);
+  }, [screens, activeScreenId, currentWb, setAppActiveScreenId, initScreenTabs]);
 
   const togglePinScreen = useCallback((screenId: string) => {
     setScreens((prev) =>

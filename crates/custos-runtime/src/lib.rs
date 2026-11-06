@@ -18,7 +18,9 @@ pub mod session;
 pub mod terminal;
 pub mod workflow;
 pub mod workspace;
+pub mod packages;
 
+pub use packages::WorkerLease;
 pub use clock::{ClockError, ClockTick, PrecisionEventClock};
 pub use event_bus::{EventBusError, PipelineEvent, PipelineEventBus};
 pub use integration::{

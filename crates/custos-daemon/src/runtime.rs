@@ -290,6 +290,9 @@ impl CustosRuntime {
             workspace_provider,
         ));
 
+        let admission_coordinator = Arc::new(custos_runtime::compute::WorkloadAdmissionCoordinator::default());
+        custos_adapters::local_inference::set_admission_coordinator(admission_coordinator.clone());
+
         let workflow = Arc::new(
             TaskRuntime::new()
                 .with_kernel(kernel.clone())
@@ -301,8 +304,10 @@ impl CustosRuntime {
                 .with_run_store(store.clone())
                 .with_session_store(store.clone())
                 .with_journal_manager(session_manager.clone())
-                .with_workspace_coordinator(workspace_coordinator.clone()),
+                .with_workspace_coordinator(workspace_coordinator.clone())
+                .with_admission_coordinator(admission_coordinator.clone()),
         );
+        workflow.validate_ready()?;
         let active_claims = store.runs().list_active_claims()?;
         workflow.dispatcher().restore_from_active_claims(active_claims);
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new(Arc::new(
@@ -311,37 +316,70 @@ impl CustosRuntime {
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new(Arc::new(
             custos_adapters::notebook::LocalPythonDriver,
         )));
+        let files_coordinator = Arc::new(custos_runtime::workspace::WorkspaceFilesCoordinator::new());
+        let mcp_hub = Arc::new(custos_adapters::mcp::McpFederationHub::new());
 
         let oauth_callback_server = Arc::new(
             crate::oauth_callback_server::OAuthCallbackServer::with_credentials(credentials.clone()),
         );
 
-        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+        // Auto-probe pre-existing local packages from disk (~/.custos/packages) into inventory
+        let packages_dir = dirs::home_dir()
+            .map(|h| h.join(".custos").join("packages"))
+            .unwrap_or_else(|| std::path::PathBuf::from(".custos/packages"));
+        if let Ok(discovered) = custos_adapters::packages::scan_local_packages(&packages_dir) {
+            for pkg in discovered {
+                let _ = store.packages().register_discovered_candidate(
+                    &pkg.component_id,
+                    &pkg.version,
+                    &pkg.platform,
+                    &pkg.digest,
+                    &pkg.installed_path.to_string_lossy(),
+                );
+            }
+        }
+
+        let enabled_components = match store.packages().list_enabled_components() {
+            Ok(comps) => comps,
+            Err(e) => {
+                tracing::error!("Failed to query enabled packages from store: {e}; falling closed to safe built-in 'assistant' only");
+                vec!["assistant".into()]
+            }
+        };
+        let enabled_refs: Vec<&str> = enabled_components.iter().map(String::as_str).collect();
+        let pack_registry = Arc::new(custos_packs::create_pack_registry_from_inventory(&enabled_refs));
         // not-integrated: gateway awaits product caller and lifecycle test (F4)
         // not-integrated: in-memory memory store awaits product caller (F3)
 
+        let api_deps = crate::api::LocalApiDependencies {
+            terminal: terminal_coordinator.clone(),
+            files: files_coordinator,
+            harnesses: harnesses.clone(),
+            python_kernel: Some(python_coordinator.clone()),
+            pack_registry: pack_registry.clone(),
+            mcp_hub,
+        };
+
         let local_api = Arc::new(
-            LocalApiDispatcher::new(
+            LocalApiDispatcher::with_dependencies(
                 task_service.clone(),
                 session_manager.clone(),
                 bridge_service.clone(),
+                api_deps,
             )
             .with_workflow(workflow.clone())
             .with_usage_runs(store.clone())
             .with_sqlite_store(store.clone())
             .with_workspace(workspace_coordinator.clone())
-            .with_terminal(terminal_coordinator.clone())
-            .with_python_kernel(python_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
             .with_model_availability(availability)
             .with_providers(Arc::new(store.providers().clone()))
             .with_credentials(credentials.clone())
             .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
             .with_oauth_callback_server(oauth_callback_server)
-            .with_harnesses(harnesses.clone())
-            .with_packs(pack_registry.clone())
             .with_assistant(Arc::new(store.assistant().clone()))
-            .with_outbox(Arc::new(store.outbox().clone())),
+            .with_outbox(Arc::new(store.outbox().clone()))
+            .with_admission_coordinator(admission_coordinator.clone()),
         );
 
         Ok(Self {

@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(manifest.lens, WorkbenchLens::Quant);
 
         let verifiers = registry.list_all_verifiers();
-        assert_eq!(verifiers.len(), 2, "Quant pack must expose 2 verifiers");
+        assert_eq!(verifiers.len(), 3, "Quant pack must expose 3 verifiers");
 
         // Unregister on-demand
         let removed = registry.unregister("quant");

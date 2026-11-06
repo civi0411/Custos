@@ -227,4 +227,39 @@ impl DomainPack for EngineeringPack {
         );
         Ok(())
     }
+
+    fn tool_declarations(&self) -> Vec<serde_json::Value> {
+        vec![
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "edit_file",
+                    "description": "Apply precise content replacement or patch to a workspace file",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Relative file path" },
+                            "content": { "type": "string", "description": "New or patched file content" }
+                        },
+                        "required": ["path", "content"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "description": "Run a shell command safely inside the isolated development worktree",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": { "type": "string", "description": "Shell command to execute" },
+                            "timeout_secs": { "type": "integer", "description": "Execution timeout in seconds" }
+                        },
+                        "required": ["command"]
+                    }
+                }
+            }),
+        ]
+    }
 }

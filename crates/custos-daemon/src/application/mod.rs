@@ -16,7 +16,13 @@ pub(crate) use custos_domain::DomainError;
 
 impl LocalApiDispatcher {
     pub(crate) async fn dispatch_application(&self, req: ApiRequest) -> ApiResponse {
-        match req.method.split('.').nth(1).unwrap_or("") {
+        let parts: Vec<&str> = req.method.split('.').collect();
+        let domain_prefix = match parts.as_slice() {
+            ["v1" | "custos", domain, ..] => *domain,
+            [domain, ..] => *domain,
+            [] => "",
+        };
+        match domain_prefix {
             // Group: Tasks & Workflow — Task lifecycle, workflow execution, omni-intelligence orchestration
             "tasks" | "workflow" | "oi" => self.handle_tasks(req).await,
 
@@ -51,8 +57,8 @@ impl LocalApiDispatcher {
             // Group: Integrations — Browser/emulator automation, fleet SSH orchestration
             "browser" | "emulator" | "fleet" | "automation" => self.handle_integrations(req).await,
 
-            // Group: Domain Packs — Domain-specific pack manifests, jobs and roles
-            "packs" => self.handle_packs(req).await,
+            // Group: Domain Packs — Domain-specific pack manifests, jobs, packages inventory
+            "packs" | "packages" => self.handle_packs(req).await,
 
             // Group: System & Diagnostic — System settings, diagnostic capabilities, ping & health, pipeline status
             "settings" | "system" | "capabilities" | "resources" | "ping" | "health" | "pipeline" => {

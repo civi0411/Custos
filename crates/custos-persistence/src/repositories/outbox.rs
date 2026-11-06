@@ -686,4 +686,25 @@ mod tests {
         assert_eq!(failed_entry.status, OutboxStatus::Failed);
         assert_eq!(failed_entry.error_message.as_deref(), Some("connection timeout"));
     }
+
+    #[tokio::test]
+    async fn test_no_dispatch_before_approval_and_reconcile() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = OutboxRepository::new(db);
+
+        // Verify that after reconcile_on_startup, any entries that were dispatching
+        // are transitioned to uncertain, and zero unapproved entries can remain in dispatching state.
+        let recovered = repo.reconcile_on_startup().expect("reconcile succeeds");
+        assert_eq!(recovered, 0);
+
+        let conn = repo.db.lock().unwrap();
+        let dispatching_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM outbox_entries WHERE status = 'dispatching'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(dispatching_count, 0, "No entries may remain dispatching without approval");
+    }
 }

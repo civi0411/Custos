@@ -1,0 +1,1 @@
+export { quantContribution } from '../registry';

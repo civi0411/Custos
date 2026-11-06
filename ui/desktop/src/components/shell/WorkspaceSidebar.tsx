@@ -192,7 +192,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
   const workbenchConfig = useMemo(() => {
     switch (activeWorkbench) {
-      case 'research':
+      case 'research': {
+        const studiesCount = researchPath ? 1 : 0;
         return {
           title: 'Research Study',
           icon: FlaskConical,
@@ -201,11 +202,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           badgeClass: 'bg-amber-400/10 text-amber-300 border-amber-400/20',
           searchPlaceholder: 'Search studies, findings, claims...',
           allLabel: 'All Studies',
-          allCount: 1,
+          allCount: studiesCount,
           activeLabel: 'Active',
-          activeCount: researchPath ? 1 : 0,
-          footerStatus: researchDetection?.name || 'Research Study Ready',
+          activeCount: studiesCount,
+          footerStatus: researchDetection?.name || (researchPath ? 'Research Study Active' : 'No Study Folder Selected'),
         };
+      }
       case 'copilot':
         return {
           title: 'Autonomous Tasks',
@@ -220,7 +222,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           activeCount: tasks.filter((t) => t.status === 'Blocked' || t.metadata?.approval_required === 'true').length,
           footerStatus: 'Copilot Supervisor Ready',
         };
-      case 'quant':
+      case 'quant': {
+        const strategiesCount = 0;
         return {
           title: 'Quant Strategies',
           icon: TrendingUp,
@@ -229,11 +232,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           badgeClass: 'bg-violet-400/10 text-violet-300 border-violet-400/20',
           searchPlaceholder: 'Search alphas, backtests, risk audits...',
           allLabel: 'All Strategies',
-          allCount: 3,
+          allCount: strategiesCount,
           activeLabel: 'Live Alphas',
-          activeCount: 2,
-          footerStatus: 'Quant Risk Engine · Ready',
+          activeCount: 0,
+          footerStatus: strategiesCount > 0 ? `${strategiesCount} Strategies Registered` : 'No Active Deployments',
         };
+      }
       case 'engineering':
       default: {
         const totalWorktrees = projectGroups.reduce(
@@ -526,7 +530,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             handleOpenStudyFolder={handleOpenStudyFolder}
           />
         ) : activeWorkbench === 'quant' ? (
-          <QuantStrategyExplorer onShowToast={onShowToast} />
+          <QuantStrategyExplorer onShowToast={onShowToast} onOpenTab={_onOpenTab} />
         ) : (
           <EngineeringWorkspaceTree
             projectGroups={projectGroups}
