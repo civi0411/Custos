@@ -4,8 +4,10 @@
 //! - market: market data ingestion/query, factor discovery, pre-trade risk gates, post-trade reviews
 
 pub mod backtest;
+pub mod dto;
 pub mod market;
 pub mod orders;
+pub mod services;
 
 use crate::api::*;
 
