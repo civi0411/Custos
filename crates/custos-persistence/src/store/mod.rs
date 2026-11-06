@@ -24,6 +24,9 @@ use custos_domain::{
 /// DecisionPort, WorkflowRevisionPort, and ReplanPort.
 /// Manages tasks, execution spans, continuation packets, sessions, outbox, runs, decision records,
 /// workflow revisions, and replans with WAL mode and foreign key integrity.
+/// Alias representing the canonical SQLite persistent store for Custos
+pub type CustosStore = SqliteTaskStore;
+
 #[derive(Clone)]
 pub struct SqliteTaskStore {
     db: DbConnection,
@@ -236,6 +239,19 @@ impl SqliteTaskStore {
 
     pub fn command_ledger(&self) -> &CommandLedgerRepository {
         &self.command_ledger_repo
+    }
+
+    /// Health check pinging SQLite to verify read/write availability and WAL consistency
+    pub fn health_check(&self) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let res: i64 = conn
+            .query_row("SELECT 1", [], |row| row.get(0))
+            .map_err(|e| DomainError::Validation(format!("SQLite health check failed: {e}")))?;
+        if res == 1 {
+            Ok(())
+        } else {
+            Err(DomainError::Validation("SQLite health check returned unexpected value".into()))
+        }
     }
 
     pub fn get_settings(&self) -> Result<std::collections::HashMap<String, String>, DomainError> {

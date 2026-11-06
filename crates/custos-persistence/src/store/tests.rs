@@ -416,3 +416,10 @@ use super::*;
         let deleted = store.get_workspace(&ws_id).await.unwrap();
         assert!(deleted.is_none());
     }
+
+    #[tokio::test]
+    async fn test_store_health_check() {
+        let store = CustosStore::new_in_memory().unwrap();
+        assert!(store.health_check().is_ok());
+    }
+
