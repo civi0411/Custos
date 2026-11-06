@@ -2,6 +2,8 @@
 
 **Status:** target architecture with an audited current-state map. A named module, pane, or upstream feature is not proof of an end-to-end capability. The product intent is defined in [Custos.md](../../Custos.md); the physical code map is [codebase-architecture.md](../development/codebase-architecture.md).
 
+**Master specification integration:** product/package/UI contracts now live directly in master §1.2; one assembly and host/application boundaries in §2.3; data ownership and durability in §§6.3/6.5; reasoning/execution in §14.15; physical feature placement and package/resource lifetime in §15.10; notebook/training/GPU recovery in §17.8; and the aligned P00–P11 delivery/acceptance summary in §18.8. This topic expands those decisions; it is not a prerequisite link that substitutes for their presence in the master. Production-import metadata was refreshed at `rft/c4c0c35` (12 product Cargo packages); semantic findings below retain their stated audit scope and must be revalidated before code changes. This consolidation changes documentation only.
+
 **Current assembly reading entry:** §§10–13 map the current crates into cohesive blocks, one composition path, workbench contributions and measurable resource behavior. The historical snapshot in §7 does not override the current source follow-up: `workflow/task_runtime` and daemon `api` are directory modules, the legacy `engine` tree is absent, and Coding/Research/Quant are optional specialist workbenches around Base Assistant. Implementation is tracked in [P00–P11](../development/modular-workbench-refactor-plan.md#28-work-breakdown-chi-tiết-p00p11), not a separate campaign.
 
 ## 1. Product contract
