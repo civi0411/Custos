@@ -26,6 +26,9 @@ pub mod shared;
 pub mod task;
 pub mod workspace;
 
+/// Standard Decoupled Architectural Blocks (Kim Tự Tháp - Level 0)
+pub mod blocks;
+
 // Backward-compatible module paths for existing callers
 pub use authority::action;
 pub use authority::approval;

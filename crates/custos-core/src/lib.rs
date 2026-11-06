@@ -14,6 +14,9 @@ pub mod oi;
 pub mod research_ingress;
 pub mod sandbox_policy;
 
+/// Standard Decoupled Architectural Blocks (Kim Tự Tháp - Level 1)
+pub mod blocks;
+
 // Re-exports and compatibility aliases
 pub use authority::*;
 pub use capability::*;
