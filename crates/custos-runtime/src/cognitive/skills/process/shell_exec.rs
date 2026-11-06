@@ -209,8 +209,13 @@ impl SandboxedProcess {
         match result {
             Ok(Ok(output)) => {
                 let exit_code = output.status.code().unwrap_or(-1);
-                let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-                let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+                let mut stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+                let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+                // Cap total captured output to 64 KB on character boundaries
+                const MAX_OUTPUT_BYTES: usize = 65_536;
+                custos_domain::truncate_to_char_boundary(&mut stdout, MAX_OUTPUT_BYTES);
+                custos_domain::truncate_to_char_boundary(&mut stderr, MAX_OUTPUT_BYTES);
 
                 debug!(
                     exit_code,
@@ -316,5 +321,12 @@ mod tests {
             assert!(out_tail.chars().count() <= n);
             assert!(err_tail.chars().count() <= n);
         }
+    }
+
+    #[test]
+    fn test_output_capping_safety() {
+        let mut large_str = "A".repeat(100_000);
+        custos_domain::truncate_to_char_boundary(&mut large_str, 65_536);
+        assert_eq!(large_str.len(), 65_536);
     }
 }
