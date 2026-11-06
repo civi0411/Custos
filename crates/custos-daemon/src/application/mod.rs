@@ -1,4 +1,5 @@
 mod assistant;
+pub mod blocks;
 mod compute;
 mod execution;
 mod integrations;
@@ -12,6 +13,7 @@ mod tasks;
 mod workspaces;
 
 pub(crate) use crate::api::*;
+pub use blocks::*;
 pub(crate) use custos_domain::DomainError;
 
 impl LocalApiDispatcher {

@@ -1,5 +1,6 @@
 pub mod artifacts;
 pub mod batch_writer;
+pub mod blocks;
 pub mod connection;
 pub mod migrations;
 pub mod repositories;

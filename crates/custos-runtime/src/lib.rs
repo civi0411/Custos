@@ -4,6 +4,7 @@
 //! session lifecycle, and context window assembly.
 
 pub mod agent;
+pub mod blocks;
 pub mod cognitive;
 pub mod compute;
 pub mod context;
