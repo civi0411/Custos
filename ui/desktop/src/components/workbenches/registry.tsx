@@ -8,19 +8,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-export type CanonicalWorkbenchId = 'assistant' | 'coding' | 'research' | 'quant' | 'unsupported';
-export type WorkbenchId = CanonicalWorkbenchId | 'copilot' | 'engineering';
-
-export interface WorkbenchContribution {
-  id: WorkbenchId;
-  canonicalId: CanonicalWorkbenchId;
-  label: string;
-  icon: React.ElementType;
-  shortcut: string;
-  builtin: boolean;
-  description: string;
-  supportedTabTypes: string[];
-}
+import type { WorkbenchContribution, CanonicalWorkbenchId, WorkbenchId } from '@/types/workbench';
+export type { WorkbenchContribution, CanonicalWorkbenchId, WorkbenchId };
 
 export const BUILTIN_CONTRIBUTIONS: WorkbenchContribution[] = [
   {
