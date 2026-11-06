@@ -157,3 +157,20 @@ pub trait DomainPack: Send + Sync {
         Vec::new()
     }
 }
+
+/// Lifecycle hooks invoked when a pack is dynamically loaded or unloaded from the registry
+#[async_trait]
+pub trait PackLifecycle: Send + Sync {
+    /// Hook invoked immediately after the pack is registered into the active runtime
+    async fn on_load(&self) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    /// Hook invoked prior to pack deregistration and resource disposal
+    async fn on_unload(&self) -> Result<(), DomainError> {
+        Ok(())
+    }
+}
+
+impl<T: DomainPack + ?Sized> PackLifecycle for T {}
+

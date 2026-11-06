@@ -26,6 +26,10 @@ impl VerificationResult {
     }
 }
 
+/// Structured outcome alias for verifier evaluations
+pub type VerifierResult = VerificationResult;
+
+
 /// Context supplied to a verifier execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationContext {
