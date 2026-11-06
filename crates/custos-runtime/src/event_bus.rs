@@ -64,6 +64,20 @@ pub enum PipelineEvent {
     },
 }
 
+impl PipelineEvent {
+    /// Returns the canonical modality tag name for this event.
+    pub fn modality_name(&self) -> &'static str {
+        match self {
+            Self::MarketBarClosed { .. } => "market_bar_closed",
+            Self::CodeAstChanged { .. } => "code_ast_changed",
+            Self::ScienceClaimVerified { .. } => "science_claim_verified",
+            Self::AgentOutboxDispatched { .. } => "agent_outbox_dispatched",
+            Self::PipelineHeartbeat { .. } => "pipeline_heartbeat",
+        }
+    }
+}
+
+
 /// Thread-safe in-process broadcast event bus for sovereign pipeline notifications
 #[derive(Debug, Clone)]
 pub struct PipelineEventBus {
@@ -142,5 +156,6 @@ mod tests {
         assert_eq!(msg1, event);
         assert_eq!(msg2, event);
         assert_eq!(bus.total_published(), 1);
+        assert_eq!(event.modality_name(), "market_bar_closed");
     }
 }

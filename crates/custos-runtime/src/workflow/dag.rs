@@ -57,6 +57,19 @@ impl DagNode {
             error: None,
         }
     }
+
+    /// Returns the strongly-typed WorkflowNodeId for this node.
+    pub fn typed_id(&self) -> custos_domain::WorkflowNodeId {
+        custos_domain::WorkflowNodeId::new(&self.id)
+    }
+
+    /// Returns strongly-typed WorkflowNodeId vector for all dependencies.
+    pub fn typed_dependencies(&self) -> Vec<custos_domain::WorkflowNodeId> {
+        self.depends_on
+            .iter()
+            .map(custos_domain::WorkflowNodeId::new)
+            .collect()
+    }
 }
 
 /// Execution Wave: A set of node IDs whose dependencies have all completed,
@@ -593,5 +606,22 @@ mod tests {
         // 7. Graph finished
         assert!(graph.is_finished());
         assert!(!graph.is_all_completed()); // because B failed and D skipped
+    }
+
+    #[test]
+    fn test_typed_node_ids() {
+        let node = DagNode::new(
+            "node_compile",
+            "Compile target",
+            "cargo_build",
+            serde_json::json!({}),
+            vec!["node_fetch".to_string(), "node_check".to_string()],
+        );
+
+        assert_eq!(node.typed_id().as_str(), "node_compile");
+        let deps = node.typed_dependencies();
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].as_str(), "node_fetch");
+        assert_eq!(deps[1].as_str(), "node_check");
     }
 }
