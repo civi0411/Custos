@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ShieldCheck, CheckCircle2, AlertTriangle, XCircle, RotateCw } from 'lucide-react';
 import { WorkbenchPane, WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 import { daemonClient } from '@/api/daemon_client';
@@ -55,10 +55,20 @@ interface ReviewReportView {
   }>;
 }
 
+interface PboResultView {
+  available: boolean;
+  probability: number;
+  samples: number;
+  median_logit: number;
+  is_overfitted: boolean;
+  status: string;
+}
+
 export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [gateResult, setGateResult] = useState<GateOutcomeView | null>(null);
   const [reviewReport, setReviewReport] = useState<ReviewReportView | null>(null);
+  const [pboResult, setPboResult] = useState<PboResultView | null>(null);
 
   const runGateEvaluation = async () => {
     setLoading(true);
@@ -128,11 +138,22 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
     }
   };
 
-  useEffect(() => {
-    // Initial evaluation on mount
-    void runGateEvaluation();
-    void runTradeReview();
-  }, []);
+  const runPboEvaluation = async () => {
+    try {
+      const res = await daemonClient.computeQuantPbo({
+        score_matrix: [
+          [1.5, 2.0, 1.8, 1.2, 0.9, 1.4],
+          [2.5, 2.2, 2.9, -1.0, -0.5, -0.8],
+          [0.5, 0.6, 0.4, 0.5, 0.7, 0.6],
+          [1.2, 1.1, 1.3, 1.4, 1.2, 1.3],
+        ],
+        max_combinations: 500,
+      });
+      setPboResult(res);
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <WorkbenchPane
@@ -148,6 +169,7 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
             onClick={() => {
               void runGateEvaluation();
               void runTradeReview();
+              void runPboEvaluation();
             }}
             className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-xs font-medium text-[var(--color-fg-muted)] transition-colors"
           >
@@ -158,12 +180,34 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
       }
     >
       <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4 space-y-4 bg-[var(--color-canvas)] text-[var(--color-fg)]">
-        {/* Gate Evaluation Section */}
-        {gateResult ? (
-          <div className={`flex items-start gap-3 p-4 rounded-lg border ${
-            gateResult.is_allowed
-              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-              : 'border-rose-500/20 bg-rose-500/10 text-rose-400'
+        {!gateResult && !reviewReport && !pboResult ? (
+          <WorkbenchEmptyState
+            title="No Risk Evaluation Run"
+            description="Evaluate pre-trade decision gates, FIFO trade cohorts, or CSCV overfitting probabilities for your trading strategies."
+            action={
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  void runGateEvaluation();
+                  void runTradeReview();
+                  void runPboEvaluation();
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-workbench-accent/20 hover:bg-workbench-accent/30 text-workbench-accent border border-workbench-accent/30 transition flex items-center gap-1.5"
+              >
+                <ShieldCheck size={14} />
+                <span>{loading ? 'Evaluating...' : 'Run Decision Gate & Risk Audit'}</span>
+              </button>
+            }
+          />
+        ) : (
+          <>
+            {/* Gate Evaluation Section */}
+            {gateResult ? (
+              <div className={`flex items-start gap-3 p-4 rounded-lg border ${
+                gateResult.is_allowed
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  : 'border-rose-500/20 bg-rose-500/10 text-rose-400'
           }`}>
             {gateResult.is_allowed ? (
               <CheckCircle2 size={20} className="shrink-0 mt-0.5" />
@@ -268,6 +312,81 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
               </table>
             </div>
 
+            {/* Exit Reason Cohorts Attribution */}
+            {reviewReport.exit_cohorts && reviewReport.exit_cohorts.length > 0 && (
+              <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+                    Exit Reason Cohorts Attribution
+                  </span>
+                  <span className="text-[11px] font-mono text-[var(--color-fg-muted)]">Zero-Anchored Net P&L</span>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-[var(--color-border-subtle)] text-[var(--color-fg-muted)]">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Exit Reason</th>
+                      <th className="px-4 py-2 font-medium">Fills Count</th>
+                      <th className="px-4 py-2 font-medium">Net PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border-subtle)]">
+                    {reviewReport.exit_cohorts.map((cohort, idx) => (
+                      <tr key={idx} className="hover:bg-[var(--color-surface-2)]">
+                        <td className="px-4 py-2 font-semibold font-mono uppercase">{cohort.reason}</td>
+                        <td className="px-4 py-2 font-mono">{cohort.count}</td>
+                        <td className={`px-4 py-2 font-mono ${cohort.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          ${cohort.net_pnl.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Probability of Backtest Overfitting (PBO / CSCV) */}
+            {pboResult && pboResult.available && (
+              <div className="p-4 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
+                <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle)]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+                      Combinatorially Symmetric Cross-Validation (CSCV)
+                    </span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                      pboResult.is_overfitted
+                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                    }`}>
+                      {pboResult.is_overfitted ? 'FAIL: OVERFITTED' : 'PASS: ROBUST'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-[var(--color-fg-muted)]">
+                    {pboResult.samples} Combinations Evaluated
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-3">
+                  <div>
+                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">PBO (Overfitting Prob)</div>
+                    <div className={`text-xl font-mono font-bold mt-1 ${pboResult.probability > 0.5 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {(pboResult.probability * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">Median Rank Logit</div>
+                    <div className="text-xl font-mono font-bold mt-1 text-[var(--color-fg)]">
+                      {pboResult.median_logit > 0 ? `+${pboResult.median_logit.toFixed(3)}` : pboResult.median_logit.toFixed(3)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">Evaluation Status</div>
+                    <div className="text-xl font-mono font-bold mt-1 capitalize text-[var(--color-fg)]">
+                      {pboResult.status}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Diagnostic Checks */}
             {reviewReport.diagnostics.length > 0 && (
               <div className="space-y-2">
@@ -301,6 +420,8 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
             )}
           </div>
         )}
+      </>
+    )}
       </div>
     </WorkbenchPane>
   );

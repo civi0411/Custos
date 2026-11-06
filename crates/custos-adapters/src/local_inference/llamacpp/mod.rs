@@ -354,12 +354,6 @@ impl LlamaCppBackend {
 
         let backend = match LlamaBackend::init() {
             Ok(backend) => backend,
-            Err(llama_cpp_2::LlamaCppError::BackendAlreadyInitialized) => {
-                unreachable!(
-                    "LlamaBackend already initialized but Weak was dead; \
-                     the runtime mutex prevents concurrent re-init"
-                )
-            }
             Err(e) => {
                 tracing::error!(error = %e, "failed to initialize local inference runtime");
                 return Err(anyhow::anyhow!("Failed to init llama backend: {}", e));

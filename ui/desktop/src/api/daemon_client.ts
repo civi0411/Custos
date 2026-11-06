@@ -801,6 +801,25 @@ export class DaemonClient {
     return this.request('v1.quant.market_bars.get', params);
   }
 
+  async ingestQuantMarketBars(params: {
+    symbol: string;
+    timeframe: string;
+    bars: Array<{
+      timestamp: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>;
+  }): Promise<{
+    symbol: string;
+    timeframe: string;
+    stored_bars: number;
+  }> {
+    return this.request('v1.quant.market_bars.ingest', params);
+  }
+
   async getPipelineStatus(): Promise<{
     status: string;
     timestamp_ms: number;
@@ -979,6 +998,21 @@ export class DaemonClient {
     timestamp: number;
   }> {
     return this.request('v1.quant.orderbook.get', params);
+  }
+
+  async computeQuantPbo(params: {
+    score_matrix: number[][];
+    max_combinations?: number;
+  }): Promise<{
+    available: boolean;
+    probability: number;
+    samples: number;
+    median_logit: number;
+    logits: number[];
+    is_overfitted: boolean;
+    status: string;
+  }> {
+    return this.request('v1.quant.pbo.compute', params);
   }
 
 
@@ -2041,6 +2075,35 @@ export class DaemonClient {
       attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
     };
   }
+
+  async listPackageInventory(): Promise<{ items: PackageInventoryItem[] }> {
+    const res = await this.request<{ items: PackageInventoryItem[] }>('packages.list_inventory');
+    return {
+      items: res.items || [],
+    };
+  }
+
+  async installPackage(componentId: string, version: string = '0.1.0'): Promise<any> {
+    return this.request('packages.install', { component_id: componentId, version });
+  }
+
+  async enablePackage(componentId: string): Promise<any> {
+    return this.request('packages.enable', { component_id: componentId });
+  }
+
+  async disablePackage(componentId: string): Promise<any> {
+    return this.request('packages.disable', { component_id: componentId });
+  }
+}
+
+export interface PackageInventoryItem {
+  component_id: string;
+  display_name: string;
+  state: 'builtin' | 'installed' | 'staged' | 'downloading' | 'failed' | 'disabled';
+  version: string;
+  is_builtin: boolean;
+  manifest_ref?: string;
+  installed_at?: string;
 }
 
 export const daemonClient = new DaemonClient();

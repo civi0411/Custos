@@ -35,6 +35,7 @@ pub struct TaskRuntime {
     dispatcher: Arc<super::dispatcher::WorkflowDispatcher>,
     lease_manager: Option<Arc<super::lease::WorkspaceLeaseManager>>,
     workspace_coordinator: Option<Arc<crate::workspace::WorkspaceCoordinator>>,
+    admission_coordinator: Option<Arc<crate::compute::WorkloadAdmissionCoordinator>>,
     active_runs: Arc<RwLock<HashMap<String, Run>>>,
     active_workers: Arc<RwLock<HashMap<String, WorkerRun>>>,
 }
@@ -56,6 +57,7 @@ impl TaskRuntime {
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
             workspace_coordinator: None,
+            admission_coordinator: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -77,6 +79,7 @@ impl TaskRuntime {
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
             workspace_coordinator: None,
+            admission_coordinator: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -188,6 +191,39 @@ impl TaskRuntime {
 
     pub fn workspace_coordinator(&self) -> Option<&Arc<crate::workspace::WorkspaceCoordinator>> {
         self.workspace_coordinator.as_ref()
+    }
+
+    pub fn with_admission_coordinator(
+        mut self,
+        admission_coordinator: Arc<crate::compute::WorkloadAdmissionCoordinator>,
+    ) -> Self {
+        self.admission_coordinator = Some(admission_coordinator);
+        self
+    }
+
+    pub fn admission_coordinator(&self) -> Option<&Arc<crate::compute::WorkloadAdmissionCoordinator>> {
+        self.admission_coordinator.as_ref()
+    }
+
+    /// Validates that all mandatory composition dependencies are present before accepting production work.
+    /// Distinguishes intentionally disabled capabilities from missing required wiring (A03).
+    pub fn validate_ready(&self) -> Result<(), DomainError> {
+        if self.kernel.is_none() {
+            return Err(DomainError::Validation("composition_incomplete: kernel port is required".into()));
+        }
+        if self.run_store.is_none() {
+            return Err(DomainError::Validation("composition_incomplete: run_store port is required".into()));
+        }
+        if self.session_store.is_none() {
+            return Err(DomainError::Validation("composition_incomplete: session_store port is required".into()));
+        }
+        if self.model.is_none() {
+            return Err(DomainError::Validation("composition_incomplete: model port is required".into()));
+        }
+        if self.workspace_coordinator.is_none() {
+            return Err(DomainError::Validation("composition_incomplete: workspace_coordinator is required".into()));
+        }
+        Ok(())
     }
 
     pub fn kernel(&self) -> Option<&Arc<dyn KernelPort>> {

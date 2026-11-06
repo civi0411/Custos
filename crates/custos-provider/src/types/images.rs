@@ -206,6 +206,24 @@ fn read_bounded(reader: impl std::io::Read, max_bytes: u64) -> std::io::Result<V
     Ok(bytes)
 }
 
+/// Parse image bytes into an ImageContent with size and magic number validation (A06).
+pub fn parse_image_bytes(bytes: &[u8], mime_type: &str) -> Result<ImageContent, ProviderError> {
+    if bytes.len() as u64 > MAX_IMAGE_BYTES {
+        return Err(ProviderError::RequestFailed(format!(
+            "Image file exceeds the {} MiB limit",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        )));
+    }
+    if !has_image_magic(bytes) {
+        return Err(ProviderError::RequestFailed(
+            "File is not a valid image".to_string(),
+        ));
+    }
+
+    let data = base64::prelude::BASE64_STANDARD.encode(bytes);
+    Ok(ImageContent::new(data, mime_type))
+}
+
 /// Convert a local image file to base64 encoded ImageContent
 pub fn load_image_file(path: &str) -> Result<ImageContent, ProviderError> {
     let path = Path::new(path);
@@ -229,34 +247,9 @@ pub fn load_image_file(path: &str) -> Result<ImageContent, ProviderError> {
 
     let file = std::fs::File::open(path)
         .map_err(|e| ProviderError::RequestFailed(format!("Failed to read image file: {e}")))?;
-    let file_size = file
-        .metadata()
-        .map_err(|e| ProviderError::RequestFailed(format!("Failed to read image file: {e}")))?
-        .len();
-    if file_size > MAX_IMAGE_BYTES {
-        return Err(ProviderError::RequestFailed(format!(
-            "Image file exceeds the {} MiB limit",
-            MAX_IMAGE_BYTES / (1024 * 1024)
-        )));
-    }
-
     let bytes = read_bounded(file, MAX_IMAGE_BYTES)
         .map_err(|e| ProviderError::RequestFailed(format!("Failed to read image file: {e}")))?;
-    if bytes.len() as u64 > MAX_IMAGE_BYTES {
-        return Err(ProviderError::RequestFailed(format!(
-            "Image file exceeds the {} MiB limit",
-            MAX_IMAGE_BYTES / (1024 * 1024)
-        )));
-    }
-    if !has_image_magic(&bytes) {
-        return Err(ProviderError::RequestFailed(
-            "File is not a valid image".to_string(),
-        ));
-    }
-
-    let data = base64::prelude::BASE64_STANDARD.encode(&bytes);
-
-    Ok(ImageContent::new(data, mime_type))
+    parse_image_bytes(&bytes, mime_type)
 }
 
 #[cfg(test)]

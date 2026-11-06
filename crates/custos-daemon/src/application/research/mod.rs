@@ -13,6 +13,35 @@ use crate::api::*;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_research(&self, req: ApiRequest) -> ApiResponse {
+        let is_read_only = matches!(
+            req.method.as_str(),
+            METHOD_RESEARCH_SOURCES_LIST
+                | METHOD_RESEARCH_ANCHORS_LIST
+                | METHOD_RESEARCH_CLAIMS_LIST
+                | METHOD_RESEARCH_LINEAGE_LIST
+                | METHOD_RESEARCH_RUNS_LIST
+                | METHOD_NOTEBOOK_CELLS_LIST
+                | METHOD_NOTEBOOK_STATUS
+                | "v1.research.executions.list"
+                | "v1.research.executions.get"
+                | "v1.research.recipes.list"
+                | "v1.research.recipes.get"
+                | METHOD_REVIEWS_LIST
+                | METHOD_REVIEWS_GET
+                | METHOD_SYNTHESIS_PROPOSALS_LIST
+                | METHOD_SYNTHESIS_PROPOSALS_GET
+                | "v1.research.annotations.list"
+                | METHOD_ARTIFACTS_LIST
+                | METHOD_ARTIFACTS_GET
+                | METHOD_ARTIFACTS_LINEAGE_GRAPH
+                | METHOD_NOTES_LIST
+                | METHOD_NOTES_GET
+        );
+        if !is_read_only {
+            if let Err(denied) = self.require_pack_enabled("research", &req.id) {
+                return denied;
+            }
+        }
         match req.method.as_str() {
             METHOD_RESEARCH_SOURCES_LIST
             | METHOD_RESEARCH_SOURCES_SAVE

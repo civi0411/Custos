@@ -20,6 +20,7 @@ pub use sidecar::{
 pub mod backend;
 #[cfg(feature = "hf-hub")]
 pub mod hf_models;
+#[cfg(feature = "local-inference-native")]
 mod llamacpp;
 #[cfg(feature = "hf-hub")]
 pub mod management;
@@ -43,14 +44,16 @@ use custos_provider::errors::ProviderError;
 use custos_provider::images::ImageFormat;
 use custos_provider::model::ModelConfig;
 use custos_provider::request_log::{start_log, LoggerHandleExt, RequestLogHandle};
-use llamacpp::{LlamaCppBackend, LLAMACPP_BACKEND_ID};
+#[cfg(feature = "local-inference-native")]
+use llamacpp::LlamaCppBackend;
+pub const LLAMACPP_BACKEND_ID: &str = "llamacpp";
 use mlx::{MlxBackend, MLX_BACKEND_ID};
 use model::ChatTemplate;
 use rmcp::model::Tool;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex as StdMutex, Weak};
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
@@ -115,13 +118,20 @@ pub struct InferenceRuntime {
 }
 
 pub fn builtin_chat_template_names() -> Vec<String> {
-    llamacpp::builtin_chat_template_names()
+    #[cfg(feature = "local-inference-native")]
+    {
+        llamacpp::builtin_chat_template_names()
+    }
+    #[cfg(not(feature = "local-inference-native"))]
+    {
+        Vec::new()
+    }
 }
 
-static RUNTIME: StdMutex<Weak<InferenceRuntime>> = StdMutex::new(Weak::new());
+static RUNTIME: StdMutex<Option<Arc<InferenceRuntime>>> = StdMutex::new(None);
 
 fn current_runtime() -> Option<Arc<InferenceRuntime>> {
-    RUNTIME.lock().expect("runtime lock poisoned").upgrade()
+    RUNTIME.lock().expect("runtime lock poisoned").clone()
 }
 
 pub fn set_admission_coordinator(
@@ -135,13 +145,16 @@ pub fn set_admission_coordinator(
 impl InferenceRuntime {
     pub fn get_or_init() -> Result<Arc<Self>> {
         let mut guard = RUNTIME.lock().expect("runtime lock poisoned");
-        if let Some(runtime) = guard.upgrade() {
-            return Ok(runtime);
+        if let Some(ref runtime) = *guard {
+            return Ok(runtime.clone());
         }
-        let llamacpp_backend: Arc<dyn LocalInferenceBackend> = Arc::new(LlamaCppBackend::new()?);
+        let mut backends: HashMap<&'static str, Arc<dyn LocalInferenceBackend>> = HashMap::new();
+        #[cfg(feature = "local-inference-native")]
+        {
+            let llamacpp_backend: Arc<dyn LocalInferenceBackend> = Arc::new(LlamaCppBackend::new()?);
+            backends.insert(LLAMACPP_BACKEND_ID, llamacpp_backend);
+        }
         let mlx_backend: Arc<dyn LocalInferenceBackend> = Arc::new(MlxBackend::new());
-        let mut backends = HashMap::new();
-        backends.insert(LLAMACPP_BACKEND_ID, llamacpp_backend);
         backends.insert(MLX_BACKEND_ID, mlx_backend);
         let runtime = Arc::new(Self {
             models: StdMutex::new(HashMap::new()),
@@ -149,7 +162,7 @@ impl InferenceRuntime {
             backends,
             admission: StdMutex::new(None),
         });
-        *guard = Arc::downgrade(&runtime);
+        *guard = Some(runtime.clone());
         Ok(runtime)
     }
 

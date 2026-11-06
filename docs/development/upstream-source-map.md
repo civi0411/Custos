@@ -2,11 +2,13 @@
 
 > **Status:** Audit in progress. This inventory records observations in the Custos checkout, not a license-compliance conclusion. Do not claim upstream SHA pinning or production integration until the missing evidence is filled in.
 
+**Three-workbench follow-up:** [Current crates/UI audit](workbench-core-and-controls-audit.md#current-custos-crates-ui-and-three-reference-follow-up) adds source-traced installation/admission and domain evidence findings. QuantDinger's local backend snapshot is `e75f0cfa9cd47de9259844fefbf20c2fa1464d45`; its main checkout supplies backend/jobs/command/lifecycle references. The Vue client is a [separate repository](https://github.com/OpenByteInc/QuantDinger-Vue) with separate source-available terms; only its official README/router were inspected remotely in this follow-up. No QuantDinger source was copied, no frontend dependency installed, and no permission to reuse frontend code is inferred from the backend license.
+
 ## Goose-derived source
 
 | Custos path | Observed content | Runtime status | Upstream revision / attribution |
 |---|---|---|---|
-| `crates/custos-runtime/src/engine/agents/` | Agent loop, state machine, extension manager, MCP client and platform tools with Goose identifiers | Present in the repository; `engine` is not mounted from `runtime/src/lib.rs` | Exact Goose source SHA and file-level mapping **unknown** |
+| Historical `crates/custos-runtime/src/engine/agents/` | Earlier unmounted Goose-style agent/extension tree | Directory absent in the current follow-up checkout; do not count it as current code or propose deleting it again | Historical source SHA and file-level mapping **unknown** |
 | `crates/custos-runtime/src/agent/` | Extracted machine, inference, tool and conversation primitives | Compiled module; no daemon-composed `StateMachine` call path found at audit commit `3e4dac4` | File-level origin and divergence **unverified** |
 | `crates/custos-provider/src/types/` | Goose-style provider, conversation and model types coexist with `ModelProvider` | Compiled; two model interfaces require a conformance mapping | File-level origin and divergence **unverified** |
 | `crates/custos-sdk/` | Bindings and wire types retain Goose identifiers | Present; runtime usage not established by this inventory | File-level origin and divergence **unverified** |

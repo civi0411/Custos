@@ -67,6 +67,7 @@ pub const METHOD_QUANT_INDICATORS_COMPUTE: &str = "v1.quant.indicators.compute";
 pub const METHOD_QUANT_GATE_EVALUATE: &str = "v1.quant.gate.evaluate";
 pub const METHOD_QUANT_REVIEW_COMPUTE: &str = "v1.quant.review.compute";
 pub const METHOD_QUANT_ORDERBOOK_GET: &str = "v1.quant.orderbook.get";
+pub const METHOD_QUANT_PBO_COMPUTE: &str = "v1.quant.pbo.compute";
 
 
 pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";

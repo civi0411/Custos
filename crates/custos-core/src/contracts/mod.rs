@@ -34,7 +34,13 @@ pub mod terminal;
 pub mod workflow;
 pub mod workspace;
 pub mod workspace_files;
+pub mod packages;
+pub mod worker_wire;
 
+pub use packages::{
+    DownloadProgress, InstalledPath, PackageError, PackageTransferPort, StagedArtifact,
+};
+pub use worker_wire::{WorkerBudget, WorkerObservation, WorkerOperation, WorkerUsage};
 pub use skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, SkillRegistry,
     TaintLevel, WorkerRunId, WorkspaceScope, WriteTarget,

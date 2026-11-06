@@ -15,11 +15,14 @@ pub mod grid;
 pub mod lease;
 pub mod metrics;
 pub mod order;
+pub mod orderbook;
+pub mod pbo;
 pub mod portal;
 pub mod review;
 pub mod risk;
 
 pub use backtest::{calculate_dsr, normal_cdf, probit, BacktestTearsheet, MonthlyReturn};
+pub use pbo::{calculate_pbo_cscv, PboResult};
 pub use contracts::{
     ExchangeOrderAdapter, ExecutionStatus, FillSnapshot, LimitThenMarketExecutor, MarketOrderExecutor,
     MarketType, OrderExecutionStrategy, OrderIntent, OrderSide, PositionSnapshot, RestingLimitExecutor,
@@ -36,6 +39,7 @@ pub use metrics::{
     calculate_omega_ratio, calculate_sortino_ratio, compute_institutional_suite, InstitutionalMetrics,
 };
 pub use order::{OrderDirection, OrderTicket, OrderTicketStatus, OrderType};
+pub use orderbook::{OrderBookLevel, OrderBookSnapshot};
 pub use portal::{BarTimeframe, BollingerBandsResult, MacdResult, NativeDataPortal};
 pub use review::{
     DiagnosticCheck, ExitReasonCohort, HoldingCohort, PostTradeAnalyzer, PostTradeReviewReport,

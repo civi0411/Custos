@@ -46,12 +46,9 @@ impl CanonicalModelRegistry {
             .map_err(|e| anyhow::anyhow!("{}", e))
     }
 
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .context("Failed to read canonical models file")?;
-
+    pub fn from_json_str(content: &str) -> Result<Self> {
         let models: Vec<CanonicalModel> =
-            serde_json::from_str(&content).context("Failed to parse canonical models JSON")?;
+            serde_json::from_str(content).context("Failed to parse canonical models JSON")?;
 
         let mut registry = Self::new();
         for model in models {
@@ -65,15 +62,22 @@ impl CanonicalModelRegistry {
         Ok(registry)
     }
 
-    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn to_json_string(&self) -> Result<String> {
         let mut models: Vec<&CanonicalModel> = self.models.values().collect();
         models.sort_by(|a, b| a.id.cmp(&b.id));
 
-        let json = serde_json::to_string_pretty(&models)
-            .context("Failed to serialize canonical models")?;
+        serde_json::to_string_pretty(&models).context("Failed to serialize canonical models")
+    }
 
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
+        let content = std::fs::read_to_string(path.as_ref())
+            .context("Failed to read canonical models file")?;
+        Self::from_json_str(&content)
+    }
+
+    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<()> {
+        let json = self.to_json_string()?;
         std::fs::write(path.as_ref(), json).context("Failed to write canonical models file")?;
-
         Ok(())
     }
 

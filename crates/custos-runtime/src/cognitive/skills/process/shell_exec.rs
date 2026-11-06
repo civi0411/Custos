@@ -31,15 +31,27 @@ pub struct ProcessOutput {
 
 impl ProcessOutput {
     /// Returns the last `n` chars of stderr — useful for evidence hints.
+    /// Slices safely on UTF-8 character boundaries to avoid panics on multibyte characters.
     pub fn stderr_tail(&self, n: usize) -> &str {
-        let start = self.stderr.len().saturating_sub(n);
-        &self.stderr[start..]
+        if n == 0 {
+            return "";
+        }
+        let total_chars = self.stderr.chars().count();
+        let skip_chars = total_chars.saturating_sub(n);
+        let byte_offset = self.stderr.char_indices().nth(skip_chars).map(|(idx, _)| idx).unwrap_or(self.stderr.len());
+        &self.stderr[byte_offset..]
     }
 
     /// Returns the last `n` chars of stdout.
+    /// Slices safely on UTF-8 character boundaries to avoid panics on multibyte characters.
     pub fn stdout_tail(&self, n: usize) -> &str {
-        let start = self.stdout.len().saturating_sub(n);
-        &self.stdout[start..]
+        if n == 0 {
+            return "";
+        }
+        let total_chars = self.stdout.chars().count();
+        let skip_chars = total_chars.saturating_sub(n);
+        let byte_offset = self.stdout.char_indices().nth(skip_chars).map(|(idx, _)| idx).unwrap_or(self.stdout.len());
+        &self.stdout[byte_offset..]
     }
 
     /// Convenience: did the process exit successfully?
@@ -287,5 +299,22 @@ mod tests {
         assert!(!output.stderr.is_empty());
         let tail = output.stderr_tail(3);
         assert!(tail.len() <= output.stderr.len());
+    }
+
+    #[test]
+    fn test_tail_utf8_multibyte_safety() {
+        let output = ProcessOutput {
+            exit_code: 0,
+            stdout: "Tiếng Việt có dấu và emoji 🚀🎯".to_string(),
+            stderr: "Lỗi kiểm thử đa byte: ⚠️ thành công".to_string(),
+            elapsed_ms: 10,
+        };
+        // Slicing at any character count must never panic and must produce valid slices
+        for n in 0..50 {
+            let out_tail = output.stdout_tail(n);
+            let err_tail = output.stderr_tail(n);
+            assert!(out_tail.chars().count() <= n);
+            assert!(err_tail.chars().count() <= n);
+        }
     }
 }

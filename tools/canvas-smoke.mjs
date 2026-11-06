@@ -695,3 +695,44 @@ test('Screen migration imports legacy resource tabs and preserves future version
   assert.equal(JSON.parse(mockLocalStorage.getItem('custos.screen_layout.v2.default')).version, 3);
   assert.ok(mockLocalStorage.getItem('custos.screen_layout.v2.default.unrecognized_backup'));
 });
+
+test('workbench contribution registry filters active modes and isolates uninstalled domains', () => {
+  const mockIcon = () => null;
+  const { getActiveContributions, canonicalWorkbenchId, getWorkbenchForTabType } = helpers(
+    'components/workbenches/registry.tsx',
+    ['getActiveContributions', 'canonicalWorkbenchId', 'getWorkbenchForTabType', 'BUILTIN_CONTRIBUTIONS'],
+    { Code2: mockIcon, FlaskConical: mockIcon, Bot: mockIcon, TrendingUp: mockIcon, Download: mockIcon, AlertCircle: mockIcon }
+  );
+
+  // 1. Canonical alias resolution
+  assert.equal(canonicalWorkbenchId('copilot'), 'assistant');
+  assert.equal(canonicalWorkbenchId('assistant'), 'assistant');
+  assert.equal(canonicalWorkbenchId('engineering'), 'coding');
+  assert.equal(canonicalWorkbenchId('coding'), 'coding');
+  assert.equal(canonicalWorkbenchId('research'), 'research');
+  assert.equal(canonicalWorkbenchId('quant'), 'quant');
+
+  // 2. Base installation preset: only builtins (assistant & coding) active
+  const baseContributions = getActiveContributions(['assistant']);
+  const baseIds = baseContributions.map(c => c.canonicalId);
+  assert.ok(baseIds.includes('assistant'));
+  assert.ok(baseIds.includes('coding')); // built-in developer mode
+  assert.equal(baseIds.includes('research'), false);
+  assert.equal(baseIds.includes('quant'), false);
+
+  // 3. Selective install: adding quant activates quant without research
+  const quantContributions = getActiveContributions(['assistant', 'quant']);
+  const quantIds = quantContributions.map(c => c.canonicalId);
+  assert.ok(quantIds.includes('quant'));
+  assert.equal(quantIds.includes('research'), false);
+
+  // 4. Tab domain isolation mapping
+  assert.equal(getWorkbenchForTabType('literature'), 'research');
+  assert.equal(getWorkbenchForTabType('synthesis'), 'research');
+  assert.equal(getWorkbenchForTabType('alphastudio'), 'quant');
+  assert.equal(getWorkbenchForTabType('tearsheet'), 'quant');
+  assert.equal(getWorkbenchForTabType('files'), 'coding');
+  assert.equal(getWorkbenchForTabType('drafts'), 'assistant');
+  assert.equal(getWorkbenchForTabType('conversation'), null); // cross-cutting
+  assert.equal(getWorkbenchForTabType('tasks'), null); // cross-cutting
+});

@@ -3,13 +3,25 @@
 use super::*;
 use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus, QuantPort};
 use custos_domain::quant::{
-    calculate_dsr, compute_rank_ic, detect_lookahead_bias, BacktestConfig, BacktestTearsheet,
+    calculate_dsr, calculate_pbo_cscv, compute_rank_ic, detect_lookahead_bias, BacktestConfig, BacktestTearsheet,
     BarTimeframe, BenjaminiHochberg, DualMovingAverageRule, FactorClassification, MonthlyReturn,
     NativeBacktestEngine, NativeDataPortal, OhlcvBar, OrderDirection, OrderTicket, OrderType, ProtectionSpec,
 };
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_quant(&self, req: ApiRequest) -> ApiResponse {
+        let is_read_only = matches!(
+            req.method.as_str(),
+            METHOD_QUANT_TEARSHEET_GET
+                | METHOD_QUANT_ORDERS_LIST
+                | METHOD_QUANT_MARKET_BARS_GET
+                | METHOD_QUANT_ORDERBOOK_GET
+        );
+        if !is_read_only {
+            if let Err(denied) = self.require_pack_enabled("quant", &req.id) {
+                return denied;
+            }
+        }
         match req.method.as_str() {
             METHOD_QUANT_BACKTEST_SUBMIT => {
                 let store = match self.sqlite_store.as_ref() {
@@ -293,14 +305,12 @@ impl LocalApiDispatcher {
                 let symbol = req.params.get("symbol").and_then(|v| v.as_str()).unwrap_or("SPY");
                 let timeframe = req.params.get("timeframe").and_then(|v| v.as_str()).unwrap_or("1d");
 
-                // Retrieve bars from database or use sample synthetic bars if none exist yet
-                let mut bars = store.quant().get_market_bars(symbol, timeframe, 300).await.unwrap_or_default();
+                let bars = store.quant().get_market_bars(symbol, timeframe, 300).await.unwrap_or_default();
                 if bars.len() < 20 {
-                    let mut p = 100.0;
-                    for idx in 0..60 {
-                        p += if idx % 2 == 0 { 0.8 } else { -0.3 };
-                        bars.push(OhlcvBar::new(idx as i64 * 86400, p - 0.2, p + 0.5, p - 0.5, p, 5000.0));
-                    }
+                    return ApiResponse::error(
+                        req.id,
+                        format!("Insufficient market bars for '{symbol}' ({timeframe}): at least 20 historical bars are required to compute empirical factor IC and FDR. Ingest historical bars first via quant_market_bars_ingest."),
+                    );
                 }
 
                 // Calculate forward returns
@@ -668,69 +678,29 @@ impl LocalApiDispatcher {
                 };
 
                 let close_price = last_bar_close.unwrap_or(if symbol.starts_with("BTC") { 68000.0 } else { 100.0 });
-                let spread = (close_price * 0.0002).max(0.1);
-                let half_spread = spread / 2.0;
-
-                let mut asks = Vec::new();
-                let mut bids = Vec::new();
-
-                let mut cum_ask = 0.0;
-                for i in 1..=depth_levels {
-                    let step = (i as f64) * (spread * 0.8);
-                    let price = (close_price + half_spread + step * 0.5 * (i as f64)).round();
-                    let size = ((1.2 + (i as f64) * 0.35) * 100.0).round() / 100.0;
-                    cum_ask += size;
-                    asks.push(serde_json::json!({
-                        "price": price,
-                        "size": size,
-                        "total": (cum_ask * 100.0).round() / 100.0,
-                    }));
-                }
-
-                let mut cum_bid = 0.0;
-                for i in 1..=depth_levels {
-                    let step = (i as f64) * (spread * 0.8);
-                    let price = (close_price - half_spread - step * 0.5 * (i as f64)).round();
-                    let size = ((1.0 + (i as f64) * 0.4) * 100.0).round() / 100.0;
-                    cum_bid += size;
-                    bids.push(serde_json::json!({
-                        "price": price,
-                        "size": size,
-                        "total": (cum_bid * 100.0).round() / 100.0,
-                    }));
-                }
-
-                let best_ask = asks[0]["price"].as_f64().unwrap_or(close_price + half_spread);
-                let best_bid = bids[0]["price"].as_f64().unwrap_or(close_price - half_spread);
-                let actual_spread = (best_ask - best_bid).max(0.01);
-                let mid_price = (best_ask + best_bid) / 2.0;
-                let spread_bps = (actual_spread / mid_price) * 10000.0;
-
-                let best_bid_size = bids[0]["size"].as_f64().unwrap_or(1.0);
-                let best_ask_size = asks[0]["size"].as_f64().unwrap_or(1.0);
-                let microprice = (best_ask * best_bid_size + best_bid * best_ask_size) / (best_bid_size + best_ask_size);
-
-                let total_bid = cum_bid;
-                let total_ask = cum_ask;
-                let imbalance_pct = if (total_bid + total_ask) > 0.0 {
-                    ((total_bid - total_ask) / (total_bid + total_ask)) * 100.0
-                } else {
-                    0.0
+                let snapshot = custos_domain::quant::OrderBookSnapshot::synthesize(symbol, close_price, depth_levels);
+                ApiResponse::success(req.id, serde_json::to_value(&snapshot).unwrap_or(serde_json::Value::Null))
+            }
+            METHOD_QUANT_PBO_COMPUTE => {
+                let matrix_val = match req.params.get("score_matrix").and_then(|v| v.as_array()) {
+                    Some(arr) if !arr.is_empty() => arr,
+                    _ => return ApiResponse::error(req.id, "Missing or invalid 'score_matrix' array"),
                 };
 
-                let now_ms = chrono::Utc::now().timestamp_millis();
+                let mut matrix: Vec<Vec<f64>> = Vec::with_capacity(matrix_val.len());
+                for row_val in matrix_val {
+                    if let Some(sub_arr) = row_val.as_array() {
+                        let row: Vec<f64> = sub_arr.iter().filter_map(|v| v.as_f64()).collect();
+                        matrix.push(row);
+                    }
+                }
 
-                ApiResponse::success(req.id, serde_json::json!({
-                    "symbol": symbol,
-                    "mid_price": (mid_price * 100.0).round() / 100.0,
-                    "spread": (actual_spread * 100.0).round() / 100.0,
-                    "spread_bps": (spread_bps * 100.0).round() / 100.0,
-                    "microprice": (microprice * 100.0).round() / 100.0,
-                    "imbalance_pct": (imbalance_pct * 10.0).round() / 10.0,
-                    "asks": asks,
-                    "bids": bids,
-                    "timestamp": now_ms,
-                }))
+                let max_comb = req.params.get("max_combinations").and_then(|v| v.as_u64()).unwrap_or(2000) as usize;
+
+                match calculate_pbo_cscv(&matrix, max_comb) {
+                    Ok(result) => ApiResponse::success(req.id, serde_json::to_value(result).unwrap_or(serde_json::Value::Null)),
+                    Err(e) => ApiResponse::error(req.id, format!("PBO evaluation failed: {e}")),
+                }
             }
             _ => ApiResponse::error(req.id, format!("Unknown quant method: {}", req.method)),
         }

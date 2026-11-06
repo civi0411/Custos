@@ -62,6 +62,107 @@ pub fn create_default_skill_registry() -> SkillRegistry {
     registry
 }
 
+/// Constructs a `DomainPackRegistry` composed dynamically based on enabled inventory components.
+pub fn create_pack_registry_from_inventory(enabled: &[&str]) -> DomainPackRegistry {
+    let mut registry = DomainPackRegistry::new();
+    for id in enabled {
+        match *id {
+            "assistant" | "copilot" => {
+                registry.register(Arc::new(assistant::AssistantPack::new()));
+            }
+            "coding" | "engineering" => {
+                registry.register(Arc::new(engineering::EngineeringPack::new()));
+            }
+            "research" => {
+                registry.register(Arc::new(research::ResearchPack::new()));
+            }
+            "quant" => {
+                registry.register(Arc::new(quant::QuantPack::new()));
+            }
+            other => {
+                tracing::warn!(pack_id = %other, "Unknown pack ID in inventory — skipped");
+            }
+        }
+    }
+    registry
+}
+
+/// Constructs a `SkillRegistry` composed dynamically based on enabled inventory components.
+pub fn create_skill_registry_from_inventory(enabled: &[&str]) -> SkillRegistry {
+    let mut registry = SkillRegistry::new();
+
+    // Cross-pack Shared Foundation Skills are always available
+    registry.register(Arc::new(FileReadSkill));
+    registry.register(Arc::new(LexicalSearchSkill));
+    registry.register(Arc::new(FetchUrlSkill::new()));
+
+    for id in enabled {
+        match *id {
+            "coding" | "engineering" => {
+                engineering::skills::register_engineering_skills(&mut registry);
+            }
+            "research" => {
+                research::skills::register_research_skills(&mut registry);
+            }
+            "assistant" | "copilot" => {
+                assistant::skills::register_assistant_skills(&mut registry);
+            }
+            "quant" => {
+                quant::skills::register_quant_skills(&mut registry);
+            }
+            _ => {}
+        }
+    }
+    registry
+}
+
+/// Dynamic Tool Disclosure: Compiles the exposed tools for the Governed Agent Runtime
+/// based on the active Workbench lens and the enabled packs in the registry.
+/// Prevents token bloat and hallucination by disclosing only core safe read tools
+/// plus domain tools belonging to the active and installed workbench lens.
+pub fn compile_governed_tools(
+    lens: custos_domain::WorkbenchLens,
+    pack_registry: &DomainPackRegistry,
+) -> Vec<serde_json::Value> {
+    // 1. Cross-lens core safe inspection tools (read-only)
+    let mut tools = vec![
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Read file contents at specified relative path",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Relative file path" }
+                    },
+                    "required": ["path"]
+                }
+            }
+        }),
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "list_dir",
+                "description": "List files and directories in a workspace folder",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Directory path (defaults to '.')" }
+                    }
+                }
+            }
+        }),
+    ];
+
+    // 2. Disclose domain tools only if pack for lens is installed/enabled
+    if let Some(pack) = pack_registry.get_pack_for_lens(lens) {
+        tools.extend(pack.tool_declarations());
+    }
+
+    tools
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +308,65 @@ mod tests {
             .expect("assistant t0 perms");
         assert!(ast_t0.contains(&"contact_resolve".to_string()));
         assert!(!ast_t0.contains(&"git_patch".to_string()));
+    }
+
+    #[test]
+    fn test_create_pack_registry_from_inventory_assistant_only() {
+        let registry = create_pack_registry_from_inventory(&["assistant"]);
+        assert!(registry.has_pack("assistant"));
+        assert!(!registry.has_pack("engineering"));
+        assert!(!registry.has_pack("research"));
+        assert!(!registry.has_pack("quant"));
+
+        let skill_reg = create_skill_registry_from_inventory(&["assistant"]);
+        assert!(skill_reg.contains("file_read")); // Foundation
+        assert!(skill_reg.contains("payload_lock")); // Assistant
+        assert!(!skill_reg.contains("cargo_test")); // Engineering not loaded
+    }
+
+    #[test]
+    fn test_create_pack_registry_from_inventory_developer_preset() {
+        let registry = create_pack_registry_from_inventory(&["assistant", "coding"]);
+        assert!(registry.has_pack("assistant"));
+        assert!(registry.has_pack("engineering"));
+        assert!(!registry.has_pack("research"));
+        assert!(!registry.has_pack("quant"));
+    }
+
+    #[test]
+    fn test_compile_governed_tools_lens_isolation() {
+        // Developer preset: only assistant and coding are installed
+        let registry = create_pack_registry_from_inventory(&["assistant", "coding"]);
+
+        // 1. Coding lens reveals base tools + edit_file & bash
+        let coding_tools = compile_governed_tools(WorkbenchLens::Coding, &registry);
+        let coding_tool_names: Vec<&str> = coding_tools
+            .iter()
+            .map(|t| t["function"]["name"].as_str().unwrap())
+            .collect();
+        assert!(coding_tool_names.contains(&"read_file"));
+        assert!(coding_tool_names.contains(&"list_dir"));
+        assert!(coding_tool_names.contains(&"edit_file"));
+        assert!(coding_tool_names.contains(&"bash"));
+        assert!(!coding_tool_names.contains(&"run_backtest")); // Quant not present
+
+        // 2. Quant lens (not installed in developer preset) only discloses base tools
+        let quant_tools = compile_governed_tools(WorkbenchLens::Quant, &registry);
+        let quant_tool_names: Vec<&str> = quant_tools
+            .iter()
+            .map(|t| t["function"]["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(quant_tool_names, vec!["read_file", "list_dir"]);
+        assert!(!quant_tool_names.contains(&"run_backtest"));
+
+        // 3. Assistant lens discloses base tools + schedule_task
+        let assistant_tools = compile_governed_tools(WorkbenchLens::Assistant, &registry);
+        let assistant_tool_names: Vec<&str> = assistant_tools
+            .iter()
+            .map(|t| t["function"]["name"].as_str().unwrap())
+            .collect();
+        assert!(assistant_tool_names.contains(&"read_file"));
+        assert!(assistant_tool_names.contains(&"schedule_task"));
+        assert!(!assistant_tool_names.contains(&"edit_file"));
     }
 }

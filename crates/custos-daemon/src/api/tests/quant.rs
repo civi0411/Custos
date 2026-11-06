@@ -7,6 +7,10 @@ use custos_core::CreateTask;
 
 async fn setup_quant_env() -> (LocalApiDispatcher, String) {
     let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    store
+        .packages()
+        .commit_installed("quant", "0.1.0", "any", None, "packages/quant/0.1.0")
+        .unwrap();
     let service = Arc::new(TaskService::new(store.clone()));
     let task = service
         .execute_create(CreateTask {
@@ -363,7 +367,7 @@ async fn test_pipeline_run_rpc() {
         params: serde_json::json!({
             "content": csv_content,
             "modality": "Science",
-            "salt": "vinmec_secret_salt_123",
+            "salt": "custos_secret_salt_123",
         }),
     };
     let resp = dispatcher.handle_request(req).await;
@@ -535,6 +539,83 @@ async fn test_quant_orderbook_get_rpc() {
         assert!(bids[i]["price"].as_f64().unwrap() <= bids[i - 1]["price"].as_f64().unwrap());
     }
 }
+
+#[tokio::test]
+async fn test_quant_pbo_compute_rpc() {
+    let (dispatcher, _) = setup_quant_env().await;
+
+    let score_matrix = vec![
+        vec![1.5, 2.0, 1.8, 1.2, 0.9, 1.4],
+        vec![2.5, 2.2, 2.9, -1.0, -0.5, -0.8],
+        vec![0.5, 0.6, 0.4, 0.5, 0.7, 0.6],
+        vec![1.2, 1.1, 1.3, 1.4, 1.2, 1.3],
+    ];
+
+    let req = ApiRequest {
+        id: "pbo_test".into(),
+        method: METHOD_QUANT_PBO_COMPUTE.into(),
+        params: serde_json::json!({
+            "score_matrix": score_matrix,
+            "max_combinations": 500,
+        }),
+    };
+
+    let resp = dispatcher.handle_request(req).await;
+    assert!(resp.is_success(), "{:?}", resp.error);
+    let res = resp.result.unwrap();
+
+    assert_eq!(res["available"], true);
+    assert_eq!(res["samples"], 20);
+    let prob = res["probability"].as_f64().unwrap();
+    assert!(prob >= 0.0 && prob <= 1.0);
+    assert!(res["logits"].as_array().unwrap().len() > 0);
+}
+
+#[tokio::test]
+async fn test_quant_pack_dynamic_admission_after_disable_and_enable() {
+    let (dispatcher, task_id) = setup_quant_env().await;
+
+    // 1. Initial execution call succeeds because quant is enabled
+    let backtest_req = ApiRequest {
+        id: "backtest_initial".into(),
+        method: METHOD_QUANT_BACKTEST_SUBMIT.into(),
+        params: serde_json::json!({
+            "strategy_id": "strat_mom",
+            "task_id": task_id,
+            "formula": "ts_rank(close, 10)",
+        }),
+    };
+    let resp1 = dispatcher.handle_request(backtest_req.clone()).await;
+    assert!(resp1.is_success(), "{:?}", resp1.error);
+
+    // 2. Disable quant pack via packages.disable RPC
+    let disable_req = ApiRequest {
+        id: "disable_quant".into(),
+        method: "packages.disable".into(),
+        params: serde_json::json!({ "component_id": "quant" }),
+    };
+    let disable_resp = dispatcher.handle_request(disable_req).await;
+    assert!(disable_resp.is_success(), "{:?}", disable_resp.error);
+
+    // 3. Subsequent execution call must be dynamically rejected without restart
+    let resp2 = dispatcher.handle_request(backtest_req.clone()).await;
+    assert!(!resp2.is_success());
+    assert!(resp2.error.unwrap().contains("pack_disabled"));
+
+    // 4. Re-enable quant pack via packages.enable RPC
+    let enable_req = ApiRequest {
+        id: "enable_quant".into(),
+        method: "packages.enable".into(),
+        params: serde_json::json!({ "component_id": "quant" }),
+    };
+    let enable_resp = dispatcher.handle_request(enable_req).await;
+    assert!(enable_resp.is_success(), "{:?}", enable_resp.error);
+
+    // 5. Execution call succeeds again
+    let resp3 = dispatcher.handle_request(backtest_req).await;
+    assert!(resp3.is_success(), "{:?}", resp3.error);
+}
+
 
 
 

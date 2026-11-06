@@ -570,7 +570,7 @@ use custos_domain::*;
         ));
         let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
         let dispatcher = LocalApiDispatcher::new(task_service.clone(), session_manager.clone(), bridge_service)
-            .with_packs(pack_registry);
+            .with_pack_registry(pack_registry);
 
         // 1. List Pack Manifests via v1.packs.manifests.list
         let man_req = ApiRequest {

@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "custos-daemon"
 path = "src/main.rs"
 
+[[bin]]
+name = "custos-worker"
+path = "src/bin/custos-worker.rs"
+
 [dependencies]
 custos-domain = { workspace = true }
 custos-core = { workspace = true }
@@ -39,6 +43,7 @@ thiserror = { workspace = true }
 reqwest = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
