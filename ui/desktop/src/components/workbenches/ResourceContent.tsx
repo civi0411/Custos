@@ -6,7 +6,7 @@ import { ConversationPane } from '@/components/chat/ConversationPane';
 import { ActivityPane } from './engineering/ActivityPane';
 import { RemoteFleetWorkbenchPane } from './shared/RemoteFleetWorkbenchPane';
 import type { Session } from '@/types';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 import { useAppContext } from '@/context/AppContext';
 import {
   getWorkbenchForTabType,

@@ -16,7 +16,7 @@ import {
   ArrowRight,
   GitBranch,
 } from 'lucide-react';
-import type { ActiveWorkbench } from './AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { useNavigate } from 'react-router-dom';
 import { formatKeyCombo } from '@/lib/utils';

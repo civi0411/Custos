@@ -1,4 +1,4 @@
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 
 export interface LensMeta {
   title: string;

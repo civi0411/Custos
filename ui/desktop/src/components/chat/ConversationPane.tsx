@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Session, ChatMessage } from '@/types';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 import type { Task, ExecutionWorkspace } from '@/types/domain';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { ModelSelector } from './ModelSelector';
