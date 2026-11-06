@@ -1,11 +1,23 @@
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+//! Kernel FSM Observability and Transition Tracing
 
-pub fn init_tracing() {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("custos=info,warn"));
+/// Hook for tracing and auditing FSM state transitions across kernel execution
+pub struct KernelObservability;
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+impl KernelObservability {
+    pub fn on_state_change(
+        entity_id: &str,
+        from_state: &str,
+        to_state: &str,
+        reason: Option<&str>,
+    ) {
+        tracing::info!(
+            target: "custos::kernel::fsm",
+            entity_id = %entity_id,
+            from = %from_state,
+            to = %to_state,
+            reason = ?reason,
+            "Kernel FSM state transition"
+        );
+    }
 }
+

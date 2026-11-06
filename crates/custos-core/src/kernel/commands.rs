@@ -43,3 +43,24 @@ pub struct CancelTask {
     pub expected_epoch: u64,
     pub reason: String,
 }
+
+/// Typed specification for operation retry policy with exponential backoff
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RetrySpec {
+    pub max_attempts: u8,
+    pub initial_delay_ms: u64,
+    pub max_delay_ms: u64,
+    pub backoff_factor: f32,
+}
+
+impl Default for RetrySpec {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            initial_delay_ms: 250,
+            max_delay_ms: 5000,
+            backoff_factor: 2.0,
+        }
+    }
+}
+

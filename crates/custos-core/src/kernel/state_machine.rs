@@ -36,6 +36,13 @@ impl TaskStateMachine {
                 to: to.to_string(),
             });
         }
+        crate::kernel::observability::KernelObservability::on_state_change(
+            "task",
+            &from.to_string(),
+            &to.to_string(),
+            None,
+        );
         Ok(())
     }
 }
+
