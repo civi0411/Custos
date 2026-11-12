@@ -460,7 +460,7 @@ cargo metadata --no-deps --format-version 1 --offline
 cargo test -p custos-runtime --lib --offline
 cargo test -p custos-domain -p custos-core -p custos-persistence --lib --offline
 npm --prefix ui/desktop run build
-node tools/canvas-smoke.mjs
+node tests/desktop/canvas-smoke.mjs
 git diff --check
 ```
 

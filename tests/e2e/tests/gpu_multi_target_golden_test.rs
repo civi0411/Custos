@@ -13,12 +13,11 @@ use std::sync::Arc;
 use tempfile::tempdir;
 
 use custos_adapters::compute::{ColabTargetAdapter, KaggleTargetAdapter};
-use custos_core::contracts::experiment::ExecutionTargetPort;
-use custos_core::contracts::WorkloadAdmissionPort;
+use custos_core::contracts::compute::{ExecutionTargetPort, WorkloadAdmissionPort};
 use custos_domain::{
-    ComputeBackendKind, ComputeDeviceRef, ComputeWorkloadKind, ExecState,
-    ExecutionAttempt, ExternalJobRef, ResourceState, WorkloadAdmissionRequest,
-    WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
+    ComputeBackendKind, ComputeDeviceRef, ComputeWorkloadKind, ExecState, ExecutionAttempt,
+    ExecutionLane, ExternalJobRef, ResourceState, WorkloadAdmissionRequest, WorkloadAdmissionVerdict,
+    WorkloadLease, WorkloadLeaseStatus,
 };
 use custos_runtime::compute::{
     OptionalConsumerPlacementEngine, RemoteExecutionCoordinator, WorkloadAdmissionCoordinator,
@@ -59,9 +58,14 @@ async fn test_g_multi_01_colab_interactive_lifecycle_and_capabilities() {
         ComputeBackendKind::Colab,
         None,
     );
-    let res = live_adapter.submit(&attempt_unstaged, "idem_colab_02").await;
+    let res = live_adapter
+        .submit(&attempt_unstaged, "idem_colab_02")
+        .await;
     assert!(res.is_err());
-    assert!(res.unwrap_err().to_string().contains("does not exist; stage your script"));
+    assert!(res
+        .unwrap_err()
+        .to_string()
+        .contains("does not exist; stage your script"));
 }
 
 #[tokio::test]
@@ -154,7 +158,8 @@ async fn test_g_multi_05_remote_coordinator_multi_target_admission() {
 
     // Register virtual devices for Colab and Kaggle
     let colab_dev = ComputeDeviceRef::cuda(0, "Colab A100 GPU", 40960, Some("colab_dev_0".into()));
-    let kaggle_dev = ComputeDeviceRef::cuda(1, "Kaggle P100 GPU", 16384, Some("kaggle_dev_0".into()));
+    let kaggle_dev =
+        ComputeDeviceRef::cuda(1, "Kaggle P100 GPU", 16384, Some("kaggle_dev_0".into()));
     admission.register_device(colab_dev.clone()).await;
     admission.register_device(kaggle_dev.clone()).await;
 
@@ -210,6 +215,7 @@ async fn test_g_multi_05_remote_coordinator_multi_target_admission() {
         preferred_device_id: Some(colab_dev.device_id.clone()),
         require_exclusive: true,
         required_memory_mb: Some(4096),
+        lane: None,
     };
     let verdict = admission.admit_workload(&req_duplicate).await.unwrap();
     assert!(matches!(verdict, WorkloadAdmissionVerdict::Queued { .. }));
@@ -239,7 +245,9 @@ async fn test_g_multi_06_optional_consumer_cooperative_cpu_fallback() {
     assert_eq!(placement_free.target_device_id, gpu.device_id);
     assert!(placement_free.is_accelerated);
     assert_eq!(placement_free.batch_size, 64);
-    assert!(placement_free.reason.contains("admitted for cooperative background indexing"));
+    assert!(placement_free
+        .reason
+        .contains("admitted for cooperative background indexing"));
 
     // Case B: GPU is held by an exclusive training run -> background OCR routed to CPU fallback
     let training_lease = WorkloadLease {
@@ -251,6 +259,7 @@ async fn test_g_multi_06_optional_consumer_cooperative_cpu_fallback() {
         status: WorkloadLeaseStatus::Active,
         acquired_at: 100,
         released_at: None,
+        lane: ExecutionLane::Batch,
     };
     let active_leases = vec![training_lease];
 
@@ -268,7 +277,9 @@ async fn test_g_multi_06_optional_consumer_cooperative_cpu_fallback() {
     assert_eq!(placement_busy.target_device_id, cpu.device_id);
     assert!(!placement_busy.is_accelerated);
     assert_eq!(placement_busy.batch_size, 16);
-    assert!(placement_busy.reason.contains("held exclusively by active training run; routed to CPU fallback"));
+    assert!(placement_busy
+        .reason
+        .contains("held exclusively by active training run; routed to CPU fallback"));
 }
 
 #[tokio::test]
@@ -319,11 +330,21 @@ async fn test_g_multi_07_cloud_egress_guardrail_and_priority_preemption() {
         status: WorkloadLeaseStatus::Active,
         acquired_at: 100,
         released_at: None,
+        lane: ExecutionLane::Ambient,
     };
 
-    assert!(engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::NotebookKernel));
-    assert!(engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::TrainingRun));
-    assert!(engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::LocalInference));
-    assert!(!engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::DocumentOcr));
-    assert!(!engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::BackgroundEmbedding));
+    assert!(engine
+        .can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::NotebookKernel));
+    assert!(
+        engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::TrainingRun)
+    );
+    assert!(engine
+        .can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::LocalInference));
+    assert!(
+        !engine.can_preempt_background_for_interactive(&bg_lease, ComputeWorkloadKind::DocumentOcr)
+    );
+    assert!(!engine.can_preempt_background_for_interactive(
+        &bg_lease,
+        ComputeWorkloadKind::BackgroundEmbedding
+    ));
 }

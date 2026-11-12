@@ -51,7 +51,9 @@ async fn test_g_remote_01_preflight_and_capability_gate() {
 
     // 3. Preflight with blockers rejects admission upfront
     adapter
-        .set_mock_preflight_blockers(vec!["Insufficient remote VRAM: requested 40GB, available 16GB".into()])
+        .set_mock_preflight_blockers(vec![
+            "Insufficient remote VRAM: requested 40GB, available 16GB".into(),
+        ])
         .await;
 
     let mut attempt = ExecutionAttempt::new(
@@ -181,10 +183,15 @@ async fn test_g_remote_03_telemetry_and_monotonic_progress() {
         local: Some(80),
         protected: Some(50),
     };
-    triplet.validate().expect("Protected <= Local <= Observed must hold");
+    triplet
+        .validate()
+        .expect("Protected <= Local <= Observed must hold");
     adapter.set_mock_progress(triplet).await;
 
-    let obs = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let obs = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(obs.exec_state, ExecState::Running);
     assert_eq!(attempt.exec_state, ExecState::Running);
     assert_eq!(obs.progress.observed, Some(100));
@@ -201,7 +208,10 @@ async fn test_g_remote_03_telemetry_and_monotonic_progress() {
     triplet2.validate().unwrap();
     adapter.set_mock_progress(triplet2).await;
 
-    let obs2 = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let obs2 = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(obs2.progress.observed, Some(200));
     assert_eq!(obs2.progress.recovery_point(), Some(150));
 
@@ -299,13 +309,19 @@ async fn test_g_remote_05_disconnection_and_startup_crash_reconciliation() {
 
     // Mark running and persist
     adapter.set_mock_status("running").await;
-    let _ = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let _ = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(attempt.exec_state, ExecState::Running);
     store.experiment_attempts().save_attempt(&attempt).unwrap();
 
     // 1. Simulate network failure / connection lost
     adapter.set_mock_status("unknown_status_network_drop").await;
-    let obs_lost = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let obs_lost = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(obs_lost.exec_state, ExecState::Uncertain);
     assert_eq!(attempt.exec_state, ExecState::Uncertain);
     store.experiment_attempts().save_attempt(&attempt).unwrap();
@@ -320,7 +336,10 @@ async fn test_g_remote_05_disconnection_and_startup_crash_reconciliation() {
     );
     active_attempt.exec_state = ExecState::Running;
     active_attempt.resource_state = ResourceState::ReleaseRequested;
-    store.experiment_attempts().save_attempt(&active_attempt).unwrap();
+    store
+        .experiment_attempts()
+        .save_attempt(&active_attempt)
+        .unwrap();
 
     let reconciled_count = store
         .experiment_attempts()
@@ -338,7 +357,10 @@ async fn test_g_remote_05_disconnection_and_startup_crash_reconciliation() {
 
     // 3. Network connection recovers and job finishes
     adapter.set_mock_status("completed").await;
-    let obs_recovered = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let obs_recovered = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(obs_recovered.exec_state, ExecState::Completed);
     assert_eq!(attempt.exec_state, ExecState::Completed);
 
@@ -412,7 +434,10 @@ async fn test_g_remote_07_artifact_collection_and_cas_verification() {
 
     // 1. Progress to completed state on remote target
     adapter.set_mock_status("completed").await;
-    let obs = coordinator.observe_and_reconcile(&mut attempt).await.unwrap();
+    let obs = coordinator
+        .observe_and_reconcile(&mut attempt)
+        .await
+        .unwrap();
     assert_eq!(obs.exec_state, ExecState::Completed);
     assert_eq!(attempt.exec_state, ExecState::Completed);
 

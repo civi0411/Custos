@@ -5,13 +5,15 @@ on:
     branches: [ main, dev ]
     paths:
       - 'ui/desktop/**'
-      - 'tools/canvas-smoke.mjs'
+      - 'tests/desktop/**'
+      - 'xtask/scripts/**'
       - '.github/workflows/ui.yml'
   pull_request:
     branches: [ main, dev ]
     paths:
       - 'ui/desktop/**'
-      - 'tools/canvas-smoke.mjs'
+      - 'tests/desktop/**'
+      - 'xtask/scripts/**'
       - '.github/workflows/ui.yml'
 
 jobs:
@@ -40,7 +42,7 @@ jobs:
 
       - name: Canvas Smoke Invariants
         working-directory: .
-        run: node --test tools/canvas-smoke.mjs
+        run: node --test tests/desktop/canvas-smoke.mjs tests/desktop/model-catalog-smoke.mjs xtask/scripts/checks-smoke.mjs
 
       - name: Build Desktop Bundle
         run: npm run build

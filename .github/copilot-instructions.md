@@ -10,7 +10,7 @@ Read `docs/development/codebase-architecture.md` for the authoritative physical 
    - `docs/` (Topic engineering specs: architecture, reference, development).
    - `docs/development/codebase-architecture.md` (Physical AST index and file catalog, inserted at the exact crate).
    Never implement architectural code changes before updating the triad.
-2. **Preserve Boundaries Across 11 Crates:** All Rust packages live under `crates/`. Keep domain contracts (`custos-domain`) completely independent of persistence, network, and providers (Zero-I/O). Prevent `custos-bridge` from directly importing `custos-persistence`.
+2. **Preserve 3-Ring Modular Boundaries:** Packages live under `platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, and `xtask/`. Keep `platform/domain` (`custos-domain`) completely free of persistence, network, and provider I/O (Zero-I/O), keep SQLite single-writer inside `platform/storage` (`custos-persistence`), and keep kernel layers free of vertical workbench dependencies (`cargo xtask check-boundaries`).
 3. **Consult Codebase Architecture Map:** Before editing or adding files, inspect `docs/development/codebase-architecture.md` to establish a shared mental model of file responsibilities and owners (Vĩ, Trường, Vinh).
 4. **Rust Standards:** No `panic!()` or `.unwrap()` in production code. Use typed errors with `thiserror`. Add `tracing` spans with correlation IDs.
 5. **Zero Formatting Junk:** Do not use decorative emojis anywhere. Do not embed artificial version numbers or dates in documentation headers.

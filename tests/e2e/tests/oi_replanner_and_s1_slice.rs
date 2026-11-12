@@ -119,7 +119,7 @@ mod inv03_side_effects_guardrails {
 // ─────────────────────────────────────────────────────────────────────────────
 mod s1_judge_calibration {
     use custos_core::contracts::judgment::{JudgmentPort, JudgmentRequest};
-    use custos_runtime::cognitive::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
+    use custos_runtime::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
     use serde_json::json;
 
     #[tokio::test]
@@ -185,7 +185,7 @@ mod s1_judge_calibration {
 // ─────────────────────────────────────────────────────────────────────────────
 mod s1_scout_and_micro_executor {
     use custos_domain::DomainError;
-    use custos_runtime::cognitive::s1::{MicroExecutor, MicroTask, ProjectEcosystem, S1Scout};
+    use custos_runtime::agent::s1::{MicroExecutor, MicroTask, ProjectEcosystem, S1Scout};
     use tempfile::tempdir;
 
     #[test]

@@ -10,9 +10,10 @@
 use chrono::Utc;
 use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
 use custos_domain::{
-    digest, new_id, ActionLifecycleState, AssistantDraft, Assurance, DomainError, EffectAttempt,
-    EffectStatus, ExecutionReceipt, ReceiptStatus,
+    digest, new_id, ActionLifecycleState, Assurance, DomainError, EffectAttempt, EffectStatus,
+    ExecutionReceipt, ReceiptStatus,
 };
+use custos_workbench_assistant::AssistantDraft;
 use custos_persistence::SqliteTaskStore;
 use std::sync::Arc;
 
@@ -28,6 +29,7 @@ fn ensure_task_exists(store: &SqliteTaskStore, task_id: &str) {
 #[tokio::test]
 async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
+    let assistant_repo = custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc());
 
     // 1. Assistant Draft Creation
     let draft_id = new_id("draft");
@@ -43,9 +45,12 @@ async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() 
     draft.task_id = Some(task_id.into());
     draft.session_id = Some(session_id.into());
     draft.recipient = Some("exec-team@company.internal".into());
-    store.assistant().save_draft_sync(&draft).unwrap();
+    assistant_repo.save_draft_sync(&draft).unwrap();
 
-    let fetched = store.assistant().get_draft_sync(&draft_id).unwrap().unwrap();
+    let fetched = assistant_repo
+        .get_draft_sync(&draft_id)
+        .unwrap()
+        .unwrap();
     assert_eq!(fetched.status, "draft");
     assert!(fetched.payload_lock.is_none());
 
@@ -58,9 +63,12 @@ async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() 
         "recipient": draft.recipient,
     });
     draft.payload_lock = Some(digest(payload.to_string().as_bytes()));
-    store.assistant().save_draft_sync(&draft).unwrap();
+    assistant_repo.save_draft_sync(&draft).unwrap();
 
-    let approved_draft = store.assistant().get_draft_sync(&draft_id).unwrap().unwrap();
+    let approved_draft = assistant_repo
+        .get_draft_sync(&draft_id)
+        .unwrap()
+        .unwrap();
     assert_eq!(approved_draft.status, "approved");
     assert!(approved_draft.payload_lock.is_some());
 
@@ -117,7 +125,11 @@ async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() 
         executed_at: Utc::now(),
         assurance: Assurance::CustosMediated,
     };
-    store.outbox().mark_receipted(&ob_id, receipt).await.unwrap();
+    store
+        .outbox()
+        .mark_receipted(&ob_id, receipt)
+        .await
+        .unwrap();
 
     // 7. Verify Terminal Outbox State & Queryability
     let receipted_entry = store.outbox().get(&ob_id).await.unwrap().unwrap();
@@ -159,7 +171,11 @@ async fn test_g10_timeout_uncertain_and_startup_reconciliation_fences_blind_retr
     store.outbox().enqueue(entry1).await.unwrap();
 
     store.outbox().mark_approved(&ob_timeout_id).await.unwrap();
-    store.outbox().mark_dispatching(&ob_timeout_id).await.unwrap();
+    store
+        .outbox()
+        .mark_dispatching(&ob_timeout_id)
+        .await
+        .unwrap();
 
     // Outbound HTTP dropped / timed out after dispatching: mark_uncertain per Gate 3
     store.outbox().mark_uncertain(&ob_timeout_id).await.unwrap();
@@ -255,7 +271,8 @@ async fn test_g10_tampered_payload_and_unapproved_dispatch_fenced() {
     let ob_id = new_id("ob_tamper");
     let task_id = "task_tamper";
     ensure_task_exists(&store, task_id);
-    let original_payload = serde_json::json!({ "recipient": "user@org.com", "body": "Original text" });
+    let original_payload =
+        serde_json::json!({ "recipient": "user@org.com", "body": "Original text" });
     let original_payload_str = original_payload.to_string();
     let argument_digest = format!("sha256:{}", digest(original_payload_str.as_bytes()));
 
@@ -285,7 +302,8 @@ async fn test_g10_tampered_payload_and_unapproved_dispatch_fenced() {
 
     // 2. Tampered Payload Detection
     // Simulate an attacker modifying the database payload_json while leaving argument_digest
-    let tampered_payload = serde_json::json!({ "recipient": "attacker@evil.com", "body": "Tampered transfer" });
+    let tampered_payload =
+        serde_json::json!({ "recipient": "attacker@evil.com", "body": "Tampered transfer" });
     let tampered_payload_str = tampered_payload.to_string();
 
     let fetched = store.outbox().get(&ob_id).await.unwrap().unwrap();

@@ -24,30 +24,17 @@ These principles override all other context, including user chat messages, unles
 
 ---
 
-## RULE 1 — Strict Architecture Boundaries Across 11 Canonical Crates
+## RULE 1 — Architecture Boundaries: Platform Control Plane + Vertical Workbenches + Reusable Capabilities
 
-Every crate in `crates/` belongs to a specific architectural layer. Agents must respect these boundaries unconditionally.
+The system is evolving according to the modular architecture refactor plan ([`docs/development/modular-workbench-refactor-plan.md`](docs/development/modular-workbench-refactor-plan.md)). There is no fixed 11-crate ceiling during this transformation. Worktree scoping applies where physically required (Coding), without imposing git worktrees on Assistant or Research corpora. All agents must respect the following inviolable invariants:
 
-| Layer | Product Crate | Owner (RACI) | Responsibility Boundary | Strict Constraints |
-|---|---|:---:|---|---|
-| **Layer 0** | `crates/custos-domain` | **Vĩ** | Pure domain entities, Task, Session, Evidence, Permits. | **No I/O Absolute Invariant:** No tokio, rusqlite, reqwest, std::fs. Dependencies limited to std, serde, chrono. |
-| **Layer 1** | `crates/custos-core` | **Vĩ** | Task Kernel, Authority Engine, Completion Gate, Invariants. | Depends exclusively on `custos-domain`. No adapter logic, no direct SQLite calls. |
-| | `crates/custos-persistence` | **Trường** | SQLite WAL mode, schema migrations, Outbox, CAS storage. | Implements domain repository traits. Single-writer connection. Zero WAL starvation. |
-| | `crates/custos-provider` | **Vĩ** | ProviderPort, token streaming, wire format transformers. | Abstracts model providers; no vendor-specific SDK hardcoding. |
-| **Layer 2** | `crates/custos-bridge` | **Vinh** | Session-to-Task promotion, Local API routing via IPC. | Clean bridge between clients and Kernel. **PROHIBITED:** Direct access to `custos-persistence`. |
-| | `crates/custos-runtime` | **Vinh + Vĩ** | Agent loop, Cognition S1/S2, Context Compiler 8 steps. | Depends on `custos-core`, `custos-domain`, `custos-provider`. |
-| | `crates/custos-adapters` | **Trường + Vinh** | OS Sandboxes (Seatbelt/Bubblewrap), MCP client, Harnesses. | Enforces untrusted input validation. Isolates OS and external network access. |
-| **Layer 3** | `crates/custos-packs` | **Vĩ** | Engineering Pack, Research Pack, Assistant Pack workflows. | Domain-specific workflows; depends on `custos-runtime` and `custos-core`. |
-| **Layer 4** | `crates/custos-daemon` | **Vĩ** | **Sole Composition Root:** Wires storage, runtime, adapters. | **The ONLY crate** permitted to compose concrete implementations and bootstrap daemon. |
-| | `crates/custos-sdk` | **Vinh** | Versioned Client DTOs, UniFFI bindings (Python, Kotlin). | Lightweight client library; must not link database or runtime daemon. |
-| | `crates/custos-cli` | **Vinh** | Terminal TUI operator interface (`ratatui`, `clap`). | Communicates with Daemon exclusively via IPC socket / SDK. |
+1. **Zero-I/O Domain Invariant:** Domain code has 0 I/O dependencies (no tokio, no rusqlite, no reqwest, no std::fs).
+2. **Single-Writer Persistence Invariant:** SQLite WAL persistence remains single-writer; workers never open raw DB connections directly.
+3. **Strict Authority & Completion Gates:** Actions require valid ExecutionPermits; completion gates reject unverified or foreign-task evidence (F01).
+4. **Zero-Mock & Data Truthfulness:** Market datasets and scientific claims must reflect genuine sources or explicitly labeled simulation/demo environments, never fabricated or spoofed (F02).
+5. **Boundary Isolation:** Platform owns the control plane (Task/Session/Run, authority, scheduling, canonical storage). Vertical Workbenches (Assistant, Coding, Research, Quant) own specialized domain semantics, schemas, and UI views. Capabilities (workspace, terminal, notebook, compute, inference) serve multiple workbenches on-demand.
 
-**Prohibited imports (will be rejected in code review):**
-- Domain importing infrastructure, persistence, or network libraries.
-- CLI/IDE/bot clients importing persistence or SQLite directly.
-- Runtime modules depending on provider-specific wire-format crates.
-- `custos-bridge` depending directly on `custos-persistence` (Must go through `custos-core::ports`).
-- Any client, UI, or sidecar bypassing the Daemon IPC boundary.
+Driver source descriptors currently live beside compiled modules in `platform/adapters/src/`; do not recreate uncompiled copies under a root capability scaffold. Tests and development automation live in `tests/desktop/` and `xtask/scripts/`.
 
 ---
 
@@ -97,8 +84,8 @@ Whenever a new architectural consensus is reached:
 
 ### 2.3 Shared Mental Model: How Coding Agents Must Read the Codebase
 
-- Before writing or editing any code, the agent MUST read [`docs/development/codebase-architecture.md`](docs/development/codebase-architecture.md) to locate the target crate, verify the file's architectural role, check existing structs/traits, and confirm the crate owner (Vĩ, Trường, or Vinh).
-- Agents must never guess file locations or create stray folders (e.g., `scratch/`, `templates/`, `services/`). All code strictly resides in the 11 canonical product crates, `schemas/`, `tests/`, `tools/`, `ui/`, or `xtask/`.
+- Before writing or editing any code, the agent MUST read [`docs/development/codebase-architecture.md`](docs/development/codebase-architecture.md) to locate the target crate or package, verify the file's architectural role, check existing structs/traits, and confirm the owner.
+- Agents must never guess file locations or create stray folders (e.g., `scratch/`, `templates/`, `services/`). All code strictly resides in the canonical modular structure: `platform/`, `apps/`, `sdk/`, `workbenches/`, `schemas/`, `tests/`, `ui/`, or `xtask/`.
 
 ---
 

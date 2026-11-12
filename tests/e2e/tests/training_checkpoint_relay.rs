@@ -8,14 +8,12 @@
 //! 5. Tampering/corruption with checkpoint files fails closed with IntegrityCheckFailed.
 //! 6. Three-tier progress triplet guarantees (observed >= local >= protected).
 
-use tempfile::tempdir;
 use custos_domain::{
     digest, CheckpointCommitStatus, DomainError, ProgressTriplet, ProtectionPolicy,
     ProtectionStatus,
 };
-use custos_testkit::{
-    DataCursor, DeterministicTrainer, OptimizerKind,
-};
+use custos_testkit::{DataCursor, DeterministicTrainer, OptimizerKind};
+use tempfile::tempdir;
 
 #[test]
 fn test_uninterrupted_vs_interrupted_resumed_parity() {
@@ -65,9 +63,8 @@ fn test_uninterrupted_vs_interrupted_resumed_parity() {
         .expect("Protected manifest must validate for state resume");
 
     // Restore into a fresh Attempt 2 trainer instance
-    let mut restored_trainer =
-        DeterministicTrainer::restore_from_checkpoint(&ckpt_dir, &manifest)
-            .expect("Checkpoint restore must succeed");
+    let mut restored_trainer = DeterministicTrainer::restore_from_checkpoint(&ckpt_dir, &manifest)
+        .expect("Checkpoint restore must succeed");
 
     assert_eq!(restored_trainer.global_step, 50);
     assert_eq!(restored_trainer.weights, trainer_b.weights);
@@ -131,7 +128,10 @@ fn test_d5_sgd_no_momentum_empty_state_resumes_bit_exact() {
 
     // D5 verification: verify optimizer.pt on disk is literally empty JSON "{}"
     let opt_content = std::fs::read_to_string(ckpt_dir.join("optimizer.pt")).unwrap();
-    assert_eq!(opt_content, "{}", "SGD without momentum must store empty tensor state");
+    assert_eq!(
+        opt_content, "{}",
+        "SGD without momentum must store empty tensor state"
+    );
 
     manifest.commit_status = CheckpointCommitStatus::CommittedProtected;
     manifest.validate_for_state_resume().unwrap();
@@ -151,7 +151,10 @@ fn test_d5_sgd_no_momentum_empty_state_resumes_bit_exact() {
 fn test_d6_cursor_mutation_or_desync_detected_by_oracle() {
     let seed = 999;
     let dataset_len = 1000;
-    let opt = OptimizerKind::SgdWithMomentum { lr: 0.01, momentum: 0.9 };
+    let opt = OptimizerKind::SgdWithMomentum {
+        lr: 0.01,
+        momentum: 0.9,
+    };
 
     let mut baseline = DeterministicTrainer::new(opt.clone(), seed, dataset_len);
     for _ in 0..100 {
@@ -172,9 +175,16 @@ fn test_d6_cursor_mutation_or_desync_detected_by_oracle() {
     manifest.commit_status = CheckpointCommitStatus::CommittedProtected;
 
     // Simulate faulty cursor in checkpoint (e.g., reset index to 0)
-    let faulty_cursor = DataCursor { epoch: 0, index: 0, dataset_len, shuffle_seed: seed };
-    let mut meta: custos_testkit::TrainerStateMetadata =
-        serde_json::from_str(&std::fs::read_to_string(ckpt_dir.join("trainer_state.json")).unwrap()).unwrap();
+    let faulty_cursor = DataCursor {
+        epoch: 0,
+        index: 0,
+        dataset_len,
+        shuffle_seed: seed,
+    };
+    let mut meta: custos_testkit::TrainerStateMetadata = serde_json::from_str(
+        &std::fs::read_to_string(ckpt_dir.join("trainer_state.json")).unwrap(),
+    )
+    .unwrap();
     meta.cursor = faulty_cursor;
     let meta_json = serde_json::to_string(&meta).unwrap();
     std::fs::write(ckpt_dir.join("trainer_state.json"), &meta_json).unwrap();
@@ -201,7 +211,12 @@ fn test_d6_cursor_mutation_or_desync_detected_by_oracle() {
 
 #[test]
 fn test_d7_canary_evaluation_does_not_mutate_state() {
-    let opt = OptimizerKind::Adam { lr: 0.01, beta1: 0.9, beta2: 0.999, eps: 1e-8 };
+    let opt = OptimizerKind::Adam {
+        lr: 0.01,
+        beta1: 0.9,
+        beta2: 0.999,
+        eps: 1e-8,
+    };
     let mut trainer = DeterministicTrainer::new(opt, 777, 500);
 
     for _ in 0..25 {

@@ -22,13 +22,13 @@
 
 use custos_core::contracts::judgment::{JudgmentPort, JudgmentRequest};
 use custos_core::contracts::storage::{OutboxEntry, OutboxStatus};
-use custos_core::oi::hard_filters::HardFilters;
+use custos_runtime::oi::hard_filters::HardFilters;
 use custos_domain::oi::{
     ComparisonMarginConfig, DecisionSnapshot, OptimizationClaimOutcome, OptimizationEvaluator,
     RejectionReason, ReplanTrigger, StrategyProposal, TaskExecutionMetrics,
 };
 use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-use custos_runtime::cognitive::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
+use custos_runtime::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
 use custos_runtime::oi::{CandidateBuilder, Estimator, Replanner};
 use serde_json::json;
 
@@ -211,10 +211,7 @@ mod s1_judge_calibration_and_escalation {
         let request = JudgmentRequest {
             judgment_id: "jdg-clean-001".into(),
             task_id: "task-clean".into(),
-            criteria: vec![
-                "exit code 0".into(),
-                "contains: test result: ok".into(),
-            ],
+            criteria: vec!["exit code 0".into(), "contains: test result: ok".into()],
             candidate: json!({
                 "status": "completed",
                 "exit_code": 0,
@@ -260,10 +257,7 @@ mod s1_judge_calibration_and_escalation {
         let request = JudgmentRequest {
             judgment_id: "jdg-fail-003".into(),
             task_id: "task-failing".into(),
-            criteria: vec![
-                "exit code 0".into(),
-                "contains: BUILD SUCCESSFUL".into(),
-            ],
+            criteria: vec!["exit code 0".into(), "contains: BUILD SUCCESSFUL".into()],
             candidate: json!({
                 "status": "failed",
                 "exit_code": 1,
@@ -278,7 +272,9 @@ mod s1_judge_calibration_and_escalation {
         assert!(result.violations.is_some());
         let violations = result.violations.unwrap();
         assert!(violations.iter().any(|v| v.contains("exit_code is 1")));
-        assert!(violations.iter().any(|v| v.contains("missing required token 'build successful'")));
+        assert!(violations
+            .iter()
+            .any(|v| v.contains("missing required token 'build successful'")));
     }
 }
 
@@ -313,10 +309,7 @@ mod delta_replanning_and_authority_preservation {
             ("node_read_repo".into(), "node_modify_code".into()),
             ("node_modify_code".into(), "node_run_tests".into()),
         ];
-        rev.obligations = vec![
-            "permit.fs.write".into(),
-            "criteria.tests_pass".into(),
-        ];
+        rev.obligations = vec!["permit.fs.write".into(), "criteria.tests_pass".into()];
 
         // Downstream verifier fails due to test assertion failure
         let brief = Replanner::create_brief(
@@ -350,8 +343,14 @@ mod delta_replanning_and_authority_preservation {
         assert_eq!(new_rev.revision_number, 2);
         assert_eq!(new_rev.nodes.len(), 3);
         assert!(new_rev.nodes.iter().any(|n| n.node_id == "node_read_repo"));
-        assert!(new_rev.nodes.iter().any(|n| n.node_id == "node_modify_code_v2"));
-        assert!(new_rev.nodes.iter().any(|n| n.node_id == "node_run_tests_v2"));
+        assert!(new_rev
+            .nodes
+            .iter()
+            .any(|n| n.node_id == "node_modify_code_v2"));
+        assert!(new_rev
+            .nodes
+            .iter()
+            .any(|n| n.node_id == "node_run_tests_v2"));
         assert_eq!(new_rev.obligations, rev.obligations);
     }
 
@@ -413,12 +412,14 @@ mod hard_filters_catalog_and_uncertainty_estimation {
         }
 
         // 2. HardFilters strictly rejects any rogue proposal targeting an unconfigured executor
-        let unconfigured_proposal = StrategyProposal::native_baseline("task-catalog-g12", "unconfigured-gpu-runner");
+        let unconfigured_proposal =
+            StrategyProposal::native_baseline("task-catalog-g12", "unconfigured-gpu-runner");
         let filter_res = HardFilters::evaluate(&unconfigured_proposal, &snapshot);
         assert!(filter_res.is_err());
         let reasons = filter_res.unwrap_err();
         assert!(reasons.iter().any(|r| match r {
-            RejectionReason::CapabilityMissing(msg) => msg.contains("unavailable or not configured"),
+            RejectionReason::CapabilityMissing(msg) =>
+                msg.contains("unavailable or not configured"),
             _ => false,
         }));
     }
@@ -430,16 +431,22 @@ mod hard_filters_catalog_and_uncertainty_estimation {
         snapshot.required_capabilities = vec!["LocalOnly".into()];
 
         // Pinned model mismatch
-        let mismatch_proposal = StrategyProposal::native_baseline("task-constraints-g12", "custos-local");
+        let mismatch_proposal =
+            StrategyProposal::native_baseline("task-constraints-g12", "custos-local");
         let res1 = HardFilters::evaluate(&mismatch_proposal, &snapshot);
         assert!(res1.is_err());
-        assert!(res1.unwrap_err().contains(&RejectionReason::ModelPinMismatch));
+        assert!(res1
+            .unwrap_err()
+            .contains(&RejectionReason::ModelPinMismatch));
 
         // Local-only violation
-        let cloud_proposal = StrategyProposal::native_baseline("task-constraints-g12", "claude-code");
+        let cloud_proposal =
+            StrategyProposal::native_baseline("task-constraints-g12", "claude-code");
         let res2 = HardFilters::evaluate(&cloud_proposal, &snapshot);
         assert!(res2.is_err());
-        assert!(res2.unwrap_err().contains(&RejectionReason::LocalOnlyConstraint));
+        assert!(res2
+            .unwrap_err()
+            .contains(&RejectionReason::LocalOnlyConstraint));
     }
 
     #[test]
@@ -457,8 +464,14 @@ mod hard_filters_catalog_and_uncertainty_estimation {
 
         for cand in &candidates {
             // G12 Invariant: Unknown spend and latency must NOT be 0!
-            assert!(cand.est_tokens > 2000, "Tokens must reflect unknowns buffer");
-            assert!(cand.est_latency_ms > 4000, "Latency must reflect recovery and verification");
+            assert!(
+                cand.est_tokens > 2000,
+                "Tokens must reflect unknowns buffer"
+            );
+            assert!(
+                cand.est_latency_ms > 4000,
+                "Latency must reflect recovery and verification"
+            );
             if !cand.harness_id.contains("local") {
                 assert!(cand.est_cost_usd_max > cand.est_cost_usd_min);
             }

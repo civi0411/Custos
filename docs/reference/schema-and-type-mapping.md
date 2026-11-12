@@ -10,27 +10,27 @@ This document specifies the exact mapping between external JSON wire schemas, in
 
 ## 1. Protocol Wire Schemas (Wire Contracts)
 
-| Schema Specification | JSON Schema Title | Rust Type | Defining Crate | Alignment Status |
+| Schema Specification | JSON Schema Title | Rust Type | Defining Package | Alignment Status |
 |---|---|---|---|---|
-| `envelope.schema.json` | `ProtocolEnvelope` | `ProtocolEnvelope` | `crates/custos-domain` | **Aligned** (RFC 3339 timestamp, UUIDs) |
-| `error.schema.json` | `ProtocolError` | `DomainError` / `ProtocolError` | `crates/custos-domain` | **Aligned** (Error taxonomy mapping) |
-| `provider-request.schema.json` | `ProviderRequest` | `ProviderRequest` | `crates/custos-provider` | **Identical** (1:1 field compatibility) |
-| `provider-event.schema.json` | `ProviderEvent` | `ProviderEvent` | `crates/custos-provider` | **Identical** (Streaming event taxonomy) |
-| `judgment-request.schema.json` | `JudgmentRequest` | `JudgmentRequest` | `crates/custos-core` | **Identical** (Criteria, candidate, context) |
-| `judgment-result.schema.json` | `JudgmentResult` | `JudgmentResult` | `crates/custos-core` | **Identical** (Score, confidence, rationale) |
-| `capability-request.schema.json`| `CapabilityRequest`| `CapabilityRequest` | `crates/custos-core` | **Identical** (Permit ID, action, arguments) |
-| `execution-receipt.schema.json` | `ExecutionReceipt` | `ExecutionReceipt` | `crates/custos-domain` | **Identical** (Output digest, duration, status) |
-| `continuation-packet.schema.json`| `ContinuationPacket`| `ContinuationPacket`| `crates/custos-domain` | **Identical** (SHA-256 integrity hash) |
+| `envelope.schema.json` | `ProtocolEnvelope` | `ProtocolEnvelope` | `platform/domain` / `sdk/protocol` | **Aligned** (RFC 3339 timestamp, UUIDs) |
+| `error.schema.json` | `ProtocolError` | `DomainError` / `ProtocolError` | `platform/domain` (`custos-domain`) | **Aligned** (Error taxonomy mapping) |
+| `provider-request.schema.json` | `ProviderRequest` | `ProviderRequest` | `platform/ai` (`custos-provider`) | **Identical** (1:1 field compatibility) |
+| `provider-event.schema.json` | `ProviderEvent` | `ProviderEvent` | `platform/ai` (`custos-provider`) | **Identical** (Streaming event taxonomy) |
+| `judgment-request.schema.json` | `JudgmentRequest` | `JudgmentRequest` | `platform/core` (`custos-core`) | **Identical** (Criteria, candidate, context) |
+| `judgment-result.schema.json` | `JudgmentResult` | `JudgmentResult` | `platform/core` (`custos-core`) | **Identical** (Score, confidence, rationale) |
+| `capability-request.schema.json`| `CapabilityRequest`| `CapabilityRequest` | `platform/core` (`custos-core`) | **Identical** (Permit ID, action, arguments) |
+| `execution-receipt.schema.json` | `ExecutionReceipt` | `ExecutionReceipt` | `platform/domain` (`custos-domain`) | **Identical** (Output digest, duration, status) |
+| `continuation-packet.schema.json`| `ContinuationPacket`| `ContinuationPacket`| `platform/domain` (`custos-domain`) | **Identical** (SHA-256 integrity hash) |
 
 ---
 
 ## 2. Pack Domain Schemas
 
-| Schema Specification | JSON Schema Title | Rust Type | Defining Crate | Scope |
+| Schema Specification | JSON Schema Title | Rust Type | Defining Package | Scope |
 |---|---|---|---|---|
-| `pack-manifest.schema.json` | `PackManifest` | `DomainPackManifest` | `crates/custos-packs` | Pack metadata, tools, and workflows |
-| `workflow.schema.json` | `WorkflowDefinition`| `WorkflowPlan`, `WorkflowStep` | `crates/custos-domain` | Directed acyclic graph execution nodes |
-| `verifier-profile.schema.json` | `VerifierProfile` | `EvidenceKind`, `ContractEvidence` | `crates/custos-domain` | Acceptance criteria verifier rules |
+| `pack-manifest.schema.json` | `PackManifest` | `DomainPackManifest` | `platform/components` (`custos-packs`) | Pack metadata, tools, and workflows |
+| `workflow.schema.json` | `WorkflowDefinition`| `WorkflowPlan`, `WorkflowStep` | `platform/domain` (`custos-domain`) | Directed acyclic graph execution nodes |
+| `verifier-profile.schema.json` | `VerifierProfile` | `EvidenceKind`, `ContractEvidence` | `platform/domain` (`custos-domain`) | Acceptance criteria verifier rules |
 
 ---
 
@@ -54,7 +54,7 @@ Every protocol error emitted across Unix Domain Sockets, HTTP, or SSE strictly c
 
 ## 4. SQLite Relational Schema Mapping
 
-The persistence layer in `crates/custos-persistence` manages durable state using SQLite in WAL mode. Core relational tables map to domain aggregates as follows:
+The persistence layer in `platform/storage` (`custos-persistence`) manages durable state using SQLite in WAL mode. Core relational tables map to domain aggregates as follows:
 
 | Table Name | Primary Key | Key Columns | Mapped Aggregate / Entity |
 |---|---|---|---|

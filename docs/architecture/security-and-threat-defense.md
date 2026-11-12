@@ -81,9 +81,9 @@ graph TD
 
 ---
 
-## 4. Continuous Red-Teaming Test Fixtures
+## 4. Continuous Red-Teaming & Boundary Verification
 
-Custos maintains a suite of continuous adversarial fixtures in `crates/custos-core/fixtures/adversarial/` executed during CI:
+Custos maintains security & adversarial policy verification suites across `tests/testkit/`, `tests/contract/`, and `platform/core` covering:
 
 - `phantom_credential_request.txt`: Traps attempts by external prompts to elicit API keys or SSH certificates.
 - `infinite_recursion_tool_loop.txt`: Validates that repetitive tool calls trigger step budgets and graceful task termination.

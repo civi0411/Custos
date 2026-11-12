@@ -57,24 +57,29 @@ flowchart LR
 
 ---
 
-## Ba Lăng Kính Chuyên Miền (Three Specialized Domain Lenses)
+## Bốn Lăng Kính Chuyên Miền (Bàn Làm Việc Chuyên Biệt)
 
-Custos cung cấp các mô hình tương tác và bộ máy kiểm chứng chuyên biệt cho từng miền nhận thức:
+Custos cung cấp các mô hình tương tác, lược đồ miền và bộ máy kiểm chứng chuyên biệt cho 4 miền nhận thức:
 
-### 1. Lăng Kính Kỹ Thuật (Engineering Lens - Bàn Làm Việc Lập Trình)
+### 1. Lập Trình (Coding Workbench - `workbenches/coding`)
 - **Không Gian Thực Thi 3 Tuyến (3-Path Workspaces):** Tách biệt an toàn giữa kho lưu trữ chuẩn (canonical repo), nhánh trung gian (staging fork) và sandbox kiểm chứng.
 - **Bó Vá Nguyên Tử (Atomic Patch Bundles):** Ràng buộc diff có cấu trúc với quy trình kiểm tra cú pháp và lint tự động trước khi staging.
-- **Cách Ly Lease Cây Làm Việc (Worktree Lease Isolation):** Fencing các thao tác ghi đồng thời trên cùng worktree để ngăn chặn tranh chấp và mất dữ liệu.
+- **Cách Ly Lease Cây Làm Việc (Worktree Lease Isolation):** Fencing các thao tác ghi đồng thời trên cùng worktree để ngăn chặn tranh chấp và mất dữ liệu (`ENV-02`).
 
-### 2. Lăng Kính Nghiên Cứu (Research Lens - Bàn Làm Việc Nghiên Cứu)
+### 2. Nghiên Cứu (Research Workbench - `workbenches/research`)
 - **Cấp Bậc Xác Thực Khẳng Định (Claim Grounding):** Phân định 4 bậc nhận thức nghiêm ngặt: `L0 Chưa Kiểm Chứng`, `L1 Có Trích Dẫn`, `L2 Bình Duyệt Chuyên Gia`, `L3 Tái Hiện Thực Nghiệm`.
 - **Thẩm Định Trích Dẫn (Citation Coverage Oracle):** Đối soát nguồn DOI/tài liệu khoa học đã công bố và từ chối các xác nhận suông của mô hình.
-- **Phòng Tổng Hợp (Synthesis Studio):** Chuyển hóa tổng hợp tài liệu đa nguồn thành các giả thuyết có thể kiểm chứng và các mẻ thực nghiệm có thể tái hiện.
+- **Phòng Tổng Hợp & Kernel Notebook:** Chuyển hóa tổng hợp tài liệu đa nguồn thành các giả thuyết có thể kiểm chứng và các mẻ thực nghiệm gắn liền với chốt tái lập `EnvSnapshot` mật mã (`ENV-04`).
 
-### 3. Lăng Kính Trợ Lý (Assistant Lens - Bàn Làm Việc Trợ Lý & Dùng Chung)
+### 3. Trợ Lý (Assistant Workbench - `workbenches/assistant`)
 - **Hàng Đợi Phê Duyệt Outbox (Outbox Approval Queue):** Giữ các liên lạc gửi ra và các đột biến quan trọng sau trạng thái chờ người dùng duyệt bền vững.
 - **Ủy Quyền Thường Trực (Standing Grants):** Cho phép ủy quyền có chính sách đối với tác vụ định kỳ trong khi vẫn kích hoạt can thiệp con người đối với hành động rủi ro cao.
-- **Môi Trường Tích Hợp:** Hợp nhất quyền truy cập an toàn vào trình duyệt sandbox, terminal PTY, máy chủ từ xa và ghi chú bền vững.
+- **Neo Đậu Phạm Vi Logic (Logical Scope):** Thao tác trên phạm vi logic của dự án mà không tạo ra các checkout Git giả mạo.
+
+### 4. Định Lượng (Quant Workbench - `workbenches/quant`)
+- **Phân Vùng Dữ Liệu Thị Trường:** Neo đậu chiến lược vào các phân vùng dữ liệu lịch sử tất định nhằm triệt tiêu look-ahead bias.
+- **Cách Ly Mô Phỏng Air-Gap:** Thực thi backtest trong môi trường tuyệt đối không kết nối mạng (`network_restricted = true`), ngăn ngừa rò rỉ dữ liệu hoặc gửi lệnh thật ra ngoài (`ENV-05`).
+- **Thẩm Định Tín Hiệu Alpha:** Đánh giá tearsheet backtest, tỷ số Sharpe/Sortino và biên độ sụt giảm (drawdown) trước khi đưa chiến lược vào danh mục.
 
 ---
 
@@ -93,24 +98,45 @@ Custos cung cấp các mô hình tương tác và bộ máy kiểm chứng chuy�
 
 ---
 
-## Cấu Trúc Crate & Kiến Trúc Không Gian Làm Việc
+## Môi Trường Thực Thi Của Agent (AEE) & 7 Cổng Bất Biến
 
-Custos phân định nghiêm ngặt giữa logic thuần túy và tác dụng phụ qua các package Cargo phân tầng:
+Agent tự trị tuyệt đối không bao giờ được phép thực thi trong một môi trường trống rỗng, không được neo đậu hoặc mang tính suy đoán (`sade-foundations.md`). Custos chuẩn hóa mô hình **Agent Execution Environment (AEE)** qua các type miền thuần (`EnvironmentSpec`, `EnvironmentProfile`, `EnvironmentState`, `EnvSnapshot`, `EnvironmentAssurance`), port ở core (`EnvironmentPort`), và coordinator ở runtime.
 
-| Phân tầng | Đường dẫn Crate | Tên Package | Trách nhiệm cốt lõi |
-|---|---|---|---|
-| **Tầng 0 (Domain)** | `crates/custos-domain` | `custos-domain` | Định danh miền thuần túy, mô hình thực thể, máy trạng thái và các bất biến Zero-I/O. |
-| **Tầng 1 (Core)** | `crates/custos-core` | `custos-core` | Dịch vụ điều phối tác vụ, engine thẩm quyền và các bộ kiểm chứng hoàn thành. |
-| | `crates/custos-persistence` | `custos-persistence` | Lưu trữ SQLite WAL, mô hình Outbox, chuyển dịch trạng thái CAS `state_version` và phục hồi sự cố. |
-| | `crates/custos-provider` | `custos-provider` | Hợp đồng mô hình trung lập `ModelPort`, bộ giải mã streaming SSE và tokenizer. |
-| **Tầng 2 (Runtime & Adapters)** | `crates/custos-bridge` | `custos-bridge` | Thăng cấp Session thành Task, điều hướng luồng bay (steer) và định tuyến IPC. |
-| | `crates/custos-runtime` | `custos-runtime` | Vòng lặp nhận thức S1/S2, nén ngữ cảnh (RTK), các tầng bộ nhớ và bộ lập kế hoạch. |
-| | `crates/custos-adapters` | `custos-adapters` | Sandbox hệ điều hành, adapter client MCP, sidecar suy luận cục bộ, Git worktree và bộ chuyển đổi giao thức. |
-| **Tầng 3 (Domain Packs)** | `crates/custos-packs` | `custos-packs` | Quy trình chuyên biệt theo miền nghiệp vụ: Gói Kỹ thuật (Engineering), Nghiên cứu (Research), Trợ lý (Assistant). |
-| **Tầng 4 (Lắp Ráp & Host)** | `crates/custos-daemon` | `custos-daemon` | Điểm khởi tạo và lắp ráp duy nhất (Composition Root), dịch vụ daemon nền, HTTP/JSON-RPC cục bộ. |
-| | `crates/custos-sdk` | `custos-sdk` | Đối tượng truyền dữ liệu (DTO), UniFFI bindings và kiểu dữ liệu dây ACP. |
-| | `crates/custos-app/cli` | `custos-app-cli` | Giao diện dòng lệnh tương tác qua TUI (`ratatui`). |
-| | `crates/custos-app/desktop` | `custos-app-desktop` | Vỏ bọc native Tauri 2 tích hợp trực tiếp giao diện `ui/desktop`. |
+Trước khi bất kỳ tác vụ nào tạo ra đột biến, hệ thống sẽ đánh giá 7 cổng bất biến tất định:
+
+| Cổng Bất Biến | Bảo Đảm An Toàn | Chính Sách Đóng Khi Lỗi (Fail-Closed) |
+|---|---|---|
+| **ENV-01 (Trạng Thái Ready)** | Môi trường phải ở trạng thái `Ready` (hoặc hạ cấp an toàn có kiểm chứng). | Từ chối mọi đột biến khi đang khởi tạo, thất bại hoặc đã hủy. |
+| **ENV-02 (Cây Làm Việc Lập Trình)** | Miền Coding bắt buộc phải có Git worktree độc lập và nhánh cụ thể. | Từ chối chạy trên cây làm việc chung bị bẩn nếu thiếu chấp thuận của con người. |
+| **ENV-03 (Bảo Đảm Trung Thực)** | Mức bảo đảm mục tiêu không được vượt quá năng lực đo đạc thật của host (Cổng 4). | Host chỉ có `ObserveOnly` không thể tự nhận là `CustosMediated`; hạ cấp fail-closed. |
+| **ENV-04 (Tập Văn Bản Nghiên Cứu)** | Miền Research bắt buộc phải có đường dẫn corpus hợp lệ và chốt snapshot tái lập. | Chặn thực thi cell notebook nếu đường dẫn corpus chưa được neo đậu. |
+| **ENV-05 (Air-Gap Định Lượng)** | Mô phỏng backtest bắt buộc phải cô lập mạng hoàn toàn (`network_restricted = true`). | Chặn đứng thực thi nếu phát hiện có socket mạng ngoại vi mở. |
+| **ENV-06 (Hủy Idempotent)** | Quá trình teardown an toàn khi gọi lặp lại; daemon dọn sạch worktree và PTY mồ côi khi khởi động. | Tự động thu hồi tiến trình zombie và worktree cũ khi khởi động lại. |
+| **ENV-07 (Hạ Cấp Rõ Ràng)** | Mọi chuyển dịch sang trạng thái `Degraded` bắt buộc phải có chuỗi lý do minh bạch. | Từ chối việc hạ cấp năng lực ẩn danh hoặc không được ghi nhận. |
+
+---
+
+## Cấu Trúc Gói & Kiến Trúc Không Gian Làm Việc
+
+Custos phân định nghiêm ngặt giữa logic miền thuần túy và tác dụng phụ qua các package Cargo phân tầng theo Kiến trúc Lục giác (Hexagonal Architecture):
+
+| Phân Hệ Kiến Trúc | Đường Dẫn Thư Mục | Trách Nhiệm Cốt Lõi |
+|---|---|---|
+| **Tầng Miền (Domain Layer)** | `platform/domain` | Định danh thực thể thuần túy, mô hình zero-I/O, đặc tả AEE và các máy trạng thái. |
+| **Hợp Đồng Lõi & Thẩm Quyền** | `platform/core` | Dịch vụ điều phối tác vụ, engine thẩm quyền, `EnvironmentPort`, các bộ kiểm chứng hoàn thành. |
+| **Lưu Trữ & Bền Vững** | `platform/storage` | Lưu trữ SQLite WAL, mô hình Outbox, chuyển dịch trạng thái CAS `state_version`, phục hồi sự cố. |
+| **AI & Định Tuyến Mô Hình** | `platform/ai` | Hợp đồng mô hình trung lập `ModelPort`, danh mục mô hình, bộ phân tích streaming SSE. |
+| **Runtime Nhận Thức** | `platform/runtime` | Vòng lặp nhận thức S1/S2, `EnvironmentCoordinator`, vòng đời workspace, định tuyến terminal. |
+| **Host Adapters & Sandbox** | `platform/adapters` | Sandbox hệ điều hành (Seatbelt/Bubblewrap), client MCP, driver Git worktree, terminal PTY. |
+| **Thành Phần & Registry Pack** | `platform/components` | Registry pack động, kỹ năng nền tảng, mô tả năng lực, biên dịch công cụ theo lens. |
+| **Bàn Làm Việc Trợ Lý** | `workbenches/assistant` | Trợ lý quy trình cá nhân, lịch/danh bạ, bản nháp, hàng đợi outbox. |
+| **Bàn Làm Việc Lập Trình** | `workbenches/coding` | Kỹ thuật phần mềm, workspace 3 tuyến, diff nguyên tử, worktree lease. |
+| **Bàn Làm Việc Nghiên Cứu** | `workbenches/research` | Tổng hợp tài liệu, thang bậc xác thực 4 cấp, bộ thẩm định ALCE, thực thi notebook. |
+| **Bàn Làm Việc Định Lượng** | `workbenches/quant` | Chiến lược định lượng, backtest air-gap, đánh giá alpha, phân vùng dữ liệu thị trường. |
+| **Daemon (Điểm Lắp Ráp Duy Nhất)** | `apps/daemon` | Sole composition root, daemon nền, bộ điều phối Local JSON-RPC/HTTP API. |
+| **Client SDK** | `sdk/client-rust` | Rust client SDK, transport gọi Local API, kiểu dữ liệu truyền tin ACP. |
+| **Giao Diện Desktop** | `ui/desktop` | Ứng dụng Desktop trực quan phát triển bằng Tauri 2 + Vite + React 19. |
+| **Giao Diện Terminal CLI** | `ui/cli` | Giao diện dòng lệnh tương tác và các lệnh điều khiển terminal. |
 
 ---
 
@@ -121,9 +147,10 @@ Giao diện Desktop Custos được phát triển trên nền **Vite, React 19 v
 - **Cấu Trúc 3 Cấp:** Điều hướng phân cấp trực quan qua `Dự Án -> Không Gian Làm Việc -> Cây Làm Việc (Project -> Workspace -> Worktree)`.
 - **Hệ Thống Token Graphite JetBlack:** Tông màu tối hiện đại, tương phản cao, tối ưu hóa cho các phiên làm việc kéo dài.
 - **Bàn Làm Việc Chuyên Biệt (Workbenches):**
-  - **Kỹ thuật (Engineering):** Tệp & Thay đổi, Bằng chứng thực nghiệm, và Trình quản lý Worktree.
-  - **Nghiên cứu (Research):** Phòng tổng hợp (Synthesis Studio), Phát hiện khoa học, và Sổ cái lượt chạy.
-  - **Trợ lý & Dùng chung (Assistant & Shared):** Trình duyệt nhúng, Terminal, Hạm đội máy chủ từ xa, và Ghi chú.
+  - **Lập Trình (Coding):** Tệp & Thay đổi, Bằng chứng thực nghiệm, Trình quản lý Worktree.
+  - **Nghiên Cứu (Research):** Phòng tổng hợp (Synthesis Studio), Phát hiện khoa học, Sổ cái lượt chạy.
+  - **Trợ Lý (Assistant):** Trình duyệt nhúng, Terminal, Hạm đội máy chủ từ xa, Ghi chú.
+  - **Định Lượng (Quant):** Tearsheets, Trình mô phỏng Backtest, Studio chiến lược Alpha.
 - **Chính Sách Không Dữ Liệu Ảo (Zero-Mock Policy):** Mọi chỉ số trên UI phản ánh chính xác số liệu viễn trắc thật từ daemon và chuyển sang chế độ an toàn khi dịch vụ bị gián đoạn.
 
 ---
@@ -150,17 +177,17 @@ Custos bao bọc và giám sát các harness lập trình phổ biến mà khôn
 
 ## Cổng Kiểm Soát Chất Lượng & Kiểm Thử
 
-Mọi đóng góp mã nguồn đều phải vượt qua các cổng kiểm soát nghiêm ngặt:
+Custos áp dụng 5 cổng kiểm soát chất lượng tự động, bắt buộc qua lệnh `xtask`:
 
 ```bash
-# 1. Cổng chặn cứng Clippy Rust (0 cảnh báo, 0 lỗi)
+# Chạy toàn bộ 5 quality gates chuẩn (Packs, Desktop UI, Canvas Smoke, Invariants, Cargo Check)
+cargo run -p xtask -- gate
+
+# Kiểm tra ranh giới kiến trúc và chống rò rỉ giữa kernel và workbenches
+cargo run -p xtask -- check-boundaries
+
+# Kiểm tra Clippy toàn bộ workspace với 0 cảnh báo được dung thứ
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 2. Toàn bộ test suite (>1,670 tests, 100% pass)
-cargo test --workspace --all-targets
-
-# 3. Kiểm tra kiểu và đóng gói giao diện Desktop
-cd ui/desktop && npm run build
 ```
 
 ---

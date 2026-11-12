@@ -1,6 +1,6 @@
 # Run Lifecycle & Honest Recovery Specification
 
-> **Scope**: `crates/custos-domain/src/task/run.rs`, `crates/custos-persistence/src/repositories/run.rs`, `crates/custos-daemon/src/runtime.rs`  
+> **Scope**: `platform/domain/src/task/run/`, `platform/storage/src/repositories/run/`, `apps/daemon/src/runtime.rs`  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 1 / F04)
 

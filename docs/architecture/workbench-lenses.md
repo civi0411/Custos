@@ -1,6 +1,6 @@
 # Workbench Lenses Specification
 
-> **Scope**: `crates/custos-domain/src/session/session.rs`, `crates/custos-packs/`  
+> **Scope**: `platform/domain/src/session/session.rs`, `platform/components/src/`, `workbenches/`  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 3 / F07)
 

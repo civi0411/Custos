@@ -15,8 +15,8 @@ use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_daemon::runtime::DaemonGovernedToolExecutor;
 use custos_domain::{
-    ActionLifecycleState, ContractEvidence, DomainError, EffectStatus, EvidenceKind,
-    ReceiptStatus, StartRunCommand, TaskContract, WorkerRun, ContextPack,
+    ActionLifecycleState, ContextPack, ContractEvidence, DomainError, EffectStatus, EvidenceKind,
+    ReceiptStatus, StartRunCommand, TaskContract, WorkerRun,
 };
 use custos_persistence::SqliteTaskStore;
 use custos_provider::events::ToolCall;
@@ -49,7 +49,11 @@ impl ModelPort for ScriptedLoopProvider {
     async fn generate(&self, _req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         let mut list = self.responses.lock().unwrap();
         if list.is_empty() {
-            Ok(ModelResponse::text("Default completion", "scripted-model", 10))
+            Ok(ModelResponse::text(
+                "Default completion",
+                "scripted-model",
+                10,
+            ))
         } else {
             Ok(list.remove(0))
         }
@@ -145,13 +149,10 @@ async fn test_g07_composed_path_admitted_tool_to_real_disk_and_single_receipt() 
     let resp2 = ModelResponse::text("service.conf successfully created.", "test-model", 15);
 
     let provider = Arc::new(ScriptedLoopProvider::new(vec![resp1, resp2]));
-    let runtime = GovernedAgentRuntime::new(
-        provider,
-        "You are a sovereign test agent",
-        sample_tools(),
-    )
-    .with_tool_executor(tool_executor)
-    .with_max_iterations(5);
+    let runtime =
+        GovernedAgentRuntime::new(provider, "You are a sovereign test agent", sample_tools())
+            .with_tool_executor(tool_executor)
+            .with_max_iterations(5);
 
     let worker_run = WorkerRun::new(task.id.clone(), "coder".into(), 1);
     let context_pack = ContextPack::new("pack_1".into(), vec![], 0, "sha256:0".into());
@@ -171,7 +172,10 @@ async fn test_g07_composed_path_admitted_tool_to_real_disk_and_single_receipt() 
 
     // 2. Assert physical effect: file exists on disk inside workspace with exact content
     let file_path = workspace.path().join("service.conf");
-    assert!(file_path.exists(), "service.conf must exist on physical disk");
+    assert!(
+        file_path.exists(),
+        "service.conf must exist on physical disk"
+    );
     let content = std::fs::read_to_string(&file_path).expect("read written file");
     assert_eq!(content, "port=8080\nenv=production");
 
@@ -326,13 +330,9 @@ async fn test_g07_security_kernel_critical_risk_rejection_no_disk_mutation() {
     let resp2 = ModelResponse::text("Tool rejected by policy. Stopping.", "test-model", 10);
 
     let provider = Arc::new(ScriptedLoopProvider::new(vec![resp1, resp2]));
-    let runtime = GovernedAgentRuntime::new(
-        provider,
-        "System prompt",
-        sample_tools(),
-    )
-    .with_tool_executor(tool_executor)
-    .with_max_iterations(3);
+    let runtime = GovernedAgentRuntime::new(provider, "System prompt", sample_tools())
+        .with_tool_executor(tool_executor)
+        .with_max_iterations(3);
 
     let worker_run = WorkerRun::new("task_critical_check".into(), "coder".into(), 1);
     let context_pack = ContextPack::new("pack_1".into(), vec![], 0, "sha256:0".into());
@@ -358,7 +358,10 @@ async fn test_g07_security_kernel_critical_risk_rejection_no_disk_mutation() {
     )
     .await
     .expect("list outbox entries");
-    assert!(entries.is_empty(), "critical rejection must not enqueue any receipted effect");
+    assert!(
+        entries.is_empty(),
+        "critical rejection must not enqueue any receipted effect"
+    );
 }
 
 #[tokio::test]
@@ -388,13 +391,9 @@ async fn test_g07_path_traversal_denial_no_disk_mutation() {
     let resp2 = ModelResponse::text("Traversal was rejected. Halting.", "test-model", 10);
 
     let provider = Arc::new(ScriptedLoopProvider::new(vec![resp1, resp2]));
-    let runtime = GovernedAgentRuntime::new(
-        provider,
-        "System prompt",
-        sample_tools(),
-    )
-    .with_tool_executor(tool_executor)
-    .with_max_iterations(3);
+    let runtime = GovernedAgentRuntime::new(provider, "System prompt", sample_tools())
+        .with_tool_executor(tool_executor)
+        .with_max_iterations(3);
 
     let worker_run = WorkerRun::new("task_traversal".into(), "coder".into(), 1);
     let context_pack = ContextPack::new("pack_1".into(), vec![], 0, "sha256:0".into());
@@ -409,7 +408,10 @@ async fn test_g07_path_traversal_denial_no_disk_mutation() {
 
     // Verify zero files created outside workspace
     let escaped_path = workspace.path().join("../../escaped.txt");
-    assert!(!escaped_path.exists(), "Path traversal must never create files on disk");
+    assert!(
+        !escaped_path.exists(),
+        "Path traversal must never create files on disk"
+    );
 }
 
 #[tokio::test]
@@ -446,13 +448,9 @@ async fn test_g07_bounded_iteration_exhaustion_returns_limited_budget_exceeded()
     });
 
     let provider = Arc::new(ScriptedLoopProvider::new(vec![resp1, resp2, resp3]));
-    let runtime = GovernedAgentRuntime::new(
-        provider,
-        "System prompt",
-        sample_tools(),
-    )
-    .with_tool_executor(tool_executor)
-    .with_max_iterations(2); // Bound to 2 iterations
+    let runtime = GovernedAgentRuntime::new(provider, "System prompt", sample_tools())
+        .with_tool_executor(tool_executor)
+        .with_max_iterations(2); // Bound to 2 iterations
 
     let worker_run = WorkerRun::new("task_exhaustion".into(), "coder".into(), 1);
     let context_pack = ContextPack::new("pack_1".into(), vec![], 0, "sha256:0".into());
@@ -495,20 +493,19 @@ async fn test_g07_cancellation_during_governed_loop_cleans_handles_and_halts() {
 
     let provider = Arc::new(ScriptedLoopProvider::new(vec![resp1]));
     let runtime = Arc::new(
-        GovernedAgentRuntime::new(
-            provider,
-            "System prompt",
-            sample_tools(),
-        )
-        .with_tool_executor(tool_executor)
-        .with_max_iterations(5),
+        GovernedAgentRuntime::new(provider, "System prompt", sample_tools())
+            .with_tool_executor(tool_executor)
+            .with_max_iterations(5),
     );
 
     let worker_run = WorkerRun::new("task_cancel_g07".into(), "coder".into(), 1);
     let context_pack = ContextPack::new("pack_1".into(), vec![], 0, "sha256:0".into());
 
     // Pre-cancel run
-    runtime.cancel_run(&worker_run.id).await.expect("cancel_run succeeds");
+    runtime
+        .cancel_run(&worker_run.id)
+        .await
+        .expect("cancel_run succeeds");
 
     let err = runtime
         .execute_turn(&worker_run, &context_pack)

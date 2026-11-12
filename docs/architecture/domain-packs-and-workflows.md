@@ -140,7 +140,7 @@ Economical default scoped retrieval, deterministic time/identity, stable persona
 | Assistant | assistant skills/profile/verifiers/trigger semantics | workflow/continuation/budget/effects | adapters contacts/mail/calendar/notes/notifications; outbox |
 | Economics | Pack features/quality/fixtures | runtime OI/context/judgment, core budget | provider usage/cache profiles; persistence attempt ledger |
 
-Module roots giữ trong `crates/custos-packs/src/<pack>/`, foundations theo [plan mapping](../development/workspace-restructuring-plan.md#13-cost-core-policy-estimator-ledger-và-projections). Extend existing paths/types; proposed workspace/experiment/connectors chỉ tạo khi có behavior. Không copy semantics vào mỗi MCP/harness adapter.
+Module roots giữ trong `workbenches/<pack>/src/` (và registry/foundation dùng chung ở `platform/components/src/`), foundations theo [plan mapping](../development/workspace-restructuring-plan.md#13-cost-core-policy-estimator-ledger-và-projections). Extend existing paths/types; proposed workspace/experiment/connectors chỉ tạo khi có behavior. Không copy semantics vào mỗi MCP/harness adapter.
 
 ModelPort path nhận tool loop/context/recipes từ Custos. Native AgentRuntimePort giữ loop và receive context/skills/capabilities theo support thật; Custos verify artifacts ngoài harness. Unsupported injection/resume/usage được khai báo. Native coding agent có thể chạy research analysis nếu environment/tool phù hợp; không cần ba agent brands cho ba pack.
 

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/envelope.v1.schema.json",
+  "title": "ProtocolEnvelope",
+  "description": "Standard wrapper for all inter-process communication messages in Custos",
+  "type": "object",
+  "required": ["version", "message_id", "timestamp", "kind", "payload"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "message_id": {
+      "type": "string",
+      "pattern": "^msg_[a-f0-9]+$"
+    },
+    "correlation_id": {
+      "type": ["string", "null"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

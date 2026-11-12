@@ -2,6 +2,8 @@
 
 **Kiến trúc đích.** Áp dụng chung Coding, Research, Assistant; không tạo crate mới. Tài liệu này phân loại nơi đặt code, không tự thay đổi các trait đang tồn tại. [Master](../../Custos.md), [workspace UI](agent-workspace-and-ui.md), [catalog vật lý](../development/codebase-architecture.md) và [migration plan](../development/workspace-restructuring-plan.md) cần được đọc cùng nhau.
 
+**Source ownership trên `new_rft`:** driver và source manifest nằm cạnh nhau tại `platform/adapters/src/<subject>/`; notebook/compute dùng chung không thuộc riêng Research. Bỏ scaffold capability và bản sao source không được Cargo biên dịch. `documents/source_fetch.rs` hiện chỉ đọc UTF-8 có scope/byte limit, không tự có PDF/OCR. `compute/checkpoint.rs` chỉ kiểm integrity local. Metadata không chứng minh installed/ready/authorized hoặc downloadable. Xem [plan hiện hành](../development/modular-workbench-refactor-plan.md).
+
 ## 1. Phân biệt trước khi thêm tính năng
 
 | Khái niệm | Nội dung | Nơi chịu trách nhiệm |
@@ -19,7 +21,7 @@ Không dùng từ “skill” để gom mọi thứ. Một file `SKILL.md` khôn
 
 `repo_explain` là job Engineering đọc/giải thích code qua capabilities file/search/Git đã có. Bỏ subsystem scanner/graph/query/coordinator chuyên biệt cùng query/snapshot types chỉ phục vụ nó; không dựng index, graph database, MCP server hoặc agent thay thế.
 
-`custos-domain/src/repo/span.rs` giữ locator `SourceSpan` cho artifact chẩn đoán; Engineering giữ recipe/rubric; runtime giữ context compiler chung; adapters giữ concrete capabilities; core giữ scope/authority hiện hữu. Các capability đọc/tìm file, cây thư mục, diff và worktree không bị gỡ. `tools/repo_intelligent/` (Nexus) chỉ là development utility, không là dependency sản phẩm.
+`custos-domain/src/repo/span.rs` giữ locator `SourceSpan` cho artifact chẩn đoán; Engineering giữ recipe/rubric; runtime giữ context compiler chung; adapters giữ concrete capabilities; core giữ scope/authority hiện hữu. Các capability đọc/tìm file, cây thư mục, diff và worktree không bị gỡ. Repo Intelligence/Nexus development subsystem đã được gỡ; không giữ một MCP server/indexer thay thế.
 
 ## 3. Mở rộng cả ba miền
 

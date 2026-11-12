@@ -123,7 +123,7 @@ cargo test -p custos-tests-e2e --test governed_loop_golden_test
 # Workspace Quality Gates
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-bash ./scripts/check_deps.sh --strict
+bash ./xtask/scripts/check_deps.sh --strict
 npm --prefix ui/desktop run build
-node tools/canvas-smoke.mjs
+node tests/desktop/canvas-smoke.mjs
 ```

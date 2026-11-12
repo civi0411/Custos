@@ -89,7 +89,7 @@ OrCa cung cấp cảm hứng workspace/worktree, PTY và resource canvas. Open S
 
 ### 3.1 `custos-app` thực sự làm gì?
 
-`crates/custos-app` là thư mục chứa executable hosts, không phải một Rust package sở hữu mọi logic. Desktop package hiện tên `custos-app-desktop`; CLI host là `custos-app-cli`. Workspace có nhiều Cargo members, nên “11 canonical crates” là vocabulary phân tầng trong tài liệu, không phải số package thực tế trong Cargo metadata.
+`apps/` chứa các executable hosts/daemon, không phải một Rust package sở hữu mọi logic. Desktop package hiện tên `custos-app-desktop` (`apps/desktop/native`); headless CLI host là `custos-app-cli` (`apps/cli`). Workspace hiện gồm 20 Cargo members phân theo 3 ring (`platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`), nên “11 canonical crates” chỉ là vocabulary phân tầng lịch sử, không phải số package thực tế trong Cargo metadata.
 
 Desktop host `desktop/src/lib.rs` sở hữu:
 
@@ -418,7 +418,7 @@ Chạy lại trong lượt viết tài liệu ở mốc SHA trên:
 |---|---|---|
 | `git ls-remote origin refs/heads/vi-rft` | SHA khớp HEAD | Các docs mới đã được push |
 | `npm --prefix ui/desktop run build` | Pass, không warning build trong output | Visual QA/native interaction hoặc performance SLA |
-| `node tools/canvas-smoke.mjs` | 35/35 pass | Mọi pane callback và backend action đúng quyền |
+| `node tests/desktop/canvas-smoke.mjs` | 35/35 pass | Mọi pane callback và backend action đúng quyền |
 | `cargo test -p custos-adapters mcp:: --offline` | 14/14 pass | Live Kaggle/Colab OAuth, full MCP wire conformance; nhiều bài dùng mock/creation |
 
 Không chạy job cloud, không đăng nhập account, không thuê GPU, không gửi mail, không push code và không chạy lại full workspace tests trong lượt này. Kết quả 61/62 daemon từ phiên trước không được gán cho HEAD mới.
@@ -441,20 +441,20 @@ Các đường dẫn dưới tương đối từ repo root; dùng chúng để t
 
 | Topic | Files chính |
 |---|---|
-| Host/client | `crates/custos-app/desktop/src/{lib,browser}.rs`, `crates/custos-sdk/src/{lib,profile}.rs`, `local_api/` |
-| Daemon composition | `crates/custos-daemon/src/{runtime,profile,http_server}.rs` |
-| Application ingress | `crates/custos-daemon/src/api/mod.rs`, `api/{commands,tasks,transport,capabilities}.rs` |
+| Host/client | `apps/desktop/native/src/{lib,browser}.rs`, `sdk/client-rust/src/{lib,profile}.rs`, `local_api/` |
+| Daemon composition | `apps/daemon/src/{runtime,profile,http_server}.rs` |
+| Application ingress | `apps/daemon/src/api/mod.rs`, `application/` & `api/{admission,builder,contexts}.rs` |
 | UI transport | `ui/desktop/src/api/{daemon_client,native_browser}.ts` |
 | UI scope/layout | `context/{AppContext,ScreenContext}.tsx`, `types/{canvas,screen}.ts` |
 | UI resource hosting | `components/workbenches/{workbenchResources,ResourceContent,OrcaTabbedContainer}.tsx` |
-| Coding | `components/workbenches/engineering/`, `runtime/{workspace,terminal,agent,workflow}/`, adapters `harness/` và `workspace.rs` |
-| Research | `components/workbenches/research/`, `runtime/notebook/`, packs `research/`, persistence `repositories/research.rs` |
-| Copilot | `components/workbenches/copilot/`, domain `assistant.rs`, repositories `assistant.rs`, `outbox.rs` |
-| Compute | Domain `compute.rs`, `experiment_attempt.rs`; core contracts `compute.rs`, `experiment.rs`, `checkpoint_store.rs`; adapters `compute/` |
-| MCP/remote | Adapters `mcp/`, `roaming/a2a.rs`, `sandbox/`; không chuyển policy core vào gateway upstream |
-| OI/cognition | Domain/core/runtime `oi/`; runtime `cognitive/` và context/memory |
-| Verifier/evidence | Core task/authority/completion và domain evidence; pack-specific verifiers; test fixtures theo criterion |
-| Durable state | `crates/custos-persistence/src/{store,connection,migrations}.rs`, `repositories/`, migrations SQL |
+| Coding | `components/workbenches/engineering/`, `runtime/{environment/{workspace,terminal},agent,workflow}/`, adapters `harnesses/` và `host/workspace/` |
+| Research | `components/workbenches/research/`, `runtime/environment/notebook/`, `workbenches/research/` |
+| Copilot | `components/workbenches/copilot/`, `workbenches/assistant/`, storage `repositories/outbox/` |
+| Compute | `platform/domain/src/fleet/compute/`, `core/contracts/compute.rs`, `adapters/connectors/compute/` |
+| MCP/remote | `adapters/connectors/{mcp,roaming,a2a}/`, `adapters/host/sandbox/`; không chuyển policy core vào gateway upstream |
+| OI/cognition | `platform/domain/src/oi/`, `platform/core/src/contracts/oi.rs`, `platform/runtime/src/{oi,context}/` |
+| Verifier/evidence | Core task/authority/completion và domain evidence; `workbenches/*/src/verifiers/`; test fixtures theo criterion |
+| Durable state | `platform/storage/src/{store,connection,migrations}.rs`, `repositories/`, migrations SQL |
 
 Khi thêm feature: ghi user interaction → stable resource identity → Local API operation → application owner → runtime/adapter → canonical record → evidence → failure/recovery → UI state. Nếu chưa chỉ được chuỗi này, chưa tạo action enabled.
 

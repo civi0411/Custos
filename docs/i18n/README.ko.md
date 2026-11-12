@@ -12,7 +12,7 @@
 
 > **감독형 에이전트 개발 환경 (SADE) — 로컬 우선, 증거 바인딩, 인간 주도.**
 
-Custos는 소프트웨어 엔지니어링, 과학 연구 및 개인 워크플로 어시스턴스를 포괄하는 자율 에이전트를 위한 로컬 우선(Local-first) 개발 및 실행 환경입니다. 단순한 LLM 래퍼나 불투명한 멀티 에이전트 시스템과 달리, Custos는 결정론적 상태 지속성, 암호학적으로 감사되는 기능 게이트, 출처가 보장된 컨텍스트 컴파일, 그리고 객관적인 실증 증거를 요구하여 작업 완료를 철저히 검증합니다.
+Custos는 소프트웨어 엔지니어링, 과학 연구, 개인 워크플로 어시스턴스 및 퀀트 전략 개발을 포괄하는 자율 에이전트를 위한 로컬 우선(Local-first) 개발 및 실행 환경입니다. 단순한 LLM 래퍼나 불투명한 멀티 에이전트 시스템과 달리, Custos는 결정론적 상태 지속성, 암호학적으로 감사되는 기능 게이트, 출처가 보장된 컨텍스트 컴파일, 그리고 객관적인 실증 증거를 요구하여 작업 완료를 철저히 검증합니다.
 
 ---
 
@@ -57,24 +57,29 @@ flowchart LR
 
 ---
 
-## 3가지 특화 도메인 렌즈
+## 4대 특화 도메인 워크벤치 (Vertical Workbenches)
 
-Custos는 서로 다른 인지 영역에 최적화된 상호작용 모델과 검증 엔진을 제공합니다:
+Custos는 서로 다른 인지 영역에 최적화된 상호작용 모델, 도메인 모델 및 검증 엔진을 제공합니다:
 
-### 1. 엔지니어링 렌즈 (Engineering Lens - 코딩 워크벤치)
+### 1. 코딩 워크벤치 (Coding Workbench - `workbenches/coding`)
 - **3경로 실행 워크스페이스 (3-Path Workspaces):** 표준 저장소(canonical repo), 스테이징 포크(staging fork), 검증 샌드박스를 안전하게 격리.
 - **원자적 패치 번들 (Atomic Patch Bundles):** 스테이징 전 구조화된 Diff에 대해 구문 검사 및 자동 Lint 검증을 강제.
-- **작업 트리 임대 격리 (Worktree Lease Isolation):** 동일한 작업 트리에 대한 동시 쓰기 작업을 펜싱하여 충돌 및 데이터 손실 방지.
+- **작업 트리 임대 격리 (Worktree Lease Isolation):** 동일한 작업 트리에 대한 동시 쓰기 작업을 펜싱하여 충돌 및 데이터 손실 방지 (`ENV-02`).
 
-### 2. 리서치 렌즈 (Research Lens - 연구 워크벤치)
+### 2. 연구 워크벤치 (Research Workbench - `workbenches/research`)
 - **주장 근거 계층화 (Claim Grounding Hierarchy):** 4단계 엄밀성 체계 확립: `L0 미검증`, `L1 인용 뒷받침`, `L2 동료 평가 통과`, `L3 실험적 재현`.
 - **인용 신뢰도 오라클 (Citation Coverage Oracle):** 기출판 논문의 DOI/문헌과 대조 검증하여 모델의 자의적 완료 주장 기각.
-- **합성 스튜디오 (Synthesis Studio):** 다중 문헌 조사 결과를 검증 가능한 가설과 재현 가능한 실험 배치로 변환.
+- **합성 스튜디오 및 Notebook 커널:** 다중 문헌 조사 결과를 검증 가능한 가설과 재현 가능한 실험 배치로 변환하며, 암호학적 `EnvSnapshot`에 앵커링 (`ENV-04`).
 
-### 3. 어시스턴트 렌즈 (Assistant Lens - 개인 비서 및 공유 워크벤치)
+### 3. 어시스턴트 워크벤치 (Assistant Workbench - `workbenches/assistant`)
 - **발신함 승인 큐 (Outbox Approval Queue):** 외부 통신 및 주요 변경 작업을 지속성 대기 승인 큐 뒤에 안전하게 격리.
 - **상시 위임 권한 (Standing Grants):** 정기적인 루틴 작업에 대해 정책 기반 위임을 허용하면서 고위험 작업에서는 인간 승인 보장.
-- **통합 실행 환경:** 샌드박스 브라우저, PTY 터미널, 원격 서버 플릿, 지속성 노트에 대한 안전한 통합 접근.
+- **논리적 스코프 앵커링:** 불필요한 Git 체크아웃을 생성하지 않고 프로젝트의 논리적 스코프에 직접 앵커링.
+
+### 4. 퀀트 워크벤치 (Quant Workbench - `workbenches/quant`)
+- **시장 데이터 결정론적 파티셔닝:** 전략을 결정론적 과거 데이터 파티션에 고정하여 미래 참조 편향(Look-ahead bias) 원천 차단.
+- **에어갭 물리 격리 백테스트 (Air-Gap):** 백테스트 기간 중 네트워크 연결을 강제 차단(`network_restricted = true`)하여 전략 유출 및 오주문 방지 (`ENV-05`).
+- **알파 전략 실증 검증:** 전략 승격 전 샤프 지수, 소티노 지수, 최대 낙폭(MDD) 등 객관적 지표 자동 평가.
 
 ---
 
@@ -93,24 +98,45 @@ Custos는 서로 다른 인지 영역에 최적화된 상호작용 모델과 검
 
 ---
 
-## 워크스페이스 크레이트 및 아키텍처 토폴로지
+## 에이전트 실행 환경 (AEE) 및 7대 불변 조건 게이트
 
-Custos는 순수 도메인 로직과 외부 부작용을 계층화된 Cargo 패키지로 엄격히 분리합니다:
+자율 에이전트는 결코 정의되지 않거나, 고정되지 않거나, 감사할 수 없는 환경에서 실행되어서는 안 됩니다 (`sade-foundations.md`). Custos는 **에이전트 실행 환경 (Agent Execution Environment - AEE)** 애그리게잇을 정형화하여 순수 도메인 모델(`EnvironmentSpec`, `EnvironmentProfile`, `EnvironmentState`, `EnvSnapshot`, `EnvironmentAssurance`), 핵심 포트(`EnvironmentPort`) 및 런타임 코디네이터를 유기적으로 결합합니다.
 
-| 계층 | 크레이트 경로 | 패키지 이름 | 핵심 책임 |
-|---|---|---|---|
-| **Layer 0 (Domain)** | `crates/custos-domain` | `custos-domain` | 순수 도메인 엔티티, 데이터 모델, 상태 머신 및 Zero-I/O 불변 규칙. |
-| **Layer 1 (Core)** | `crates/custos-core` | `custos-core` | 태스크 오케스트레이션 서비스, 권한 중재 엔진 및 완료 검증기. |
-| | `crates/custos-persistence` | `custos-persistence` | SQLite WAL 영구 저장소, Outbox 패턴, CAS `state_version` 상태 전이 및 장애 복구. |
-| | `crates/custos-provider` | `custos-provider` | 공급자 중립적 `ModelPort` 계약, 스트리밍 SSE 파서 및 토큰 계량기. |
-| **Layer 2 (Runtime & Adapters)** | `crates/custos-bridge` | `custos-bridge` | 세션에서 태스크로의 승격(Session-to-Task), 실행 중 조향(Steering), IPC 라우팅. |
-| | `crates/custos-runtime` | `custos-runtime` | S1/S2 인지 루프, 컨텍스트 압축(RTK), 계층형 메모리 시스템 및 실행 플래너. |
-| | `crates/custos-adapters` | `custos-adapters` | OS 샌드박스, MCP 클라이언트 어댑터, 로컬 추론 Sidecar, Git 작업 트리 및 프로토콜 변환. |
-| **Layer 3 (Domain Packs)** | `crates/custos-packs` | `custos-packs` | 전문 도메인 워크플로: 엔지니어링(Engineering), 리서치(Research), 어시스턴트(Assistant). |
-| **Layer 4 (Composition & Hosts)** | `crates/custos-daemon` | `custos-daemon` | 유일한 조합 루트(Composition Root), 백그라운드 데몬 서버 및 로컬 HTTP/JSON-RPC. |
-| | `crates/custos-sdk` | `custos-sdk` | 클라이언트 데이터 전송 객체(DTO), UniFFI 바인딩 및 ACP 전송 타입. |
-| | `crates/custos-app/cli` | `custos-app-cli` | `ratatui` 기반의 터미널 운영자 인터페이스. |
-| | `crates/custos-app/desktop` | `custos-app-desktop` | `ui/desktop` 프론트엔드를 통합하는 네이티브 Tauri 2 호스트 셸. |
+에이전트 태스크가 상태를 변경하기 전, 시스템은 7대 결정론적 불변 조건 게이트를 검증합니다:
+
+| 불변 조건 게이트 | 핵심 안전 보증 | 실패 시 안전 차단 메커니즘 (Fail-Closed) |
+|---|---|---|
+| **ENV-01 (준비 상태 실행)** | 환경은 반드시 `Ready` 준비 상태(또는 감사된 성능 저하 상태)여야 함. | 초기화 중, 실패 또는 파괴된 상태에서의 상태 변경 요청 거부. |
+| **ENV-02 (코딩 격리 작업 트리)** | Coding 워크벤치는 격리된 Git 작업 트리 및 명시적 브랜치를 요구. | 인간의 승인 예외가 없는 한 미커밋 상태의 더러운 트리에서 실행 거부. |
+| **ENV-03 (정직한 보증 - Honest Assurance)** | 목표 격리 보증 수준은 호스트가 실측 보유한 방어력을 초과할 수 없음 (Gate 4). | 호스트가 `ObserveOnly`만 제공할 경우 `CustosMediated`를 주장하지 않고 자동 강등. |
+| **ENV-04 (연구 코퍼스 앵커링)** | Research 워크벤치는 유효한 로컬 코퍼스 디렉터리와 재현 Snapshot을 요구. | 코퍼스 디렉터리가 앵커링되지 않은 경우 Notebook 셀 코드 실행 거부. |
+| **ENV-05 (퀀트 완전 에어갭)** | 퀀트 전략 백테스트는 완전한 네트워크 차단(`network_restricted = true`)을 요구. | 활성화된 외부 네트워크 소켓 감지 시 즉시 강제 중단. |
+| **ENV-06 (멱등성 자원 해제)** | 환경 해제 작업은 멱등하게 반복될 수 있으며 시작 시 고아 프로세스와 PTY 회수. | 재부팅 시 좀비 프로세스와 고아 작업 트리를 자동으로 검색하여 정리. |
+| **ENV-07 (투명한 성능 저하 사유)** | `Degraded` 상태로 전이 시 사람이 감사 가능한 사유 문자열이 필수. | 사유가 없거나 익명의 성능 저하 상태 전이를 거부. |
+
+---
+
+## 워크스페이스 아키텍처 및 계층 토폴로지
+
+Custos는 헥사고날 아키텍처(Hexagonal Architecture)를 채택하여 순수 비즈니스 도메인 로직과 외부 부작용을 엄격히 분리합니다:
+
+| 아키텍처 서브시스템 | 물리 디렉터리 경로 | 핵심 책임 |
+|---|---|---|
+| **비즈니스 도메인 (Domain)** | `platform/domain` | 순수 도메인 애그리게잇, Zero-I/O 모델, AEE 규격 사양 및 순수 상태 머신. |
+| **핵심 계약 계층 (Core)** | `platform/core` | 태스크 오케스트레이션 서비스, 권한 중재 엔진, `EnvironmentPort` 계약 및 완료 검증기. |
+| **영구 저장 계층 (Storage)** | `platform/storage` | SQLite WAL 영구 저장, Outbox 패턴, CAS `state_version` 상태 전이 및 장애 복구. |
+| **인공지능 계층 (AI)** | `platform/ai` | 공급자 중립적 `ModelPort` 계약, 모델 카탈로그, 스트리밍 SSE 파서 및 토큰 계량기. |
+| **인지 런타임 (Runtime)** | `platform/runtime` | S1/S2 인지 루프, `EnvironmentCoordinator`, 워크스페이스 수명 주기 및 터미널 라우팅. |
+| **어댑터 및 샌드박스 (Adapters)** | `platform/adapters` | OS 샌드박스 (Seatbelt/Bubblewrap), MCP 클라이언트 어댑터, Git 작업 트리 및 PTY 터미널. |
+| **컴포넌트 및 워크플로 (Components)** | `platform/components` | 동적 Pack 레지스트리, 기초 스킬, 기능 서술자 및 뷰별 도구 컴파일러. |
+| **어시스턴트 워크벤치** | `workbenches/assistant` | 개인 워크플로 어시스턴트, 캘린더/연락처, 초안 작성 및 발신함 승인 큐. |
+| **코딩 워크벤치** | `workbenches/coding` | 소프트웨어 엔지니어링, 3경로 워크스페이스, 구조화된 원자적 Diff 및 작업 트리 임대 보호. |
+| **연구 워크벤치** | `workbenches/research` | 문헌 종합 분석, 4단계 검증 매트릭스, ALCE 인용 중재 및 Notebook 계산 실행. |
+| **퀀트 워크벤치** | `workbenches/quant` | 퀀트 전략 개발, 완전 에어갭 백테스트, 알파 신호 검증 및 시장 데이터 관리. |
+| **호스트 데몬 (Daemon)** | `apps/daemon` | 유일한 조합 루트 (Composition Root), 백그라운드 상주 데몬 서버 및 로컬 JSON-RPC/HTTP API. |
+| **클라이언트 SDK** | `sdk/client-rust` | Rust 클라이언트 SDK, 로컬 API 통신 전송 계층 및 ACP 연동 타입. |
+| **데스크톱 UI** | `ui/desktop` | 네이티브 Tauri 2 + Vite + React 19 데스크톱 애플리케이션. |
+| **터미널 CLI** | `ui/cli` | 대화형 터미널 CLI 도구. |
 
 ---
 
@@ -120,10 +146,11 @@ Custos Desktop은 **Vite, React 19 및 Tauri 2** 기반으로 제작되었습니
 
 - **3계층 계층 구조:** `프로젝트 -> 워크스페이스 -> 작업 트리 (Project -> Workspace -> Worktree)` 직관적 탐색.
 - **Graphite JetBlack 디자인 토큰:** 장시간 집중 작업에 최적화된 고대비 모던 다크 테마.
-- **전용 워크벤치 (Workbenches):**
-  - **엔지니어링 (Engineering):** 파일 및 변경 사항, 객관적 증거, 작업 트리 관리자.
-  - **리서치 (Research):** 합성 스튜디오, 연구 발견, 실행 원장.
-  - **어시스턴트 및 공용 (Assistant & Shared):** 샌드박스 브라우저, 터미널, 원격 서버 플릿, 영구 메모.
+- **4대 전용 워크벤치 (Workbenches):**
+  - **코딩 (Coding):** 파일 및 변경 사항, 객관적 증거, 작업 트리 관리자.
+  - **연구 (Research):** 합성 스튜디오, 연구 발견, 실행 원장.
+  - **어시스턴트 (Assistant):** 샌드박스 브라우저, 터미널, 원격 서버 플릿, 영구 메모.
+  - **퀀트 (Quant):** 전략 차트, 백테스트 시뮬레이터, 알파 스튜디오.
 - **Zero-Mock 정책:** UI의 모든 지표는 데몬의 실제 원격 측정을 반영하며 오류 발생 시 안전하게 차단 모드로 진입합니다.
 
 ---
@@ -150,17 +177,17 @@ Custos는 기존 코딩 하네스의 내부 로직을 침해하지 않고 외부
 
 ## 검증 및 품질 게이트
 
-모든 코드 기여는 반드시 다음 품질 게이트를 통과해야 합니다:
+모든 코드 기여는 반드시 `xtask` 자동화 시스템을 통해 다음 5대 강제 품질 게이트를 통과해야 합니다:
 
 ```bash
-# 1. Rust Clippy 경고 0건, 에러 0건의 엄격한 게이트
+# 1. 5대 필수 품질 게이트 실행 (Packs, Desktop UI, Canvas Smoke, 불변 조건, Cargo Check)
+cargo run -p xtask -- gate
+
+# 2. 아키텍처 계층 경계 검증 (Kernel과 Workbench 간 역방향 누수 방지)
+cargo run -p xtask -- check-boundaries
+
+# 3. Rust Clippy 경고 0건, 에러 0건의 엄격한 게이트
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 2. 전체 워크스페이스 테스트 스위트 (>1,670개 단위/통합 테스트, 100% 통과)
-cargo test --workspace --all-targets
-
-# 3. 데스크톱 UI 타입 검사 및 빌드 검증
-cd ui/desktop && npm run build
 ```
 
 ---

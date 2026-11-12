@@ -12,7 +12,7 @@
 
 > **Entorno de Desarrollo de Agentes Supervisados (SADE) — Local-First, Basado en Evidencia, Gobernado por Humanos.**
 
-Custos es un entorno de desarrollo y ejecución de prioridad local (local-first) para agentes autónomos en ingeniería de software, investigación científica y asistencia en flujos de trabajo personales. A diferencia de simples envoltorios de LLM o sistemas multiagente opacos, Custos impone persistencia de estado determinista, puertas de capacidad auditadas criptográficamente, compilación de contexto vinculada al origen y la exigencia de pruebas empíricas antes de reconocer cualquier tarea como completada.
+Custos es un entorno de desarrollo y ejecución de prioridad local (local-first) para agentes autónomos en ingeniería de software, investigación científica, asistencia en flujos de trabajo personales y desarrollo de estrategias cuantitativas. A diferencia de simples envoltorios de LLM o sistemas multiagente opacos, Custos impone persistencia de estado determinista, puertas de capacidad auditadas criptográficamente, compilación de contexto vinculada al origen y la exigencia de pruebas empíricas antes de reconocer cualquier tarea como completada.
 
 ---
 
@@ -57,24 +57,29 @@ flowchart LR
 
 ---
 
-## Tres Lentes de Dominio Especializadas
+## Cuatro Bancos de Trabajo Verticales (Vertical Workbenches)
 
-Custos proporciona modelos de interacción y motores de verificación adaptados a distintos dominios cognitivos:
+Custos proporciona modelos de interacción, modelos de dominio y motores de verificación adaptados a distintos dominios cognitivos:
 
-### 1. Lente de Ingeniería (Engineering Lens - Banco de Trabajo de Programación)
-- **Espacios de Trabajo de Ejecución de 3 Vías (3-Path Workspaces):** Aísla de forma segura el repositorio canónico, el fork de preparación (staging) y el sandbox de verificación.
+### 1. Banco de Trabajo de Programación (Coding Workbench - `workbenches/coding`)
+- **Espacios de Trabajo de Ejecución de 3 Vías (3-Path Workspaces):** Aísla de forma segura el repositorio canónico (canonical repo), el fork de preparación (staging fork) y el sandbox de verificación.
 - **Paquetes de Parches Atómicos (Atomic Patch Bundles):** Exige diffs estructurados con validación sintáctica y de lint automatizada antes de la preparación.
-- **Aislamiento de Arrendamiento de Árbol de Trabajo (Worktree Lease Isolation):** Protege mediante barreras (fencing) las escrituras concurrentes en el mismo árbol de trabajo para evitar condiciones de carrera y pérdida de datos.
+- **Aislamiento de Arrendamiento de Árbol de Trabajo (Worktree Lease Isolation):** Protege mediante barreras (fencing) las escrituras concurrentes en el mismo árbol de trabajo para evitar condiciones de carrera y pérdida de datos (`ENV-02`).
 
-### 2. Lente de Investigación (Research Lens - Banco de Trabajo de Investigación)
+### 2. Banco de Trabajo de Investigación (Research Workbench - `workbenches/research`)
 - **Jerarquía de Fundamentación de Afirmaciones (Claim Grounding Hierarchy):** Establece cuatro niveles de rigor epistémico: `L0 Sin Fundamento`, `L1 Con Respaldo de Citas`, `L2 Revisado por Pares`, `L3 Reproducido Empíricamente`.
 - **Oráculo de Cobertura de Citas (Citation Coverage Oracle):** Contrasta rigurosamente con literatura y DOI publicados, rechazando declaraciones de finalización infundadas.
-- **Estudio de Síntesis (Synthesis Studio):** Transforma revisiones bibliográficas multifuente en hipótesis contrastables y lotes de experimentos reproducibles.
+- **Estudio de Síntesis y Kernel de Notebooks:** Transforma revisiones bibliográficas multifuente en hipótesis contrastables y lotes de experimentos reproducibles, anclados criptográficamente mediante `EnvSnapshot` (`ENV-04`).
 
-### 3. Lente de Asistente (Assistant Lens - Asistente y Banco de Trabajo Compartido)
+### 3. Banco de Trabajo de Asistente (Assistant Workbench - `workbenches/assistant`)
 - **Cola de Aprobación de Bandeja de Salida (Outbox Approval Queue):** Aísla comunicaciones externas y mutaciones críticas tras una cola de aprobación pendiente duradera.
 - **Autorizaciones Permanentes (Standing Grants):** Permite la delegación basada en políticas para tareas rutinarias, preservando la intervención humana en acciones de alto riesgo.
-- **Entorno de Ejecución Integrado:** Acceso unificado y seguro a navegadores aislados, terminales PTY, flotas de servidores remotos y notas persistentes.
+- **Anclaje de Ámbito Lógico:** Anclado directamente en el ámbito lógico del proyecto sin falsificar checkouts innecesarios de Git.
+
+### 4. Banco de Trabajo Cuantitativo (Quant Workbench - `workbenches/quant`)
+- **Particionado Determinista de Datos de Mercado:** Fija las estrategias a particiones históricas deterministas, eliminando por completo el sesgo de anticipación (Look-ahead bias).
+- **Backtesting Aislado Físicamente (Air-Gap):** Corta forzosamente la conexión de red durante el backtesting (`network_restricted = true`), evitando fugas de estrategias u órdenes accidentales (`ENV-05`).
+- **Validación Empírica de Estrategias Alfa:** Evaluación automatizada de ratio de Sharpe, ratio de Sortino y drawdown máximo antes de la promoción.
 
 ---
 
@@ -93,24 +98,45 @@ Custos proporciona modelos de interacción y motores de verificación adaptados 
 
 ---
 
-## Crates del Espacio de Trabajo y Topología Arquitectónica
+## Entorno de Ejecución de Agentes (AEE) y 7 Compuertas Invariantes
 
-Custos aísla estrictamente la lógica de dominio pura de los efectos secundarios a través de paquetes de Cargo por capas:
+Los agentes autónomos jamás deben operar en entornos indefinidos, no anclados o inauditables (`sade-foundations.md`). Custos formaliza el agregado **Agent Execution Environment (AEE)** mediante modelos de dominio puro (`EnvironmentSpec`, `EnvironmentProfile`, `EnvironmentState`, `EnvSnapshot`, `EnvironmentAssurance`), puertos centrales (`EnvironmentPort`) y el coordinador de tiempo de ejecución.
 
-| Capa | Ruta del Crate | Nombre del Paquete | Responsabilidad Principal |
-|---|---|---|---|
-| **Layer 0 (Domain)** | `crates/custos-domain` | `custos-domain` | Entidades puras de dominio, modelos de datos, máquinas de estado e invariantes Zero-I/O. |
-| **Layer 1 (Core)** | `crates/custos-core` | `custos-core` | Servicio de orquestación de tareas, motor de autoridad y verificadores de finalización. |
-| | `crates/custos-persistence` | `custos-persistence` | Persistencia SQLite WAL, patrón Outbox, transiciones de estado CAS `state_version` y recuperación de caídas. |
-| | `crates/custos-provider` | `custos-provider` | Contratos neutrales `ModelPort`, analizadores SSE en flujo y medidores de tokens. |
-| **Layer 2 (Runtime & Adapters)** | `crates/custos-bridge` | `custos-bridge` | Promoción de sesión a tarea (Session-to-Task), redirección en vuelo (Steering) y enrutamiento IPC. |
-| | `crates/custos-runtime` | `custos-runtime` | Bucle cognitivo S1/S2, compresión de contexto (RTK), capas de memoria y planificadores de ejecución. |
-| | `crates/custos-adapters` | `custos-adapters` | Sandboxes del SO, adaptador de clientes MCP, sidecars de inferencia local, árboles Git y traductores de protocolos. |
-| **Layer 3 (Domain Packs)** | `crates/custos-packs` | `custos-packs` | Flujos de trabajo especializados: paquetes de Ingeniería (Engineering), Investigación (Research) y Asistente (Assistant). |
-| **Layer 4 (Composition & Hosts)** | `crates/custos-daemon` | `custos-daemon` | Raíz de composición única (Composition Root), servicio daemon en segundo plano y HTTP/JSON-RPC local. |
-| | `crates/custos-sdk` | `custos-sdk` | Objetos de transferencia de datos de cliente (DTO), bindings UniFFI y tipos de transporte ACP. |
-| | `crates/custos-app/cli` | `custos-app-cli` | Interfaz de terminal para el operador basada en `ratatui`. |
-| | `crates/custos-app/desktop` | `custos-app-desktop` | Shell anfitrión nativo Tauri 2 con integración del frontend `ui/desktop`. |
+Antes de que un agente modifique el estado, el sistema evalúa 7 compuertas invariantes deterministas:
+
+| Compuerta Invariante | Garantía Central de Seguridad | Mecanismo de Fallo Seguro (Fail-Closed) |
+|---|---|---|
+| **ENV-01 (Ejecución en Estado Listo)** | El entorno debe estar en estado `Ready` (o degradado auditado). | Rechaza cualquier solicitud de modificación en inicialización, fallo o destrucción. |
+| **ENV-02 (Árbol de Programación Aislado)** | Coding exige un árbol Git aislado y rama explícita. | Rechaza árboles de trabajo sucios no confirmados sin dispensa humana explícita. |
+| **ENV-03 (Garantía Honesta - Honest Assurance)** | El nivel de garantía objetivo jamás debe superar la capacidad demostrada por el anfitrión (Gate 4). | Si el anfitrión solo ofrece `ObserveOnly`, nunca reclamar `CustosMediated`; degradación automática. |
+| **ENV-04 (Anclaje de Corpus de Investigación)** | Research exige un directorio local válido de corpus y snapshot de reproducción. | Deniega la ejecución de celdas de notebook si no hay corpus anclado. |
+| **ENV-05 (Aislamiento Cuantitativo Total)** | El backtesting cuantitativo exige corte total de red (`network_restricted = true`). | Terminación forzosa inmediata si se detectan sockets de red externos activos. |
+| **ENV-06 (Liberación Idempotente de Recursos)** | El desmontaje es idempotente; el arranque del servidor recupera automáticamente procesos y PTYs huérfanos. | Escaneo y limpieza automática de procesos zombis y worktrees huérfanos al reiniciar. |
+| **ENV-07 (Motivo de Degradación Transparente)** | La transición al estado `Degraded` exige obligatoriamente un motivo auditable. | Rechaza cualquier degradación funcional anónima o sin justificación registrada. |
+
+---
+
+## Arquitectura del Espacio de Trabajo y Topología en Capas
+
+Custos sigue una arquitectura hexagonal (Hexagonal Architecture), separando estrictamente la lógica de dominio pura de los efectos secundarios físicos:
+
+| Subsistema Arquitectónico | Ruta de Directorio | Responsabilidad Principal |
+|---|---|---|
+| **Dominio de Negocio (Domain)** | `platform/domain` | Entidades puras de dominio, modelos Zero-I/O, especificaciones AEE y máquinas de estado puras. |
+| **Contratos Centrales (Core)** | `platform/core` | Orquestación de tareas, motor de autoridad, contrato `EnvironmentPort` y verificadores de finalización. |
+| **Almacenamiento Persistente (Storage)** | `platform/storage` | Persistencia SQLite WAL, patrón Outbox, transiciones de estado CAS `state_version` y recuperación de caídas. |
+| **Inteligencia Artificial (AI)** | `platform/ai` | Contratos neutrales `ModelPort`, catálogo de modelos, analizadores SSE en flujo y medidores de tokens. |
+| **Tiempo de Ejecución Cognitivo (Runtime)** | `platform/runtime` | Bucle S1/S2, `EnvironmentCoordinator`, ciclo de vida del workspace y enrutamiento de terminales. |
+| **Adaptadores y Sandboxes (Adapters)** | `platform/adapters` | Sandboxes del SO (Seatbelt/Bubblewrap), clientes MCP, árboles Git y terminales PTY. |
+| **Componentes y Flujos (Components)** | `platform/components` | Registro dinámico de Packs, habilidades básicas, descriptores de capacidades y compiladores de herramientas por vista. |
+| **Banco de Asistente** | `workbenches/assistant` | Asistencia en flujos personales, calendarios/contactos, borradores y cola de aprobación. |
+| **Banco de Programación** | `workbenches/coding` | Ingeniería de software, workspaces de 3 vías, diffs atómicos estructurados y protección de worktrees. |
+| **Banco de Investigación** | `workbenches/research` | Análisis integral de literatura, matriz de evidencia de 4 niveles, arbitraje de citas ALCE y notebooks. |
+| **Banco Cuantitativo** | `workbenches/quant` | Desarrollo de estrategias cuantitativas, backtesting aislado air-gap, señales alfa y datos de mercado. |
+| **Daemon Anfitrión (Daemon)** | `apps/daemon` | Raíz de composición única (Composition Root), servidor daemon en segundo plano y API local JSON-RPC/HTTP. |
+| **SDK de Cliente** | `sdk/client-rust` | SDK de cliente en Rust, capa de transporte de API local y tipos de interacción ACP. |
+| **Interfaz de Escritorio** | `ui/desktop` | Aplicación de escritorio nativa Tauri 2 + Vite + React 19. |
+| **CLI de Terminal** | `ui/cli` | Herramienta de interfaz de línea de comandos interactiva. |
 
 ---
 
@@ -120,10 +146,11 @@ Custos Desktop está construido con **Vite, React 19 y Tauri 2**:
 
 - **Jerarquía de 3 Niveles:** Navegación fluida a través de `Proyecto -> Espacio de Trabajo -> Árbol de Trabajo (Project -> Workspace -> Worktree)`.
 - **Sistema de Tokens Graphite JetBlack:** Tema oscuro moderno de alto contraste optimizado para sesiones de trabajo prolongadas.
-- **Bancos de Trabajo Dedicados (Workbenches):**
-  - **Ingeniería (Engineering):** Archivos y Cambios, Evidencia Objetiva y Gestor de Worktrees.
+- **Cuatro Bancos de Trabajo Dedicados (Workbenches):**
+  - **Programación (Coding):** Archivos y Cambios, Evidencia Objetiva y Gestor de Worktrees.
   - **Investigación (Research):** Estudio de Síntesis, Hallazgos y Libro de Ejecuciones.
-  - **Asistente y Compartido (Assistant & Shared):** Navegador Aislado, Terminal, Flota Remota y Notas.
+  - **Asistente (Assistant):** Navegador Aislado, Terminal, Flota Remota y Notas.
+  - **Cuantitativo (Quant):** Gráficos de Estrategia, Simulador de Backtesting y Estudio Alfa.
 - **Política Zero-Mock:** Todas las métricas de la interfaz reflejan telemetría real del daemon y conmutan a fallo cerrado en caso de degradación.
 
 ---
@@ -150,17 +177,17 @@ Custos envuelve y supervisa arneses de programación externos sin alterar sus me
 
 ## Verificación y Puertas de Calidad
 
-Todas las contribuciones deben superar estrictamente las puertas de calidad:
+Todas las contribuciones deben superar estrictamente las 5 puertas de calidad automatizadas mediante `xtask`:
 
 ```bash
-# 1. Puerta estricta Clippy de Rust (cero advertencias, cero errores)
+# 1. Ejecutar las 5 puertas de calidad obligatorias (Packs, Desktop UI, Canvas Smoke, Invariantes, Cargo Check)
+cargo run -p xtask -- gate
+
+# 2. Verificar los límites arquitectónicos (Prevenir fugas inversas entre Kernel y Workbenches)
+cargo run -p xtask -- check-boundaries
+
+# 3. Puerta estricta Clippy de Rust (cero advertencias, cero errores)
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 2. Suite de pruebas completa del espacio de trabajo (>1.670 pruebas, 100% superadas)
-cargo test --workspace --all-targets
-
-# 3. Comprobación de tipos y empaquetado de la interfaz de escritorio
-cd ui/desktop && npm run build
 ```
 
 ---

@@ -346,14 +346,17 @@ worktrees/
 !.worktrees/config.json
 
 # CAS / Artifacts
-cas/
-.cas/
-artifacts/
-storage/
+/cas/
+/.cas/
+/artifacts/
+/storage/
+/.custos/storage/
 /data/
 !crates/**/data/**
-cache/
+!platform/**
+/cache/
 .cache/
+!ui/desktop/src/app/cache/**
 
 # Logs
 logs/
@@ -488,7 +491,8 @@ tokens.json
 .Trashes
 .AppleDouble
 .LSOverride
-Icon?
+# macOS custom folder icon
+[Ii]con
 .fseventsd
 .TemporaryItems
 .VolumeIcon.icns
@@ -590,7 +594,7 @@ tramp
 .classpath
 .project
 .settings/
-bin/
+.settings/bin/
 
 # NetBeans
 nbproject/private/
@@ -619,11 +623,14 @@ DerivedData/
 *.ap_
 *.dex
 *.class
-bin/
-gen/
-out/
 .gradle/
-build/
+android/**/bin/
+android/**/gen/
+android/**/out/
+android/**/build/
+!packages/**/bin/**
+!ui/**/bin/**
+!bin/**
 
 
 # ==============================================================================
@@ -762,9 +769,14 @@ crash.log
 test-results/
 test-output/
 junit/
-reports/
-*.xml
+/reports/
+target/reports/
+test-results/**/*.xml
+/reports/**/*.xml
 !Cargo.toml
+
+# Large generated inventories
+docs/development/workbench-control-inventory.json
 
 # Coverage
 coverage/
@@ -877,7 +889,7 @@ schema-diff/
 jenkins/
 
 # Artifacts
-artifacts/
+/artifacts/
 *.artifact
 *.zip
 *.tar.gz
@@ -951,6 +963,7 @@ artifacts/
 *.lz
 *.lzma
 *.zst
+!platform/provider/src/types/canonical/*.zst
 
 # Compiled binaries
 *.o

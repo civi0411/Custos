@@ -10,8 +10,8 @@
 // Theme 1: T3 Read Fan-Out Topology
 // ─────────────────────────────────────────────────────────────────────────────
 mod t3_read_fan_out_topology {
-    use custos_core::oi::compiler::PlanCompiler;
-    use custos_core::oi::join_policy::JoinEvaluation;
+    use custos_runtime::oi::compiler::PlanCompiler;
+    use custos_runtime::oi::join_policy::JoinEvaluation;
     use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkPacket};
     use custos_runtime::oi::topologies::T3ReadFanOutCoordinator;
 
@@ -47,11 +47,11 @@ mod t3_read_fan_out_topology {
 // Theme 2: T4 Worktree Integrator Topology (WorkspaceLease Isolation)
 // ─────────────────────────────────────────────────────────────────────────────
 mod t4_worktree_integrator_topology {
-    use custos_core::oi::compiler::PlanCompiler;
-    use custos_core::oi::join_policy::JoinEvaluation;
+    use custos_runtime::oi::compiler::PlanCompiler;
+    use custos_runtime::oi::join_policy::JoinEvaluation;
     use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
     use custos_runtime::oi::topologies::T4WorktreeCoordinator;
-    use custos_runtime::workflow::lease::WorkspaceLeaseManager;
+    use custos_runtime::workspace::lease::WorkspaceLeaseManager;
     use std::fs;
 
     #[tokio::test]
@@ -114,7 +114,7 @@ mod t4_worktree_integrator_topology {
 // Theme 3: Write-Set Conflict Invariants (Gate 5 Invariant Enforcement)
 // ─────────────────────────────────────────────────────────────────────────────
 mod write_set_isolation_invariants {
-    use custos_core::oi::join_policy::WriteSetConflictChecker;
+    use custos_runtime::oi::join_policy::WriteSetConflictChecker;
     use custos_domain::workflow::RevisionNode;
 
     #[test]
@@ -154,7 +154,7 @@ mod write_set_isolation_invariants {
 // Theme 4: T6 Bounded Repair Loop Topology
 // ─────────────────────────────────────────────────────────────────────────────
 mod t6_repair_loop_topology {
-    use custos_core::oi::join_policy::JoinEvaluation;
+    use custos_runtime::oi::join_policy::JoinEvaluation;
     use custos_domain::oi::WorkerResult;
     use custos_runtime::oi::topologies::T6RepairLoopCoordinator;
 
