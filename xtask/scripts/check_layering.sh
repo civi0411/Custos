@@ -15,7 +15,7 @@ done
 # Search failures are errors, not proof that a boundary passed.
 reject_source() {
     local pattern="$1" root="$2" status
-    if rg -n --glob '*.rs' "$pattern" "$root"; then
+    if grep -rnE --include='*.rs' "$pattern" "$root"; then
         echo "ERROR: forbidden dependency in $root" >&2
         exit 1
     else

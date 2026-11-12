@@ -143,7 +143,9 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+/MANIFEST
+!workbenches/*/manifest/
+!workbenches/*/manifest/manifest.json
 
 # PyInstaller
 *.manifest
