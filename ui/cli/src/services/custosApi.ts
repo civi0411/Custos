@@ -1,61 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ExecutionPermit, OperationalMode, RiskLevel, Task, TaskSpan, TaskStatus } from '../types';
-import { SAMPLE_DIFF } from '../data/constants';
-
-let mockTasks: Task[] = [
-  {
-    id: 'tsk_01jk98a1m4z0',
-    title: 'Implement verified JWT payload decoder with domain validation',
-    status: 'Succeeded',
-    epoch: 3,
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-    updated_at: new Date(Date.now() - 1800000).toISOString(),
-    metadata: { mode: 'code', origin: 'custos-cli', verified: true },
-    result_summary: 'JWT payload decoder compiled, pass 14 test fixtures, committed to crates/runtime',
-  },
-  {
-    id: 'tsk_01jk99c4b7x2',
-    title: 'Deliberate and benchmark SQLite WAL mode vs memory-mapped WAL',
-    status: 'Running',
-    epoch: 2,
-    created_at: new Date(Date.now() - 1200000).toISOString(),
-    updated_at: new Date(Date.now() - 300000).toISOString(),
-    metadata: { mode: 'research', origin: 'custos-cli' },
-  },
-  {
-    id: 'tsk_01jk99f9v3k1',
-    title: 'Coordinate multi-agent policy audit across workflow recipes',
-    status: 'Queued',
-    epoch: 1,
-    created_at: new Date(Date.now() - 600000).toISOString(),
-    updated_at: new Date(Date.now() - 600000).toISOString(),
-    metadata: { mode: 'assistant', origin: 'custos-cli' },
-  },
-];
-
-let mockSpans: Record<string, TaskSpan[]> = {
-  tsk_01jk98a1m4z0: [
-    { id: 1, task_id: 'tsk_01jk98a1m4z0', name: 'context_recipe_compile', stage: 'Inspection', started_at: '2026-10-02T14:10:00Z', duration_ms: 120, details: 'Resolved 34 workspace dependencies' },
-    { id: 2, task_id: 'tsk_01jk98a1m4z0', name: 'trajectory_synthesis', stage: 'Planning', started_at: '2026-10-02T14:10:01Z', duration_ms: 840, details: 'LLM generated AST patch and validation suite' },
-    { id: 3, task_id: 'tsk_01jk98a1m4z0', name: 'execution_permit_grant', stage: 'Governance', started_at: '2026-10-02T14:10:04Z', duration_ms: 45, details: 'Approved by human operator' },
-    { id: 4, task_id: 'tsk_01jk98a1m4z0', name: 'worktree_commit', stage: 'Commit', started_at: '2026-10-02T14:10:06Z', duration_ms: 210, details: 'Sandbox patch verified and applied' },
-  ],
-  tsk_01jk99c4b7x2: [
-    { id: 101, task_id: 'tsk_01jk99c4b7x2', name: 'topology_investigation', stage: 'Inspection', started_at: '2026-10-02T14:40:00Z', duration_ms: 340, details: 'Profiling disk I/O on sqlite store' },
-    { id: 102, task_id: 'tsk_01jk99c4b7x2', name: 'benchmark_execution', stage: 'Running', started_at: '2026-10-02T14:40:02Z', duration_ms: 1200, details: 'Testing 10,000 concurrent writes' },
-  ],
-};
-
-let mockPermits: ExecutionPermit[] = [];
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
+let activePermits: ExecutionPermit[] = [];
 
-function notifyListeners() {
-  listeners.forEach((l) => l());
+function notifyListeners(): void {
+  listeners.forEach((listener) => listener());
 }
 
-export function subscribeToApi(listener: Listener) {
+export function subscribeToApi(listener: Listener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -63,33 +17,81 @@ export function subscribeToApi(listener: Listener) {
 }
 
 export function isTauriEnvironment(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+  return (
+    typeof window !== 'undefined' &&
+    Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+  );
 }
 
-const isTauri = isTauriEnvironment;
+function getDaemonHttpPort(): string {
+  if (typeof window !== 'undefined') {
+    const queryPort = new URLSearchParams(window.location.search).get('daemon_port');
+    if (queryPort && /^\d+$/.test(queryPort)) return queryPort;
+    try {
+      const saved = window.localStorage?.getItem('custos_daemon_port');
+      if (saved && /^\d+$/.test(saved)) return saved;
+    } catch {
+      // Ignore storage access errors in restricted webviews.
+    }
+  }
+  const envPort = (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_CUSTOS_DAEMON_PORT;
+  return envPort && /^\d+$/.test(envPort) ? envPort : '3000';
+}
+
+async function daemonRpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  const port = getDaemonHttpPort();
+  const endpoint = `http://127.0.0.1:${port}/api/request`;
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: `cli_ui_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        method,
+        params,
+      }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Custos daemon offline at ${endpoint} (${detail}). Start custos-daemon or launch via CLI.`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(`Custos daemon HTTP ${response.status} on ${method}`);
+  }
+
+  const envelope = (await response.json()) as { result?: T; error?: string };
+  if (envelope.error) {
+    throw new Error(envelope.error);
+  }
+  return envelope.result as T;
+}
 
 export const CustosApi = {
   async listTasks(): Promise<Task[]> {
-    if (isTauri()) {
-      try {
-        return await invoke<Task[]>('list_tasks');
-      } catch (err) {
-        console.warn('Tauri invoke list_tasks failed, falling back to mock:', err);
-      }
+    if (isTauriEnvironment()) {
+      return await invoke<Task[]>('list_tasks');
     }
-    return [...mockTasks];
+    return await daemonRpc<Task[]>('v1.tasks.list', {});
   },
 
   async getTask(id: string): Promise<Task | null> {
-    if (isTauri()) {
-      try {
-        return await invoke<Task>('get_task', { id });
-      } catch (err) {
-        console.warn('Tauri invoke get_task failed, falling back to mock:', err);
-      }
+    if (isTauriEnvironment()) {
+      return await invoke<Task | null>('get_task', { id });
     }
-    const found = mockTasks.find((t) => t.id === id);
-    return found ? { ...found } : null;
+    try {
+      return await daemonRpc<Task>('v1.tasks.get', { task_id: id });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.toLowerCase().includes('not found')) {
+        return null;
+      }
+      throw err;
+    }
   },
 
   async createTask(
@@ -97,177 +99,74 @@ export const CustosApi = {
     mode: OperationalMode = 'Code',
     metadata?: Record<string, unknown>
   ): Promise<Task> {
-    if (isTauri()) {
-      try {
-        const res = await invoke<Task>('create_task', {
-          title,
-          metadata: JSON.stringify({ mode: mode.toLowerCase(), origin: 'custos-cli', ...metadata }),
-        });
-        notifyListeners();
-        return res;
-      } catch (err) {
-        console.warn('Tauri invoke create_task failed, falling back to mock:', err);
-      }
-    }
-
-    const newTask: Task = {
-      id: `tsk_${Date.now().toString(36)}${Math.random().toString(36).substring(2, 6)}`,
-      title,
-      status: 'Draft',
-      epoch: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      metadata: {
-        mode: mode.toLowerCase(),
-        origin: 'custos-cli',
-        ...metadata,
-      },
+    const payloadMeta = {
+      mode: mode.toLowerCase(),
+      origin: 'custos-cli',
+      ...metadata,
     };
-
-    mockTasks = [newTask, ...mockTasks];
-    mockSpans[newTask.id] = [
-      {
-        id: Math.floor(Math.random() * 10000),
-        task_id: newTask.id,
-        name: 'task_created',
-        stage: 'Initialization',
-        started_at: new Date().toISOString(),
-        duration_ms: 10,
-        details: `Task registered with mode [${mode}]`,
-      },
-    ];
-
+    const task = isTauriEnvironment()
+      ? await invoke<Task>('create_task', {
+          title,
+          metadata: JSON.stringify(payloadMeta),
+        })
+      : await daemonRpc<Task>('v1.tasks.create', {
+          title,
+          metadata: payloadMeta,
+        });
     notifyListeners();
-    return newTask;
+    return task;
   },
 
   async advanceTask(id: string, status: TaskStatus, rationale?: string): Promise<Task> {
-    if (isTauri()) {
-      try {
-        const res = await invoke<Task>('advance_task', { id, status, rationale });
-        notifyListeners();
-        return res;
-      } catch (err) {
-        console.warn('Tauri invoke advance_task failed, falling back to mock:', err);
-      }
-    }
-
-    const task = mockTasks.find((t) => t.id === id);
-    if (!task) {
-      throw new Error(`Task with id '${id}' not found`);
-    }
-
-    task.status = status;
-    task.epoch += 1;
-    task.updated_at = new Date().toISOString();
-    if (rationale) {
-      task.rationale = rationale;
-    }
-
-    if (!mockSpans[id]) {
-      mockSpans[id] = [];
-    }
-    mockSpans[id].push({
-      id: Math.floor(Math.random() * 10000),
-      task_id: id,
-      name: `advanced_to_${status.toLowerCase()}`,
-      stage: status,
-      started_at: new Date().toISOString(),
-      duration_ms: 45,
-      details: rationale || `Advanced to ${status}`,
-    });
-
+    const task = isTauriEnvironment()
+      ? await invoke<Task>('advance_task', { id, status, rationale })
+      : await daemonRpc<Task>('v1.tasks.advance', {
+          task_id: id,
+          target_status: status,
+          rationale,
+        });
     notifyListeners();
-    return { ...task };
+    return task;
   },
 
   async completeTask(id: string, summary: string = 'Completed via Custos CLI'): Promise<Task> {
-    if (isTauri()) {
-      try {
-        const res = await invoke<Task>('complete_task', { id, summary });
-        notifyListeners();
-        return res;
-      } catch (err) {
-        console.warn('Tauri invoke complete_task failed, falling back to mock:', err);
-      }
-    }
-
-    const task = mockTasks.find((t) => t.id === id);
-    if (!task) throw new Error(`Task with id '${id}' not found`);
-
-    task.status = 'Succeeded';
-    task.epoch += 1;
-    task.updated_at = new Date().toISOString();
-    task.result_summary = summary;
-
-    if (!mockSpans[id]) mockSpans[id] = [];
-    mockSpans[id].push({
-      id: Math.floor(Math.random() * 10000),
-      task_id: id,
-      name: 'task_completed',
-      stage: 'Completion',
-      started_at: new Date().toISOString(),
-      duration_ms: 50,
-      details: summary,
-    });
-
+    const task = isTauriEnvironment()
+      ? await invoke<Task>('complete_task', { id, summary })
+      : await daemonRpc<Task>('v1.tasks.complete', {
+          task_id: id,
+          summary,
+          evidence_claims: [],
+        });
     notifyListeners();
-    return { ...task };
+    return task;
   },
 
   async cancelTask(id: string, reason: string = 'Cancelled via Custos CLI'): Promise<Task> {
-    if (isTauri()) {
-      try {
-        const res = await invoke<Task>('cancel_task', { id, reason });
-        notifyListeners();
-        return res;
-      } catch (err) {
-        console.warn('Tauri invoke cancel_task failed, falling back to mock:', err);
-      }
-    }
-
-    const task = mockTasks.find((t) => t.id === id);
-    if (!task) throw new Error(`Task with id '${id}' not found`);
-
-    task.status = 'Cancelled';
-    task.epoch += 1;
-    task.updated_at = new Date().toISOString();
-    task.failure_reason = reason;
-
-    if (!mockSpans[id]) mockSpans[id] = [];
-    mockSpans[id].push({
-      id: Math.floor(Math.random() * 10000),
-      task_id: id,
-      name: 'task_cancelled',
-      stage: 'Cancelled',
-      started_at: new Date().toISOString(),
-      duration_ms: 20,
-      details: reason,
-    });
-
+    const task = isTauriEnvironment()
+      ? await invoke<Task>('cancel_task', { id, reason })
+      : await daemonRpc<Task>('v1.tasks.cancel', {
+          task_id: id,
+          reason,
+        });
     notifyListeners();
-    return { ...task };
+    return task;
   },
 
   async listSpans(taskId: string): Promise<TaskSpan[]> {
-    if (isTauri()) {
-      try {
-        return await invoke<TaskSpan[]>('list_spans', { taskId });
-      } catch (err) {
-        console.warn('Tauri invoke list_spans failed, falling back to mock:', err);
-      }
+    if (isTauriEnvironment()) {
+      return await invoke<TaskSpan[]>('list_spans', { taskId });
     }
-    return mockSpans[taskId] ? [...mockSpans[taskId]] : [];
+    return await daemonRpc<TaskSpan[]>('v1.tasks.spans', { task_id: taskId });
   },
 
   createPermit(
     taskId: string,
-    actionType: string = 'ExecutionPermit: Apply Code Diff',
-    target: string = 'crates/runtime/src/handler.rs',
-    risk: RiskLevel = 'Medium',
-    filePath: string = SAMPLE_DIFF.filePath,
-    oldCode: string = SAMPLE_DIFF.oldCode,
-    newCode: string = SAMPLE_DIFF.newCode
+    actionType: string,
+    target: string,
+    risk: RiskLevel,
+    filePath: string,
+    oldCode: string,
+    newCode: string
   ): ExecutionPermit {
     const permit: ExecutionPermit = {
       id: `prm_${Date.now().toString(36)}`,
@@ -281,38 +180,37 @@ export const CustosApi = {
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
-    mockPermits = [permit, ...mockPermits];
+    activePermits = [permit, ...activePermits];
     notifyListeners();
     return permit;
   },
 
   resolvePermit(permitId: string, approved: boolean): ExecutionPermit | null {
-    const permit = mockPermits.find((p) => p.id === permitId);
+    const permit = activePermits.find((p) => p.id === permitId);
     if (!permit) return null;
     permit.status = approved ? 'approved' : 'rejected';
+    activePermits = activePermits.filter((p) => p.id !== permitId);
     notifyListeners();
     return { ...permit };
   },
 
   getPendingPermits(): ExecutionPermit[] {
-    return mockPermits.filter((p) => p.status === 'pending');
+    return activePermits.filter((p) => p.status === 'pending');
   },
 
   async explainArchitecture(query?: string): Promise<string> {
-    if (isTauri()) {
-      try {
-        return await invoke<string>('explain_architecture', { query });
-      } catch (err) {
-        console.warn('Tauri invoke explain_architecture failed, falling back to mock:', err);
-      }
+    if (isTauriEnvironment()) {
+      return await invoke<string>('explain_architecture', { query });
     }
-
-    return `=== Custos Architecture & End-to-End Vertical Slice ===
-[Domain Core]: custos-domain provides immutable Task, Status transitions, and Epoch Concurrency
-[Provider SDK]: custos-provider provides pluggable LLM connectors (OpenAI, Anthropic, Gemini, Local)
-[Daemon Layer]: custos-daemon hosts LocalApiClient over JSON-RPC Unix/Pipe IPC with SQLite audit store
-[Isolation]: Sandboxed worktrees guarantee code execution never escapes to production files without Permit
-[Human Governance]: ExecutionPermit enforcement requires explicit human approval for mutating worktrees
-Query context: ${query || 'Full vertical slice summary'}`;
+    const status = await daemonRpc<Record<string, unknown>>('v1.capabilities.list', {});
+    return JSON.stringify(
+      {
+        query: query || 'daemon_capabilities',
+        daemon: `http://127.0.0.1:${getDaemonHttpPort()}`,
+        capabilities: status,
+      },
+      null,
+      2
+    );
   },
 };

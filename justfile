@@ -29,4 +29,4 @@ fmt:
 
 # Verify architectural dependency rules
 check-deps:
-    ./scripts/check_deps.sh
+    ./xtask/scripts/check_deps.sh

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ExecutionPermit, OperationalMode, Task } from '../types';
-import { OPERATIONAL_MODES, SAMPLE_DIFF } from '../data/constants';
+import { OPERATIONAL_MODES } from '../data/constants';
 import { DiffViewer } from './DiffViewer';
 import { CustosApi } from '../services/custosApi';
 import { Zap, ArrowRight, Loader2, CheckCircle, XCircle, RotateCcw, ShieldAlert, Terminal, Code2, Compass, Bot } from 'lucide-react';
@@ -35,42 +35,40 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
   const [pendingPermit, setPendingPermit] = useState<ExecutionPermit | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const sampleGoals = [
-    'Add verified JWT validation to crates/runtime/src/handler.rs',
+    'Add verified JWT validation to platform/runtime/src/handler.rs',
     'Investigate SQLite WAL concurrency bottlenecks & propose benchmark',
     'Coordinate multi-agent policy audit across workflow recipes',
   ];
 
   const handleStartVibe = async () => {
     if (!goal.trim()) return;
-
+    setErrorMsg(null);
     setStage('analyzing');
-    setProgressMsg(`Analyzing repository and compiling context recipe for [${mode}] mode...`);
+    setProgressMsg(`Registering task with custos-daemon for [${mode}] mode...`);
 
-    await new Promise((r) => setTimeout(r, 700));
+    try {
+      const task = await CustosApi.createTask(goal, mode);
+      setCurrentTask(task);
+      if (onTaskCreated) onTaskCreated(task);
 
-    setStage('synthesizing');
-    setProgressMsg('Synthesizing solution trajectory with LLM Provider...');
-
-    await new Promise((r) => setTimeout(r, 900));
-
-    const task = await CustosApi.createTask(goal, mode);
-    setCurrentTask(task);
-    if (onTaskCreated) onTaskCreated(task);
-
-    const permit = CustosApi.createPermit(
-      task.id,
-      'ExecutionPermit: Apply Code Diff',
-      'crates/runtime/src/handler.rs',
-      'Medium',
-      SAMPLE_DIFF.filePath,
-      SAMPLE_DIFF.oldCode,
-      SAMPLE_DIFF.newCode
-    );
-    setPendingPermit(permit);
-
-    setStage('review_diff');
+      const permit = CustosApi.createPermit(
+        task.id,
+        'ExecutionPermit: Queue & Execute Task',
+        task.id,
+        'Medium',
+        `task/${task.id}`,
+        `status: ${task.status}\nepoch: ${task.epoch}`,
+        `status: Queued -> Running -> Succeeded\nmode: ${mode.toLowerCase()}\ngoal: ${goal}`
+      );
+      setPendingPermit(permit);
+      setStage('review_diff');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStage('input');
+    }
   };
 
   const handleApprovePermit = async () => {
@@ -78,33 +76,41 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
 
     CustosApi.resolvePermit(pendingPermit.id, true);
     setStage('executing');
-    setProgressMsg('Permit granted by operator. Worktree isolated and patched...');
+    setErrorMsg(null);
+    setProgressMsg('Permit granted by operator. Advancing task on daemon...');
 
-    await CustosApi.advanceTask(currentTask.id, 'Queued', 'Permit approved by operator');
-    await new Promise((r) => setTimeout(r, 500));
+    try {
+      await CustosApi.advanceTask(currentTask.id, 'Queued', 'Permit approved by operator');
+      setProgressMsg('Advancing task to Running state...');
+      await CustosApi.advanceTask(currentTask.id, 'Running', 'Active execution approved by operator');
 
-    setProgressMsg('Provider actively coding and executing task payload in sandbox worktree...');
-    await CustosApi.advanceTask(currentTask.id, 'Running', 'Active coding in sandbox');
-    await new Promise((r) => setTimeout(r, 800));
-
-    const completed = await CustosApi.completeTask(
-      currentTask.id,
-      `Task '${goal}' successfully executed, verified, and committed`
-    );
-    setCurrentTask(completed);
-    setStage('completed');
+      const completed = await CustosApi.completeTask(
+        currentTask.id,
+        `Task '${goal}' verified and completed under operator approval`
+      );
+      setCurrentTask(completed);
+      setStage('completed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStage('input');
+    }
   };
 
   const handleRejectPermit = async () => {
     if (!currentTask || !pendingPermit) return;
 
     CustosApi.resolvePermit(pendingPermit.id, false);
-    const cancelled = await CustosApi.cancelTask(
-      currentTask.id,
-      'Execution rejected by operator. Worktree untouched.'
-    );
-    setCurrentTask(cancelled);
-    setStage('cancelled');
+    try {
+      const cancelled = await CustosApi.cancelTask(
+        currentTask.id,
+        'Execution rejected by operator.'
+      );
+      setCurrentTask(cancelled);
+      setStage('cancelled');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStage('input');
+    }
   };
 
   const handleReset = () => {
@@ -113,6 +119,7 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
     setCurrentTask(null);
     setPendingPermit(null);
     setProgressMsg('');
+    setErrorMsg(null);
   };
 
   const currentCfg = OPERATIONAL_MODES[mode];
@@ -206,6 +213,11 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
             </div>
 
             <div className="wizard-actions">
+              {errorMsg && (
+                <p className="warning-icon" style={{ marginBottom: 8 }}>
+                  {errorMsg}
+                </p>
+              )}
               <button
                 className="launch-vibe-btn"
                 disabled={!goal.trim()}

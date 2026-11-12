@@ -1,6 +1,5 @@
 import React from 'react';
 import { TerminalLine, OperationalMode } from '../../types';
-import { SAMPLE_DIFF } from '../../data/constants';
 import { DiffViewer } from '../DiffViewer';
 import { TerminalBanner } from './TerminalBanner';
 import { TerminalModeCard } from './TerminalModeCard';
@@ -46,9 +45,9 @@ export const TerminalLineItem: React.FC<TerminalLineItemProps> = ({
     return (
       <div key={line.id} className="terminal-diff-block">
         <DiffViewer
-          filePath={line.metadata?.filePath || SAMPLE_DIFF.filePath}
-          oldCode={SAMPLE_DIFF.oldCode}
-          newCode={SAMPLE_DIFF.newCode}
+          filePath={line.metadata?.filePath || 'task-transition'}
+          oldCode={line.metadata?.oldCode ?? ''}
+          newCode={line.metadata?.newCode ?? line.content}
           compact
         />
       </div>

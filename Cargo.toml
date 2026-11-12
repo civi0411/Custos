@@ -1,21 +1,25 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/custos-domain",
-    "crates/custos-core",
-    "crates/custos-provider",
-    "crates/custos-persistence",
-    "crates/custos-bridge",
-    "crates/custos-runtime",
-    "crates/custos-adapters",
-    "crates/custos-daemon",
-    "crates/custos-sdk",
-    "crates/custos-app/cli",
-    "crates/custos-app/desktop",
-    "crates/custos-packs",
+    "platform/domain",
+    "platform/core",
+    "platform/ai",
+    "platform/storage",
+    "platform/runtime",
+    "platform/adapters",
+    "platform/components",
+    "apps/daemon",
+    "apps/cli",
+    "apps/desktop/native",
+    "sdk/protocol",
+    "sdk/client-rust",
     "tests/contract",
     "tests/e2e",
     "tests/testkit",
+    "workbenches/quant",
+    "workbenches/research",
+    "workbenches/coding",
+    "workbenches/assistant",
     "xtask"
 ]
 
@@ -33,20 +37,24 @@ description = "Custos Sovereign Agentic Operating System"
 
 [workspace.dependencies]
 # ═══════════════════════════════════════════════════════════════════════
-# Custos 11 Canonical Crates (Hexagonal Architecture)
+# Custos Workspace Packages (Inward Dependency Boundaries)
 # ═══════════════════════════════════════════════════════════════════════
-custos-domain = { path = "crates/custos-domain" }
-custos-core = { path = "crates/custos-core" }
-custos-provider = { path = "crates/custos-provider" }
-custos-persistence = { path = "crates/custos-persistence" }
-custos-bridge = { path = "crates/custos-bridge" }
-custos-runtime = { path = "crates/custos-runtime" }
-custos-adapters = { path = "crates/custos-adapters" }
-custos-sdk = { path = "crates/custos-sdk" }
-custos-daemon = { path = "crates/custos-daemon" }
-custos-cli = { path = "crates/custos-app/cli" }
-custos-desktop = { path = "crates/custos-app/desktop" }
-custos-packs = { path = "crates/custos-packs" }
+custos-domain = { path = "platform/domain" }
+custos-core = { path = "platform/core" }
+custos-provider = { path = "platform/ai" }
+custos-persistence = { path = "platform/storage" }
+custos-runtime = { path = "platform/runtime" }
+custos-adapters = { path = "platform/adapters" }
+custos-protocol = { path = "sdk/protocol" }
+custos-sdk = { path = "sdk/client-rust" }
+custos-daemon = { path = "apps/daemon" }
+custos-cli = { path = "apps/cli" }
+custos-desktop = { path = "apps/desktop/native" }
+custos-packs = { path = "platform/components", default-features = false }
+custos-workbench-quant = { path = "workbenches/quant" }
+custos-workbench-research = { path = "workbenches/research" }
+custos-workbench-coding = { path = "workbenches/coding" }
+custos-workbench-assistant = { path = "workbenches/assistant" }
 tiktoken-rs = { version = "0.12", default-features = false }
 blake3 = { version = "1", default-features = false, features = ["std"] }
 indicatif = "0.17"
@@ -120,12 +128,12 @@ libc = "0.2"
 llama-cpp-2 = { version = "=0.1.146", default-features = false, features = ["sampler", "mtmd"] }
 llama-cpp-sys-2 = { version = "=0.1.146", default-features = false }
 
-# ACP (Agent Client Protocol) — required by custos-sdk-types and roaming
+# ACP (Agent Client Protocol) — required by custos-protocol (`sdk/protocol`) and roaming
 agent-client-protocol = { version = "2.2.0", default-features = false }
 agent-client-protocol-schema = { version = "=1.9.1", default-features = false }
 agent-client-protocol-http = { version = "2.2.0", default-features = false }
 
-# iroh P2P transport — required by custos-roaming
+# iroh P2P transport — required by platform/adapters roaming connector
 iroh = { version = "1.2.0", default-features = false }
 iroh-relay = { version = "1", default-features = false }
 fs2 = "0.4"
