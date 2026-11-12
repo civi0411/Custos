@@ -1,0 +1,35 @@
+{
+  "id": "research",
+  "name": "Research",
+  "version": "0.1.0",
+  "description": "Literature synthesis, reproducible experiments, notebooks, and citation verification.",
+  "builtin": false,
+  "host_compatibility": ">=0.1.0",
+  "capabilities": ["notebook", "documents"],
+  "contributions": {
+    "icon": "FlaskConical",
+    "color": "#a78bfa",
+    "shortcut": "⌥2",
+    "supported_tab_types": [
+      "literature",
+      "findings",
+      "claims",
+      "lab",
+      "runs",
+      "experiments",
+      "training",
+      "knowledge",
+      "synthesis",
+      "artifacts"
+    ],
+    "panes": [
+      { "id": "notebook", "title": "Notebook", "position": "main", "defaultWidth": "full" },
+      { "id": "literature", "title": "Literature", "position": "main", "defaultWidth": "half" },
+      { "id": "findings", "title": "Findings & Claims", "position": "main", "defaultWidth": "half" },
+      { "id": "artifacts", "title": "Artifacts", "position": "main", "defaultWidth": "full" },
+      { "id": "synthesis", "title": "Synthesis", "position": "main", "defaultWidth": "full" },
+      { "id": "runs", "title": "Runs Ledger", "position": "bottom", "defaultWidth": "full" },
+      { "id": "training", "title": "Training Runs", "position": "bottom", "defaultWidth": "full" }
+    ]
+  }
+}

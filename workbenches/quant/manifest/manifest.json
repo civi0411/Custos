@@ -1,0 +1,28 @@
+{
+  "id": "quant",
+  "name": "Quant",
+  "version": "0.1.0",
+  "description": "Algorithmic alpha discovery, backtesting simulations, and financial risk audits.",
+  "builtin": false,
+  "host_compatibility": ">=0.1.0",
+  "capabilities": ["notebook"],
+  "contributions": {
+    "icon": "TrendingUp",
+    "color": "#fbbf24",
+    "shortcut": "⌥4",
+    "supported_tab_types": [
+      "alpha",
+      "alphastudio",
+      "tearsheet",
+      "risk_audit",
+      "riskaudit",
+      "execution"
+    ],
+    "panes": [
+      { "id": "alphastudio", "title": "Alpha Studio", "position": "main", "defaultWidth": "half" },
+      { "id": "tearsheet", "title": "Tearsheet", "position": "main", "defaultWidth": "half" },
+      { "id": "risk_audit", "title": "Risk Audit", "position": "bottom", "defaultWidth": "half" },
+      { "id": "execution", "title": "Execution", "position": "bottom", "defaultWidth": "half" }
+    ]
+  }
+}

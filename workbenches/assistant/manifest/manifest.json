@@ -1,0 +1,21 @@
+{
+  "id": "assistant",
+  "name": "Assistant",
+  "version": "0.1.0",
+  "description": "Personal agenda triage, communication drafting, and revocable grant automation.",
+  "builtin": true,
+  "host_compatibility": ">=0.1.0",
+  "capabilities": [],
+  "contributions": {
+    "icon": "Bot",
+    "color": "#34d399",
+    "shortcut": "⌥3",
+    "supported_tab_types": ["drafts", "outbox", "contacts", "calendar", "notes"],
+    "panes": [
+      { "id": "conversation", "title": "Conversation", "position": "main", "defaultWidth": "full" },
+      { "id": "drafts", "title": "Drafts", "position": "side", "defaultWidth": "third" },
+      { "id": "outbox", "title": "Outbox", "position": "side", "defaultWidth": "third" },
+      { "id": "contacts", "title": "Contacts & Calendar", "position": "side", "defaultWidth": "third" }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "coding",
+  "name": "Engineering",
+  "version": "0.1.0",
+  "description": "Autonomous software engineering, Git worktrees, tests, and AST codebase intelligence.",
+  "builtin": true,
+  "host_compatibility": ">=0.1.0",
+  "capabilities": ["workspace", "terminal"],
+  "contributions": {
+    "icon": "Code2",
+    "color": "#38bdf8",
+    "shortcut": "⌥1",
+    "supported_tab_types": [
+      "files",
+      "changes",
+      "activity",
+      "kanban",
+      "dag",
+      "evidence",
+      "worktrees",
+      "agents",
+      "terminal",
+      "fleet"
+    ],
+    "panes": [
+      { "id": "files", "title": "Files & Changes", "position": "main", "defaultWidth": "full" },
+      { "id": "activity", "title": "Activity", "position": "main", "defaultWidth": "half" },
+      { "id": "terminal", "title": "Terminal", "position": "bottom", "defaultWidth": "full" },
+      { "id": "worktrees", "title": "Worktree Manager", "position": "main", "defaultWidth": "full" },
+      { "id": "agents", "title": "Agents & Harnesses", "position": "main", "defaultWidth": "full" },
+      { "id": "dag", "title": "Workflow DAG", "position": "main", "defaultWidth": "full" },
+      { "id": "evidence", "title": "Evidence & Reviews", "position": "main", "defaultWidth": "full" }
+    ]
+  }
+}
