@@ -1,0 +1,7 @@
+{
+  "id": "mcp",
+  "name": "Model Context Protocol Capability",
+  "version": "0.1.0",
+  "description": "MCP client, tool discovery, and external protocol adapters",
+  "category": "protocol_capability"
+}

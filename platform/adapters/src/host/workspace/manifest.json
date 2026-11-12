@@ -1,0 +1,7 @@
+{
+  "id": "workspace",
+  "name": "Workspace File Operations Capability",
+  "version": "0.1.0",
+  "description": "Local filesystem access, path scoping, and file manipulation",
+  "category": "system_capability"
+}

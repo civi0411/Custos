@@ -1,0 +1,7 @@
+{
+  "id": "notebook",
+  "name": "Notebook Execution Capability",
+  "version": "0.1.0",
+  "description": "Stateful interactive Python kernel driver and cell execution coordinator",
+  "category": "runtime_capability"
+}
