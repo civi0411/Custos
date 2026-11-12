@@ -1047,7 +1047,7 @@ Dependency: PR01 trước mọi extraction. PR04/06 có thể bắt đầu sau P
 | Appearance/a11y | Light/dark/system, comfortable/compact, scale 100/125/150%, narrow desktop, long labels, keyboard only, focus restore, reduced motion |
 | Failure | Daemon offline, denied capability, invalid auth, DB error, network timeout, stale resource; every action exposes a recovery path without replacing data with fake success |
 
-Gates mỗi frontend PR: `npm --prefix ui/desktop run build`, `node tools/canvas-smoke.mjs`, và tests behavior mới tác động đúng function/component. Không chỉ thêm regex source-presence assertion; cần event/command count và actual state transitions. Khi API/browser component cần real renderer, dùng available browser test surface trước; thiếu harness thì ghi rõ gap, không thêm dependency không được phép.
+Gates mỗi frontend PR: `npm --prefix ui/desktop run build`, `node tests/desktop/canvas-smoke.mjs`, và tests behavior mới tác động đúng function/component. Không chỉ thêm regex source-presence assertion; cần event/command count và actual state transitions. Khi API/browser component cần real renderer, dùng available browser test surface trước; thiếu harness thì ghi rõ gap, không thêm dependency không được phép.
 
 Gates backend PR: workspace all-target check, touched lib/integration suites, new negative/fault-injection case; final default workspace tests và feature/platform matrix phù hợp. Không claim power-loss durability, sandbox conformance hoặc live GPU resume từ in-memory fixtures. Required build warnings phải được ghi và xử lý, không im lặng nới gate.
 
@@ -1129,7 +1129,7 @@ flowchart TD
 
 ### 13.4 Gói B — Sửa restore trước khi di chuyển state
 
-**Files:** `context/ScreenContext.tsx`, `context/AppContext.tsx`, `types/screen.ts`, `tools/canvas-smoke.mjs` và test mount/provider nếu harness hiện tại hỗ trợ.
+**Files:** `context/ScreenContext.tsx`, `context/AppContext.tsx`, `types/screen.ts`, `tests/desktop/canvas-smoke.mjs` và test mount/provider nếu harness hiện tại hỗ trợ.
 
 1. Tạo regression hai Screen cùng workbench: `screen-default` còn tồn tại, nhưng saved active là Screen thứ hai. Reload phải mở Screen thứ hai và không ghi đè saved selection bằng default.
 2. Decode một snapshot initial gồm screens và selected ID cùng lúc. Chưa hydrate xong thì không persist. Thứ tự mount effects/StrictMode không được tạo lần ghi default chen trước restore.
@@ -1226,7 +1226,7 @@ A và B không cần chờ nhau về thiết kế, nhưng một checkout không 
 cargo check --workspace --all-targets --offline
 cargo test --offline
 npm --prefix ui/desktop run build
-node tools/canvas-smoke.mjs
+node tests/desktop/canvas-smoke.mjs
 git diff --check
 ```
 
@@ -1258,5 +1258,5 @@ Toàn bộ 6 gói công việc trong Kế hoạch Hội tụ SADE Frontend-Backe
 2. `cargo test --offline --lib`: **PASS 196 unit tests** runtime + toàn bộ crates domain, core, persistence, sdk, packs.
 3. `cargo test --test '*' --offline`: **PASS 49/49 e2e integration test slices**.
 4. `npm --prefix ui/desktop run build`: **PASS (763ms, 0 errors, 0 warnings)**.
-5. `node tools/canvas-smoke.mjs`: **PASS 41/41 tests (376ms)**.
+5. `node tests/desktop/canvas-smoke.mjs`: **PASS 41/41 tests (376ms)**.
 6. `git diff --check`: **CLEAN (0 whitespace/conflict errors)**.

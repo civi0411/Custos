@@ -34,7 +34,7 @@ fn make_engineering_contract() -> TaskContract {
 // ─────────────────────────────────────────────────────────────────────────────
 mod reality_snapshot_extraction {
     use super::*;
-    use custos_core::decision::DecisionSnapshotExtractor;
+    use custos_runtime::oi::DecisionSnapshotExtractor;
     use custos_domain::TaskStatus;
 
     #[tokio::test]
@@ -68,7 +68,7 @@ mod reality_snapshot_extraction {
 // ─────────────────────────────────────────────────────────────────────────────
 mod d0_planner_baseline_strategy {
     use custos_domain::oi::{DecisionSnapshot, ExecutionTopology};
-    use custos_runtime::cognitive::dumb_oi::DumbOiPlanner;
+    use custos_runtime::oi::DumbOiPlanner;
 
     #[test]
     fn test_d0_planner_proposes_baseline_with_minimal_overhead() {

@@ -21,7 +21,7 @@ Custos enforces a rigorous, multi-tiered testing discipline designed to guarante
 ```
 
 1. **Pure Unit & Property Tests:** Fast, in-memory validation of domain entities, task state machine transitions, path normalization invariants, and budget accounting algorithms using `proptest`.
-2. **Contract & Integration Tests:** Verification of wire schemas (`schemas/`), SQLite database migrations, and adapter traits against deterministic mock servers (`tests/contract`).
+2. **Contract & Integration Tests:** Verification of wire schemas (`tests/contract/fixtures/schemas/`), SQLite database migrations, and adapter traits against deterministic mock servers (`tests/contract`).
 3. **Chaos & Crash Matrix:** Injection of simulated SIGKILL power loss, socket abrupt terminations, and full-disk conditions to test the recovery of the SQLite WAL and Git worktrees.
 4. **E2E Repo Fixture Tests:** Multi-process daemon and CLI runs on offline canonical repositories (`tests/e2e`), testing end-to-end task decomposition, patch application, and evidence verification.
 5. **Live Provider Canaries:** Periodic, budget-capped executions against real upstream vendor APIs (Anthropic, OpenAI) to detect upstream protocol drifts early.
@@ -37,9 +37,9 @@ Before any architectural change or feature is merged, it must satisfy the 8 Prod
 | **GATE A** | **Local Process E2E** | Run from CLI through Daemon, invoking a local model to explain a repo under the `LocalOnly` flag. | `tests/e2e` |
 | **GATE B** | **Worktree Isolation** | Prove all filesystem mutations take place exclusively inside `isolated_worktree`, leaving the main working branch untouched. | `custos-adapters` |
 | **GATE C** | **Crash Resilience** | Simulate SIGKILL between outbox staging and physical execution; verify the daemon restarts into state `Uncertain` with automatic reconciliation. | `tests/contract` |
-| **GATE D** | **Security Taint Test** | Inject prompt injection payloads into untrusted inputs (PDF, web scraping); verify 100% of untrusted data is quarantined from operational policy. | `custos-core/fixtures` |
-| **GATE E** | **SWE-Bench Baseline** | Resolve a sample set of standard SWE-bench Lite issues autonomously without human code intervention. | `evals/swe-bench` |
-| **GATE F** | **Research Reproducibility** | Reproduce a scientific benchmark algorithm from paper citations and generate a complete `ReproducibilityBundle`. | `custos-packs` |
+| **GATE D** | **Security Taint Test** | Inject prompt injection payloads into untrusted inputs (PDF, web scraping); verify 100% of untrusted data is quarantined from operational policy. | `platform/core`, `tests/contract`, `tests/testkit` |
+| **GATE E** | **SWE-Bench Baseline** | Resolve a sample set of standard SWE-bench Lite issues autonomously without human code intervention. | `evals/` |
+| **GATE F** | **Research Reproducibility** | Reproduce a scientific benchmark algorithm from paper citations and generate a complete `ReproducibilityBundle`. | `workbenches/research` (`platform/components`) |
 | **GATE G** | **LongMemEval Temporal** | Verify long-term memory across sessions; prove the system distinguishes between outdated facts and active facts without hallucination. | `evals/memory` |
 | **GATE OPT** | **Economic Non-Inferiority** | Measure actual `CostPerAcceptedTask`; prove System 1 routing reduces costs by $\ge 20\%$ compared to direct frontier LLM execution. | `evals/calibration` |
 

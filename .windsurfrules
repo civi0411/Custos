@@ -11,7 +11,7 @@ Read `docs/development/codebase-architecture.md` for the deep physical file-by-f
    - `docs/development/codebase-architecture.md` inserting the file/structs/traits at the exact matching crate and table.
    Never implement architectural code changes before updating this documentation triad.
 2. **Never Guess Architecture:** Before touching code, inspect `docs/development/codebase-architecture.md` to see where files live, their architectural responsibilities, and crate owners.
-3. **Strict Crate Boundaries:** Respect the 11 canonical product crates. `crates/custos-domain` MUST have Zero-I/O. `crates/custos-bridge` MUST NEVER access `crates/custos-persistence` directly.
+3. **Strict Architecture Boundaries:** Follow the 3-ring modular layout (`platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`). `platform/domain` (`custos-domain`) MUST have Zero-I/O. Keep single-writer persistence in `platform/storage` (`custos-persistence`), kernel ports in `platform/core` (`custos-core`), and zero kernel-to-workbench leakage (`cargo xtask check-boundaries`).
 4. **Rust Quality:** Zero `.unwrap()`, zero `.expect()`, zero `panic!()` in production code. Return typed `Result<T, E>`.
 5. **No Decorative Emojis:** Never use emojis in code comments, markdown files, commit logs, or headings.
 6. **Git Safety:** Never run destructive git commands or auto-commit without explicit confirmation.

@@ -865,7 +865,7 @@ This wave completes Packet 2 (Application extraction cleanup) and Packet 3 (Phys
 | Application extraction | `daemon/src/application/{providers,research,workspaces}.rs` | Retire empty 1-line forwarding wrappers and glob re-exports; eliminate dead code; route handlers and tests directly to canonical repositories | No fake abstractions or dead forwarders; canonical repository traits called directly; zero unused imports |
 | Notebook physical driver extraction | `core/contracts/notebook.rs`, `adapters/notebook/{mod,driver}.rs`, `runtime/notebook/{mod,coordinator}.rs` | Move Python subprocess actor and line protocol to `custos-adapters::notebook`; define `NotebookDriverPort` and `NotebookWorkerSession` in `custos-core`; enforce BoundedWriter (4MB) and Rust frame byte cap (10MB) to prevent OOM; guarantee process-tree cleanup | Subprocess IO and frame cap isolated in adapters; coordinator maintains kernel identity, epoch, counter, and queue; clean process tree termination on interrupt and drop |
 | Terminal PTY driver extraction | `core/contracts/terminal.rs`, `adapters/terminal/{mod,pty}.rs`, `runtime/terminal/{mod,coordinator}.rs` | Move POSIX PTY spawning, openpty, termios, and raw streams to `custos-adapters::terminal`; define `TerminalDriverPort`, `TerminalProcessHandle`, and zero-alloc `TerminalOutputConsumer` in `custos-core`; coordinator retains session state, scoping, and bounded buffer | PTY OS interaction completely decoupled from runtime; coordinator consumes chunk events and handles buffer history; Zero-I/O contracts in core without tokio channel dependencies |
-| Desktop UI & Workspace Verification | `ui/desktop`, workspace root | Execute `npm run build` and `node --test tools/canvas-smoke.mjs`; run full workspace test suite `cargo test --workspace` | UI bundle builds cleanly (1.00s); 35/35 canvas smoke regressions pass; 1,650+ unit/adapter/integration/contract tests pass 100% |
+| Desktop UI & Workspace Verification | `ui/desktop`, workspace root | Execute `npm run build` and `node --test tests/desktop/canvas-smoke.mjs`; run full workspace test suite `cargo test --workspace` | UI bundle builds cleanly (1.00s); 35/35 canvas smoke regressions pass; 1,650+ unit/adapter/integration/contract tests pass 100% |
 
 ### Implemented scope and verification
 
@@ -876,7 +876,7 @@ This wave completes Packet 2 (Application extraction cleanup) and Packet 3 (Phys
 - Implemented `NativePtyDriver` and `PtyHandle` in `custos_adapters::terminal::pty`.
 - Refactored `TerminalCoordinator` and `PythonKernelCoordinator` in `custos-runtime` to depend strictly on core driver ports injected via `custos-daemon` composition root (`LocalApiDispatcher` and `DaemonRuntime`).
 - Quality Gate: `npm run build` in `ui/desktop` succeeded in 1.00s with 0 errors.
-- Quality Gate: `node --test tools/canvas-smoke.mjs` passed 35/35 tests in 429ms.
+- Quality Gate: `node --test tests/desktop/canvas-smoke.mjs` passed 35/35 tests in 429ms.
 - Workspace Quality Gate: `cargo check --workspace --all-targets --offline` passed.
 - Workspace Quality Gate: `cargo test --workspace` passed 100% across all 11 canonical crates and test suites (over 1,650 tests passing).
 - No new crates, external dependencies, or database migrations were added. No commit or push was performed.

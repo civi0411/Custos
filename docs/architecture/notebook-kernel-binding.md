@@ -108,7 +108,7 @@ ALTER TABLE notebook_kernel_sessions ADD COLUMN kernel_id TEXT;
 
 ## 5. Golden Acceptance Gate (G06)
 
-Verification is codified in `crates/custos-runtime/tests/notebook_binding_golden_test.rs`:
+Verification is codified in `tests/e2e/tests/notebook_binding_golden_test.rs`:
 - `test_g06_two_notebooks_in_same_session_have_isolated_kernels`: Confirms memory isolation.
 - `test_g06_two_panes_opening_same_notebook_share_kernel_memory`: Confirms handle sharing across multiple UI views.
 - `test_g06_cell_source_edit_invalidates_output_and_bumps_version`: Confirms output invalidation and version increment.

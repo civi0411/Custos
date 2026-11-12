@@ -110,13 +110,13 @@ Không tạo `oi/` hay crate planner mới chỉ vì tài liệu này. Map vào 
 
 | Trách nhiệm đích | Vị trí | Trạng thái cần hiểu đúng |
 |---|---|---|
-| Domain Task/Workflow/criterion/route DTO thuần | `crates/custos-domain/src/` | Chỉ thêm type tối thiểu cùng fixture/version khi flow thật cần. |
-| Hard policy, budget/evidence/authority | `crates/custos-core/src/` | OI không sở hữu grant/permit. |
-| Signals, arbiter, provider selection | `crates/custos-runtime/src/cognitive/` | Có code routing/arbiter; chưa chứng minh OI calibrated route end-to-end. |
-| Plan compilation, scheduler, lease/replan | `crates/custos-runtime/src/workflow/` | Có machine/scheduler; không đồng nghĩa đã có typed compiler/replan. |
-| S2 loop, native harness | `crates/custos-runtime/src/agent/`, `crates/custos-adapters/` | ModelPort khác AgentRuntimePort; assurance theo call path thật. |
-| Pack template và verifier obligation | `crates/custos-packs/` + declarative pack files | Pack không mang policy quyền. |
-| Ledger, evidence, eval | `crates/custos-persistence/`, `evals/` | Canonical DB owner; Meta đọc trace redacted. |
-| Wiring, API, UI | `crates/custos-daemon/`, `crates/custos-bridge/`, clients | Client không ghi DB hoặc mint permit. |
+| Domain Task/Workflow/criterion/route DTO thuần | `platform/domain/src/` | Chỉ thêm type tối thiểu cùng fixture/version khi flow thật cần. |
+| Hard policy, budget/evidence/authority | `platform/core/src/` | OI không sở hữu grant/permit. |
+| Signals, arbiter, provider selection | `platform/runtime/src/oi/` & `platform/ai/src/routing/` | Có code routing/arbiter; chưa chứng minh OI calibrated route end-to-end. |
+| Plan compilation, scheduler, lease/replan | `platform/runtime/src/workflow/` | Có machine/scheduler; không đồng nghĩa đã có typed compiler/replan. |
+| S2 loop, native harness | `platform/runtime/src/agent/`, `platform/adapters/src/harnesses/` | ModelPort khác AgentRuntimePort; assurance theo call path thật. |
+| Pack template và verifier obligation | `platform/components/src/`, `workbenches/<pack>/` | Pack không mang policy quyền. |
+| Ledger, evidence, eval | `platform/storage/src/`, `evals/` | Canonical DB owner; Meta đọc trace redacted. |
+| Wiring, API, UI | `apps/daemon/src/`, `apps/daemon/src/application/`, clients | Client không ghi DB hoặc mint permit. |
 
 Thứ tự: audit execution spine `exists/partial/absent` → instrument strong single baseline và ledger → D0 templates/hard filter/verifier → compiler + bounded sequential → event-driven replan → thử parallel/S1/D1/D2 theo pack → Meta offline và ablation. Không gọi kiến trúc đích là implemented trước e2e test và benchmark.

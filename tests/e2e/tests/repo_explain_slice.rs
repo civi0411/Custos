@@ -1,12 +1,12 @@
 //! First Vertical Slice: `repo_explain`
 //!
-//! Master Reference: dev_docs/README.md (Section 4)
+//! Master Reference: docs/architecture/capability-catalog-and-skills.md
 //! Proves the entire architectural loop end-to-end:
 //! CLI/Service -> Task Kernel -> SQLite Persistence -> Explicit source files
 //! -> Context Compiler -> FakeProvider -> Citation Verifier -> Artifact Store
 //! -> Evidence Engine -> Crash Recovery.
 
-use custos_adapters::providers::fake::FakeProvider;
+use custos_provider::cloud::fake::FakeProvider;
 use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
 use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
@@ -29,7 +29,7 @@ async fn test_repo_explain_vertical_slice_end_to_end() {
     // -------------------------------------------------------------
     // Step 0: Setup a local fixture repository
     // -------------------------------------------------------------
-    let persistence_mod_dir = fixture_repo.join("crates/persistence-sqlite/src");
+    let persistence_mod_dir = fixture_repo.join("platform/storage/src");
     std::fs::create_dir_all(&persistence_mod_dir).unwrap();
 
     let persistence_code = r#"// Persistence SQLite Implementation
@@ -45,7 +45,7 @@ impl SqliteTaskStore {
 "#;
     std::fs::write(persistence_mod_dir.join("lib.rs"), persistence_code).unwrap();
 
-    let core_domain_dir = fixture_repo.join("crates/core-domain/src");
+    let core_domain_dir = fixture_repo.join("platform/domain/src");
     std::fs::create_dir_all(&core_domain_dir).unwrap();
     let core_domain_code = r#"// Core Domain Architecture
 // UI interacts with TaskKernel via typed commands and local IPC,
@@ -131,11 +131,11 @@ pub struct Task;
         // -------------------------------------------------------------
         // Step 6: FakeProvider generates explanation citing exact file ranges
         // -------------------------------------------------------------
-        let cited_rel_path = "crates/persistence-sqlite/src/lib.rs";
+        let cited_rel_path = "platform/storage/src/lib.rs";
         let provider = FakeProvider::with_default_text(
             "fake-provider",
             format!(
-                "The module responsible for persisting tasks is `crates/persistence-sqlite`. \
+                "The module responsible for persisting tasks is `platform/storage`. \
                 The UI cannot directly access SQLite because all mutations must pass through the TaskKernel \
                 to enforce invariant validation, cryptographic execution permits, and event sourcing. \
                 Citation: {} lines 1-6.",
@@ -146,7 +146,7 @@ pub struct Task;
         let request =
             ProviderRequest::new("explain-req-1", &task.id, 1, &prompt_title, "fake-model-v1");
         let model_resp = provider.generate(&request).await.expect("Model generation");
-        assert!(model_resp.content.contains("crates/persistence-sqlite"));
+        assert!(model_resp.content.contains("platform/storage"));
 
         // Record execution span
         let span = Span::new(
@@ -193,7 +193,7 @@ pub struct Task;
         // Step 8: Evidence Engine verifies citations
         // -------------------------------------------------------------
         let source_acq = std::sync::Arc::new(
-            custos_adapters::tools::source_fetch::SourceFetchAdapter::with_base_dir(&fixture_repo),
+            custos_adapters::documents::SourceFetchAdapter::with_base_dir(&fixture_repo),
         );
         let pipeline = EvidencePipeline::with_source_acquisition(source_acq);
         let evidence_bundle = EvidenceBundle::new(
@@ -284,7 +284,7 @@ pub struct Task;
             .unwrap()
             .expect("Artifact exists");
         let content_str = String::from_utf8(loaded_bytes).unwrap();
-        assert!(content_str.contains("crates/persistence-sqlite"));
+        assert!(content_str.contains("platform/storage"));
     }
 
     // Clean up temporary directory

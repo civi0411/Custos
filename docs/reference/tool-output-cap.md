@@ -1,6 +1,6 @@
 # Tool Output Bounds & LimitedWriter Specification
 
-> **Scope**: `crates/custos-runtime/src/agent/runtime_port.rs`  
+> **Scope**: `platform/runtime/src/agent/runtime_port/`  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 1 / F05)
 

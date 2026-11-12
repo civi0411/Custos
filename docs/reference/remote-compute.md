@@ -1,6 +1,6 @@
 # Remote Compute Adapters & Mock Mode Specification
 
-> **Scope**: `crates/custos-adapters/src/compute/` (Colab, Kaggle, Rented GPU / SSH / Cloud Pods)  
+> **Scope**: `platform/adapters/src/connectors/compute/` (Colab, Kaggle, Rented GPU / SSH / Cloud Pods)  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 2 / F06)
 

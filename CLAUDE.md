@@ -11,10 +11,10 @@ Read `docs/development/codebase-architecture.md` for the authoritative physical 
    - `docs/development/codebase-architecture.md` inserting the file/structs/traits at the exact matching crate and table.
    Never implement architectural code changes before updating this documentation triad.
 2. **Never Guess Architecture:** Before touching code, inspect `docs/development/codebase-architecture.md` to see where files live, their architectural responsibilities, and crate owners.
-3. **Strict Crate Boundaries:** Respect the 11 canonical product crates. `crates/custos-domain` MUST have Zero-I/O. `crates/custos-bridge` MUST NEVER access `crates/custos-persistence` directly. Put vendor formats strictly in `crates/custos-adapters`.
+3. **Strict Architecture Boundaries:** Follow the 3-ring modular layout (`platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`). `platform/domain` (`custos-domain`) MUST have Zero-I/O. Only `platform/storage` (`custos-persistence`) writes SQLite (via composition in `apps/daemon`). Put host/vendor I/O strictly in `platform/adapters` (`custos-adapters`), and enforce zero kernel-to-workbench leaks (`cargo xtask check-boundaries`).
 4. **Rust Quality:** Zero `.unwrap()`, zero `.expect()`, zero `panic!()` in production code. Return typed `Result<T, E>` with `thiserror`.
 5. **No Decorative Emojis:** Never use emojis in code comments, markdown files, commit logs, or headings.
 6. **Git Safety:** Never stage, commit, push, merge, or rewrite Git history without explicit, operation-specific authorization from the human operator.
-7. **No Forbidden Frameworks:** Do not add dependencies like LangChain or LlamaIndex. Do not invent new crates outside the 11 canonical product crates.
+7. **No Forbidden Frameworks:** Do not add dependencies like LangChain or LlamaIndex. Do not invent parallel crates outside the established modular workspace structure.
 
 Silence is safer than speculation.

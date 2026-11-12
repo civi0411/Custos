@@ -9,16 +9,16 @@
 //! 6. Full Provenance Lineage: Multi-generation attempt chain tracked in SQLite store with parent checkpoint linkages.
 //! 7. Crash Handoff & Recovery: Crashed attempt settled honestly and continuation child dispatched seamlessly.
 
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
-use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 
 use custos_adapters::compute::checkpoint_store::CasCheckpointStoreAdapter;
 use custos_core::contracts::checkpoint_store::{CheckpointStorePort, PromotionOutcome};
 use custos_domain::{
-    AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind,
-    ExecState, ExecutionAttempt, ResourceState, TrainingCheckpointManifest,
+    AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, ExecState,
+    ExecutionAttempt, ResourceState, TrainingCheckpointManifest,
 };
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::compute::relay::CheckpointRelayCoordinator;
@@ -31,11 +31,23 @@ fn sha256_hex(data: &[u8]) -> String {
 
 fn make_test_bundle() -> HashMap<&'static str, Vec<u8>> {
     let mut map = HashMap::new();
-    map.insert("model.safetensors", b"DUMMY_MODEL_WEIGHTS_TENSOR_BYTES".to_vec());
-    map.insert("optimizer.pt", b"DUMMY_ADAMW_OPTIMIZER_MOMENTUM_BYTES".to_vec());
+    map.insert(
+        "model.safetensors",
+        b"DUMMY_MODEL_WEIGHTS_TENSOR_BYTES".to_vec(),
+    );
+    map.insert(
+        "optimizer.pt",
+        b"DUMMY_ADAMW_OPTIMIZER_MOMENTUM_BYTES".to_vec(),
+    );
     map.insert("scheduler.pt", b"DUMMY_COSINE_LR_SCHEDULER_BYTES".to_vec());
-    map.insert("rng_state.pth", b"DUMMY_TORCH_CUDA_RNG_STATE_BYTES".to_vec());
-    map.insert("trainer_state.json", b"{\"step\": 100, \"epoch\": 1.0}".to_vec());
+    map.insert(
+        "rng_state.pth",
+        b"DUMMY_TORCH_CUDA_RNG_STATE_BYTES".to_vec(),
+    );
+    map.insert(
+        "trainer_state.json",
+        b"{\"step\": 100, \"epoch\": 1.0}".to_vec(),
+    );
     map
 }
 
@@ -153,14 +165,13 @@ async fn test_g_relay_03_single_writer_generation_cas_fencing() {
     // Attempt 1 (Gen 1) writes Checkpoint 1
     let pfx1 = format!("experiments/{experiment_id}/attempts/att_1/");
     for (name, data) in &bundle {
-        store.put_blob(&pfx1, name, data, &sha256_hex(data)).await.unwrap();
+        store
+            .put_blob(&pfx1, name, data, &sha256_hex(data))
+            .await
+            .unwrap();
     }
-    let manifest1 = build_manifest_for_bundle(
-        "ckpt_1",
-        100,
-        &format!("s3://bucket/{pfx1}"),
-        &bundle,
-    );
+    let manifest1 =
+        build_manifest_for_bundle("ckpt_1", 100, &format!("s3://bucket/{pfx1}"), &bundle);
     store.publish_manifest(&pfx1, &manifest1).await.unwrap();
 
     // Promote Checkpoint 1 at Generation 1
@@ -168,19 +179,23 @@ async fn test_g_relay_03_single_writer_generation_cas_fencing() {
         .promote_checkpoint_with_fencing(store.as_ref(), experiment_id, "ckpt_1", 1)
         .await
         .unwrap();
-    assert_eq!(outcome1, PromotionOutcome::Promoted { canonical_step: 100 });
+    assert_eq!(
+        outcome1,
+        PromotionOutcome::Promoted {
+            canonical_step: 100
+        }
+    );
 
     // Attempt 2 (Gen 2) writes Checkpoint 2
     let pfx2 = format!("experiments/{experiment_id}/attempts/att_2/");
     for (name, data) in &bundle {
-        store.put_blob(&pfx2, name, data, &sha256_hex(data)).await.unwrap();
+        store
+            .put_blob(&pfx2, name, data, &sha256_hex(data))
+            .await
+            .unwrap();
     }
-    let manifest2 = build_manifest_for_bundle(
-        "ckpt_2",
-        200,
-        &format!("s3://bucket/{pfx2}"),
-        &bundle,
-    );
+    let manifest2 =
+        build_manifest_for_bundle("ckpt_2", 200, &format!("s3://bucket/{pfx2}"), &bundle);
     store.publish_manifest(&pfx2, &manifest2).await.unwrap();
 
     // Promote Checkpoint 2 at Generation 2
@@ -188,7 +203,12 @@ async fn test_g_relay_03_single_writer_generation_cas_fencing() {
         .promote_checkpoint_with_fencing(store.as_ref(), experiment_id, "ckpt_2", 2)
         .await
         .unwrap();
-    assert_eq!(outcome2, PromotionOutcome::Promoted { canonical_step: 200 });
+    assert_eq!(
+        outcome2,
+        PromotionOutcome::Promoted {
+            canonical_step: 200
+        }
+    );
 
     // ZOMBIE WRITER DEFENSE: Lagging Attempt 1 attempts to promote at Generation 1
     let stale_outcome = relay
@@ -210,12 +230,7 @@ async fn test_g_relay_04_heterogeneous_failover_hardware_adaptation_gate() {
     let relay = CheckpointRelayCoordinator::new();
     let bundle = make_test_bundle();
 
-    let manifest = build_manifest_for_bundle(
-        "ckpt_a100",
-        500,
-        "s3://bucket/ckpt_a100",
-        &bundle,
-    );
+    let manifest = build_manifest_for_bundle("ckpt_a100", 500, "s3://bucket/ckpt_a100", &bundle);
 
     // Root attempt on RunPod A100 (40GB)
     let parent = ExecutionAttempt {
@@ -232,7 +247,7 @@ async fn test_g_relay_04_heterogeneous_failover_hardware_adaptation_gate() {
     };
 
     let source_a100 = AcceleratorSpec::a100_40gb(); // 40960 MB
-    let target_4090 = AcceleratorSpec::rtx_4090();   // 24576 MB
+    let target_4090 = AcceleratorSpec::rtx_4090(); // 24576 MB
 
     // Source batch configuration: per_device_batch = 8, grad_accum = 2 => effective_batch = 16
     let (child_attempt, plan) = relay
@@ -272,7 +287,10 @@ async fn test_g_relay_04_heterogeneous_failover_hardware_adaptation_gate() {
         2,
     );
     assert!(fail_res.is_err());
-    assert!(fail_res.unwrap_err().to_string().contains("insufficient for LLM training"));
+    assert!(fail_res
+        .unwrap_err()
+        .to_string()
+        .contains("insufficient for LLM training"));
 }
 
 #[tokio::test]
@@ -286,16 +304,15 @@ async fn test_g_relay_05_quarantining_corrupted_checkpoint() {
 
     let pfx = format!("experiments/{experiment_id}/attempts/att_1/");
     for (name, data) in &bundle {
-        store.put_blob(&pfx, name, data, &sha256_hex(data)).await.unwrap();
+        store
+            .put_blob(&pfx, name, data, &sha256_hex(data))
+            .await
+            .unwrap();
     }
 
     // Create manifest missing optimizer state
-    let mut corrupt_manifest = build_manifest_for_bundle(
-        "ckpt_corrupt",
-        100,
-        &format!("s3://bucket/{pfx}"),
-        &bundle,
-    );
+    let mut corrupt_manifest =
+        build_manifest_for_bundle("ckpt_corrupt", 100, &format!("s3://bucket/{pfx}"), &bundle);
     corrupt_manifest.commit_status = CheckpointCommitStatus::LocalStaged; // uncommitted!
 
     // Publish manifest
@@ -303,7 +320,10 @@ async fn test_g_relay_05_quarantining_corrupted_checkpoint() {
     assert!(manifests.is_empty());
 
     // Publish directly
-    store.publish_manifest(&pfx, &corrupt_manifest).await.unwrap();
+    store
+        .publish_manifest(&pfx, &corrupt_manifest)
+        .await
+        .unwrap();
 
     // Promote must quarantine due to uncommitted / corrupt state
     let outcome = relay
@@ -367,7 +387,10 @@ async fn test_g_relay_06_full_provenance_lineage_in_sqlite_store() {
 
     assert_eq!(attempts[1].id, "att_02_ssh");
     assert_eq!(attempts[1].generation, 2);
-    assert_eq!(attempts[1].parent_checkpoint_id, Some("ckpt_step_100".into()));
+    assert_eq!(
+        attempts[1].parent_checkpoint_id,
+        Some("ckpt_step_100".into())
+    );
 }
 
 #[tokio::test]
@@ -375,12 +398,8 @@ async fn test_g_relay_07_crash_handoff_and_continuation_dispatch() {
     let relay = CheckpointRelayCoordinator::new();
     let bundle = make_test_bundle();
 
-    let protected_checkpoint = build_manifest_for_bundle(
-        "ckpt_step_300",
-        300,
-        "s3://bucket/ckpt_300",
-        &bundle,
-    );
+    let protected_checkpoint =
+        build_manifest_for_bundle("ckpt_step_300", 300, "s3://bucket/ckpt_300", &bundle);
 
     let mut crashed_attempt = ExecutionAttempt {
         id: "att_crashed".into(),
@@ -417,7 +436,10 @@ async fn test_g_relay_07_crash_handoff_and_continuation_dispatch() {
 
     // 2. Child continuation attempt inherits parent checkpoint and generation bumps to 2
     assert_eq!(continuation.generation, 2);
-    assert_eq!(continuation.parent_checkpoint_id, Some("ckpt_step_300".into()));
+    assert_eq!(
+        continuation.parent_checkpoint_id,
+        Some("ckpt_step_300".into())
+    );
     assert_eq!(continuation.backend, ComputeBackendKind::DedicatedSsh);
     assert_eq!(continuation.exec_state, ExecState::Planned);
     assert_eq!(plan.resume_step, 300);

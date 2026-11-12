@@ -6,13 +6,12 @@
 //!
 //! Zero external dependencies. Zero GPU requirement. Zero cloud credentials.
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 
 use custos_domain::{
-    digest, CheckpointCommitStatus, CheckpointFileEntry, DomainError,
-    TrainingCheckpointManifest,
+    digest, CheckpointCommitStatus, CheckpointFileEntry, DomainError, TrainingCheckpointManifest,
 };
 
 /// Deterministic Linear Congruential Generator (LCG)
@@ -27,7 +26,10 @@ impl DeterministicPrng {
     }
 
     pub fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.state
     }
 
@@ -74,7 +76,12 @@ pub enum OptimizerKind {
     /// SGD with momentum: stores velocity
     SgdWithMomentum { lr: f64, momentum: f64 },
     /// Adam: stores first and second moments and time step
-    Adam { lr: f64, beta1: f64, beta2: f64, eps: f64 },
+    Adam {
+        lr: f64,
+        beta1: f64,
+        beta2: f64,
+        eps: f64,
+    },
 }
 
 /// Persisted optimizer state
@@ -194,8 +201,7 @@ impl DeterministicTrainer {
                         *momentum * self.optimizer_state.v_w[i] + *lr * grad_w[i];
                     self.weights.w[i] -= self.optimizer_state.v_w[i];
                 }
-                self.optimizer_state.v_b =
-                    *momentum * self.optimizer_state.v_b + *lr * grad_b;
+                self.optimizer_state.v_b = *momentum * self.optimizer_state.v_b + *lr * grad_b;
                 self.weights.b -= self.optimizer_state.v_b;
             }
             OptimizerKind::Adam {
@@ -241,7 +247,9 @@ impl DeterministicTrainer {
         let mut canary_clone = self.clone();
         let loss = canary_clone.step();
         if !loss.is_finite() || loss.is_nan() {
-            return Err(DomainError::Validation("Canary step produced non-finite loss".into()));
+            return Err(DomainError::Validation(
+                "Canary step produced non-finite loss".into(),
+            ));
         }
         Ok(loss)
     }
@@ -279,8 +287,7 @@ impl DeterministicTrainer {
                 .map_err(|e| DomainError::Validation(e.to_string()))?
         };
         let opt_path = dir.join("optimizer.pt");
-        fs::write(&opt_path, &opt_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        fs::write(&opt_path, &opt_json).map_err(|e| DomainError::Validation(e.to_string()))?;
         files.push(CheckpointFileEntry {
             path: "optimizer.pt".into(),
             size_bytes: opt_json.len() as u64,
@@ -295,8 +302,7 @@ impl DeterministicTrainer {
         })
         .to_string();
         let sched_path = dir.join("scheduler.pt");
-        fs::write(&sched_path, &sched_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        fs::write(&sched_path, &sched_json).map_err(|e| DomainError::Validation(e.to_string()))?;
         files.push(CheckpointFileEntry {
             path: "scheduler.pt".into(),
             size_bytes: sched_json.len() as u64,
@@ -308,8 +314,7 @@ impl DeterministicTrainer {
         let rng_json = serde_json::to_string(&self.prng)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         let rng_path = dir.join("rng_state.pth");
-        fs::write(&rng_path, &rng_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        fs::write(&rng_path, &rng_json).map_err(|e| DomainError::Validation(e.to_string()))?;
         files.push(CheckpointFileEntry {
             path: "rng_state.pth".into(),
             size_bytes: rng_json.len() as u64,
@@ -328,8 +333,7 @@ impl DeterministicTrainer {
         let meta_json = serde_json::to_string(&trainer_meta)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         let meta_path = dir.join("trainer_state.json");
-        fs::write(&meta_path, &meta_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        fs::write(&meta_path, &meta_json).map_err(|e| DomainError::Validation(e.to_string()))?;
         files.push(CheckpointFileEntry {
             path: "trainer_state.json".into(),
             size_bytes: meta_json.len() as u64,
@@ -377,11 +381,9 @@ impl DeterministicTrainer {
         // Verify each file's presence, size, and digest
         for file in &manifest.files {
             let file_path = dir.join(&file.path);
-            let bytes = fs::read(&file_path).map_err(|e| {
-                DomainError::IntegrityCheckFailed {
-                    expected: file.path.clone(),
-                    actual: format!("Missing file: {e}"),
-                }
+            let bytes = fs::read(&file_path).map_err(|e| DomainError::IntegrityCheckFailed {
+                expected: file.path.clone(),
+                actual: format!("Missing file: {e}"),
             })?;
 
             if bytes.len() as u64 != file.size_bytes {
@@ -418,14 +420,14 @@ impl DeterministicTrainer {
         // 3. RNG state
         let rng_json = fs::read_to_string(dir.join("rng_state.pth"))
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let prng: DeterministicPrng = serde_json::from_str(&rng_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let prng: DeterministicPrng =
+            serde_json::from_str(&rng_json).map_err(|e| DomainError::Validation(e.to_string()))?;
 
         // 4. Trainer state & cursor
         let meta_json = fs::read_to_string(dir.join("trainer_state.json"))
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let meta: TrainerStateMetadata = serde_json::from_str(&meta_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let meta: TrainerStateMetadata =
+            serde_json::from_str(&meta_json).map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(Self {
             weights,

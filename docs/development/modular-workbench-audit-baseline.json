@@ -1,0 +1,117 @@
+{
+  "head": "9cd903b6cfa74378f4c45815ceea8ceb9c6e7d3b",
+  "branch": "rft",
+  "snapshot_date": "2026-11-07",
+  "scope": [
+    "crates/",
+    "ui/"
+  ],
+  "excludes": [
+    "node_modules",
+    "target",
+    "dist",
+    ".git"
+  ],
+  "files": 1156,
+  "source_extension_files": 915,
+  "source_extension_lines": 250394,
+  "coverage": "All captured text read by structural scanner; selected production traces reviewed semantically; not every source line semantically audited",
+  "initial_dirty_manifest": [
+    " M Custos.md",
+    " D crates/custos-adapters/src/blocks/copilot.rs",
+    " D crates/custos-adapters/src/blocks/engineering.rs",
+    " D crates/custos-adapters/src/blocks/foundation.rs",
+    " D crates/custos-adapters/src/blocks/mod.rs",
+    " D crates/custos-adapters/src/blocks/quant.rs",
+    " D crates/custos-adapters/src/blocks/research.rs",
+    " M crates/custos-adapters/src/lib.rs",
+    " D crates/custos-core/src/blocks/copilot.rs",
+    " D crates/custos-core/src/blocks/engineering.rs",
+    " D crates/custos-core/src/blocks/foundation.rs",
+    " D crates/custos-core/src/blocks/mod.rs",
+    " D crates/custos-core/src/blocks/quant.rs",
+    " D crates/custos-core/src/blocks/research.rs",
+    " M crates/custos-core/src/contracts/mod.rs",
+    " M crates/custos-core/src/contracts/storage.rs",
+    " M crates/custos-core/src/lib.rs",
+    " D crates/custos-core/src/research_ingress.rs",
+    " M crates/custos-daemon/src/api/mod.rs",
+    " D crates/custos-daemon/src/application/assistant.rs",
+    " M crates/custos-daemon/src/application/mod.rs",
+    " M crates/custos-daemon/src/application/quant/services/backtest.rs",
+    " M crates/custos-daemon/src/application/quant/services/market.rs",
+    " M crates/custos-daemon/src/application/quant/services/orders.rs",
+    " D crates/custos-domain/src/blocks/copilot.rs",
+    " D crates/custos-domain/src/blocks/engineering.rs",
+    " D crates/custos-domain/src/blocks/foundation.rs",
+    " D crates/custos-domain/src/blocks/mod.rs",
+    " D crates/custos-domain/src/blocks/quant.rs",
+    " D crates/custos-domain/src/blocks/research.rs",
+    " M crates/custos-domain/src/lib.rs",
+    " D crates/custos-persistence/src/blocks/copilot.rs",
+    " D crates/custos-persistence/src/blocks/engineering.rs",
+    " D crates/custos-persistence/src/blocks/foundation.rs",
+    " D crates/custos-persistence/src/blocks/mod.rs",
+    " D crates/custos-persistence/src/blocks/quant.rs",
+    " D crates/custos-persistence/src/blocks/research.rs",
+    " M crates/custos-persistence/src/lib.rs",
+    " M crates/custos-persistence/src/repositories/quant.rs",
+    " D crates/custos-runtime/src/blocks/copilot.rs",
+    " D crates/custos-runtime/src/blocks/engineering.rs",
+    " D crates/custos-runtime/src/blocks/foundation.rs",
+    " D crates/custos-runtime/src/blocks/mod.rs",
+    " D crates/custos-runtime/src/blocks/quant.rs",
+    " D crates/custos-runtime/src/blocks/research.rs",
+    " M crates/custos-runtime/src/lib.rs",
+    " M docs/architecture/sade-agent-system-design.md",
+    " M docs/development/codebase-architecture.md",
+    "?? crates/custos-core/src/contracts/quant.rs",
+    "?? crates/custos-core/src/contracts/research_ingress.rs",
+    "?? crates/custos-daemon/src/application/assistant/"
+  ],
+  "source_drift_after_checks": [],
+  "checks": {
+    "rust_all_targets_offline": {
+      "exit": 0,
+      "log_tail": [
+        "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.00s"
+      ]
+    },
+    "desktop_build": {
+      "exit": 0,
+      "log_tail": [
+        "",
+        "✓ built in 894ms"
+      ]
+    },
+    "cli_ui_build": {
+      "exit": 0,
+      "log_tail": [
+        "",
+        "✓ built in 405ms"
+      ]
+    },
+    "canvas_smoke": {
+      "exit": 0,
+      "passed": 43,
+      "failed": 0
+    },
+    "core_completion_existing_tests": {
+      "exit": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    "completion_negative_audit_probe": {
+      "process_exit": 0,
+      "foreign_task_claim_accepted": true,
+      "expected_secure_behavior": false,
+      "scope": "Direct compiled completion-gate call in temporary Cargo project, not a network exploit test"
+    }
+  },
+  "limitations": [
+    "No GPU/cloud/provider/broker/mail live execution",
+    "No native OS escape, power-loss or clean-machine release testing",
+    "No manual semantic audit of every file",
+    "Per-file target paths are candidates, not automatic moves"
+  ]
+}

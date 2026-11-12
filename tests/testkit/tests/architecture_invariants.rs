@@ -4,7 +4,7 @@ use std::path::Path;
 #[test]
 fn test_domain_zero_io_invariant() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let domain_src = manifest_dir.join("../../crates/custos-domain/src");
+    let domain_src = manifest_dir.join("../../platform/domain/src");
     assert!(domain_src.exists(), "domain src directory must exist");
 
     let forbidden_imports = [
@@ -53,8 +53,8 @@ fn test_domain_zero_io_invariant() {
 #[test]
 fn test_no_file_folder_name_collisions_in_crates() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let crates_dir = manifest_dir.join("../../crates");
-    assert!(crates_dir.exists(), "crates directory must exist");
+    let platform_dir = manifest_dir.join("../../platform");
+    assert!(platform_dir.exists(), "platform directory must exist");
 
     let mut collisions = Vec::new();
 
@@ -82,7 +82,9 @@ fn test_no_file_folder_name_collisions_in_crates() {
         }
     }
 
-    check_dir(&crates_dir, &mut collisions);
+    check_dir(&platform_dir, &mut collisions);
+    check_dir(&manifest_dir.join("../../apps"), &mut collisions);
+    check_dir(&manifest_dir.join("../../sdk"), &mut collisions);
     assert!(
         collisions.is_empty(),
         "Found file/folder name collisions in crates:\n{}",
@@ -93,7 +95,7 @@ fn test_no_file_folder_name_collisions_in_crates() {
 #[test]
 fn test_domain_bounded_contexts_structure() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let domain_src = manifest_dir.join("../../crates/custos-domain/src");
+    let domain_src = manifest_dir.join("../../platform/domain/src");
 
     let expected_contexts = [
         "authority",
@@ -101,7 +103,7 @@ fn test_domain_bounded_contexts_structure() {
         "evidence",
         "fleet",
         "oi",
-        "research",
+        "pipeline",
         "session",
         "shared",
         "task",
@@ -127,7 +129,7 @@ fn test_domain_bounded_contexts_structure() {
 #[test]
 fn test_core_owns_skill_contract() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let core_skill = manifest_dir.join("../../crates/custos-core/src/contracts/skill.rs");
+    let core_skill = manifest_dir.join("../../platform/core/src/contracts/skill.rs");
     assert!(
         core_skill.exists(),
         "custos-core/src/contracts/skill.rs must exist and own the Skill trait contract"
@@ -139,8 +141,78 @@ fn test_core_owns_skill_contract() {
         "custos-core must define pub trait Skill"
     );
     assert!(
-        content.contains("pub struct SkillRegistry"),
-        "custos-core must define pub struct SkillRegistry"
+        content.contains("pub trait SkillSink"),
+        "custos-core must define pub trait SkillSink"
+    );
+    let runtime_skills = fs::read_to_string(
+        manifest_dir.join("../../platform/runtime/src/agent/skills/mod.rs"),
+    )
+    .unwrap();
+    assert!(
+        runtime_skills.contains("pub struct SkillRegistry"),
+        "custos-runtime must define pub struct SkillRegistry"
+    );
+}
+
+#[test]
+fn test_platform_kernel_workbench_isolation() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = manifest_dir.join("../..");
+
+    // 1. platform/domain must never declare workbench modules directly
+    let domain_lib = fs::read_to_string(root.join("platform/domain/src/lib.rs")).unwrap();
+    assert!(!domain_lib.contains("pub mod quant;"), "platform/domain must not contain pub mod quant");
+    assert!(!domain_lib.contains("pub mod research;"), "platform/domain must not contain pub mod research");
+
+    // 2. platform/core contracts must not contain workbench-specific contracts
+    let core_contracts = root.join("platform/core/src/contracts");
+    for wb_contract in &["quant.rs", "research.rs", "research_ingress.rs"] {
+        assert!(
+            !core_contracts.join(wb_contract).exists(),
+            "platform/core/src/contracts/{wb_contract} must not exist (belongs in workbenches)"
+        );
+    }
+
+    // 3. platform/storage migrations must not contain decoupled research migrations
+    let storage_migrations = root.join("platform/storage/migrations");
+    let decoupled = [
+        "0017_research_lineage_and_claims.sql",
+        "0018_research_recipes_and_annotations.sql",
+        "0020_notes_and_artifact_registry.sql",
+        "0021_notebook_cells_and_kernels.sql",
+        "0022_reviewer_records.sql",
+        "0023_research_synthesis_proposals.sql",
+        "0035_research_execution_snapshot.sql",
+        "0041_research_evaluation_reports.sql",
+    ];
+    for mig in &decoupled {
+        assert!(
+            !storage_migrations.join(mig).exists(),
+            "platform/storage/migrations/{mig} must not exist in core storage"
+        );
+    }
+
+    // 4. platform/storage must not contain assistant repository or migration
+    assert!(
+        !root.join("platform/storage/src/repositories/assistant.rs").exists(),
+        "platform/storage must not contain assistant repository (belongs in workbenches/assistant)"
+    );
+    assert!(
+        !storage_migrations.join("0030_assistant_drafts.sql").exists(),
+        "platform/storage/migrations/0030_assistant_drafts.sql must not exist (belongs in workbenches/assistant)"
+    );
+
+    // 5. platform/components must not contain builtins directory
+    assert!(
+        !root.join("platform/components/src/builtins").exists(),
+        "platform/components must not contain builtins directory (workbenches are standalone crates)"
+    );
+
+    // 6. platform/components/Cargo.toml must have zero workbench dependencies
+    let components_cargo = fs::read_to_string(root.join("platform/components/Cargo.toml")).unwrap();
+    assert!(
+        !components_cargo.contains("custos-workbench-"),
+        "platform/components/Cargo.toml must not depend on any custos-workbench-* package"
     );
 }
 

@@ -1,6 +1,6 @@
 # Command Ledger & Idempotency Fence Specification
 
-> **Scope**: `crates/custos-daemon/src/api/` & `crates/custos-persistence/src/repositories/command_ledger.rs`  
+> **Scope**: `apps/daemon/src/api/` & `platform/storage/src/repositories/command_ledger.rs`  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 1 / F03)
 

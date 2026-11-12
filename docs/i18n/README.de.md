@@ -12,7 +12,7 @@
 
 > **Supervised Agent Development Environment (SADE) — Local-First, Evidenzbasiert, Menschlich Gesteuert.**
 
-Custos ist eine Local-First-Entwicklungs- und Ausführungsumgebung für autonome Agenten in den Bereichen Software-Engineering, wissenschaftliche Forschung und persönliche Workflow-Assistenz. Im Gegensatz zu einfachen LLM-Wrappern oder intransparenten Multi-Agenten-Systemen erzwingt Custos deterministische Zustandspersistenz, kryptografisch auditierte Fähigkeitsschranken, herkunftsgesicherte Kontextkompilierung und empirische Nachweise, bevor eine Aufgabe als abgeschlossen anerkannt wird.
+Custos ist eine Local-First-Entwicklungs- und Ausführungsumgebung für autonome Agenten in den Bereichen Software-Engineering, wissenschaftliche Forschung, persönliche Workflow-Assistenz und quantitative Strategieentwicklung. Im Gegensatz zu einfachen LLM-Wrappern oder intransparenten Multi-Agenten-Systemen erzwingt Custos deterministische Zustandspersistenz, kryptografisch auditierte Fähigkeitsschranken, herkunftsgesicherte Kontextkompilierung und empirische Nachweise, bevor eine Aufgabe als abgeschlossen anerkannt wird.
 
 ---
 
@@ -57,24 +57,29 @@ flowchart LR
 
 ---
 
-## Drei Spezialisierte Domänen-Perspektiven
+## Vier Spezialisierte Domänen-Workbenches (Vertical Workbenches)
 
-Custos stellt maßgeschneiderte Interaktionsmodelle und Verifikations-Engines für unterschiedliche kognitive Bereiche bereit:
+Custos stellt maßgeschneiderte Interaktionsmodelle, Domänenmodelle und Verifikations-Engines für unterschiedliche kognitive Bereiche bereit:
 
-### 1. Engineering-Perspektive (Coding-Workbench)
-- **3-Pfad-Ausführungsworkspaces (3-Path Workspaces):** Sichere Trennung zwischen kanonischem Repository, Staging-Fork und Verifikations-Sandbox.
+### 1. Coding-Workbench (`workbenches/coding`)
+- **3-Pfad-Ausführungsworkspaces (3-Path Workspaces):** Sichere Trennung zwischen kanonischem Repository (canonical repo), Staging-Fork und Verifikations-Sandbox.
 - **Atomare Patch-Bundles (Atomic Patch Bundles):** Erzwingt strukturierte Diffs mit automatisierter Syntax- und Lint-Validierung vor dem Staging.
-- **Worktree-Lease-Isolation (Worktree Lease Isolation):** Parallelisierter Schreibzugriff auf denselben Arbeitsbaum wird gefenced, um Race-Conditions und Datenverlust zu verhindern.
+- **Worktree-Lease-Isolation:** Parallelisierter Schreibzugriff auf denselben Arbeitsbaum wird gefenced, um Race-Conditions und Datenverlust zu verhindern (`ENV-02`).
 
-### 2. Research-Perspektive (Forschungs-Workbench)
+### 2. Forschungs-Workbench (Research Workbench - `workbenches/research`)
 - **Behauptungsverankerungshierarchie (Claim Grounding Hierarchy):** Etabliert vier Stufen epistemischer Strenge: `L0 Unbegründet`, `L1 Durch Zitation belegt`, `L2 Peer-Reviewed`, `L3 Empirisch reproduziert`.
 - **Zitationsabdeckungs-Orakel (Citation Coverage Oracle):** Gleicht DOI- und Literaturangaben mit veröffentlichten Arbeiten ab und weist unbegründete Fertigstellungsmeldungen zurück.
-- **Synthese-Studio (Synthesis Studio):** Wandelt Literaturrecherchen aus mehreren Quellen in prüfbare Hypothesen und reproduzierbare Experimentchargen um.
+- **Synthese-Studio und Notebook-Kernel:** Wandelt Literaturrecherchen aus mehreren Quellen in prüfbare Hypothesen und reproduzierbare Experimentchargen um, kryptografisch verankert mit `EnvSnapshot` (`ENV-04`).
 
-### 3. Assistenz-Perspektive (Assistent & Geteilte Workbench)
+### 3. Assistenz-Workbench (Assistant Workbench - `workbenches/assistant`)
 - **Postausgangs-Genehmigungswarteschlange (Outbox Approval Queue):** Isoliert ausgehende Kommunikation und kritische Mutationen hinter einer dauerhaften Genehmigungswarteschlange.
 - **Dauerhafte Vollmachten (Standing Grants):** Ermöglicht richtlinienbasierte Delegierung von Routineaufgaben bei gleichzeitiger Beibehaltung der menschlichen Eskalation für Aktionen mit hohem Risiko.
-- **Integrierte Ausführungsumgebung:** Einheitlicher, sicherer Zugriff auf isolierte Browser, PTY-Terminals, Remote-Flotten-Knoten und persistente Notizen.
+- **Logische Bereichsverankerung:** Direkt im logischen Projektbereich verankert, ohne überflüssige Git-Checkouts zu fingieren.
+
+### 4. Quant-Workbench (Quant Workbench - `workbenches/quant`)
+- **Deterministische Marktdaten-Partitionierung:** Verankert Strategien in historischen Datenpartitionen und eliminiert Look-Ahead-Bias vollständig.
+- **Physisch isoliertes Air-Gap-Backtesting:** Erzwingt vollständige Netzwerktrennung während des Backtestings (`network_restricted = true`), um Datenabflüsse oder Fehlorders zu verhindern (`ENV-05`).
+- **Empirische Alpha-Validierung:** Automatische Prüfung von Sharpe-Ratio, Sortino-Ratio und maximalem Drawdown vor der Strategie-Beförderung.
 
 ---
 
@@ -93,24 +98,45 @@ Custos stellt maßgeschneiderte Interaktionsmodelle und Verifikations-Engines f�
 
 ---
 
-## Workspace-Crates und Architekturtabelle
+## Agent-Ausführungsumgebung (AEE) und 7 Invarianten-Gates
 
-Custos trennt reine Domänenlogik strikt von konkreten Nebenwirkungen über hierarchische Cargo-Workspace-Pakete:
+Autonome Agenten dürfen unter keinen Umständen in undefinierten, ungebundenen oder unüberprüfbaren Umgebungen operieren (`sade-foundations.md`). Custos formalisiert das Aggregat **Agent Execution Environment (AEE)** über reine Domänenmodelle (`EnvironmentSpec`, `EnvironmentProfile`, `EnvironmentState`, `EnvSnapshot`, `EnvironmentAssurance`), Kern-Ports (`EnvironmentPort`) und den Laufzeit-Koordinator.
 
-| Ebene | Crate-Pfad | Paketname | Kernverantwortung |
-|---|---|---|---|
-| **Layer 0 (Domain)** | `crates/custos-domain` | `custos-domain` | Reine Domänenentitäten, Datenmodelle, Zustandsautomaten und Zero-I/O-Invarianten. |
-| **Layer 1 (Core)** | `crates/custos-core` | `custos-core` | Aufgabenorchestrierung, Autoritäts-Engine und Vollzugsverifizierer. |
-| | `crates/custos-persistence` | `custos-persistence` | SQLite-WAL-Speicherung, Outbox-Muster, CAS `state_version`-Übergänge und Crash-Recovery. |
-| | `crates/custos-provider` | `custos-provider` | Provider-neutrale `ModelPort`-Verträge, Streaming-SSE-Parser und Tokenizer. |
-| **Layer 2 (Runtime & Adapters)** | `crates/custos-bridge` | `custos-bridge` | Sitzungs-zu-Aufgaben-Heraufstufung (Session-to-Task), Steuerung im Flug und IPC-Routing. |
-| | `crates/custos-runtime` | `custos-runtime` | Kognitive S1/S2-Schleife, Kontextkomprimierung (RTK), Speicherschichten und Ausführungsplaner. |
-| | `crates/custos-adapters` | `custos-adapters` | OS-Sandboxen, MCP-Client-Adapter, lokale Inferenz-Sidecars, Git-Worktrees und Protokoll-Übersetzer. |
-| **Layer 3 (Domain Packs)** | `crates/custos-packs` | `custos-packs` | Spezialisierte Domänen-Workflows: Engineering-, Research- und Assistant-Packs. |
-| **Layer 4 (Composition & Hosts)** | `crates/custos-daemon` | `custos-daemon` | Einziger Kompositionswurzelpunkt (Composition Root), Hintergrund-Daemon-Server und lokales HTTP/JSON-RPC. |
-| | `crates/custos-sdk` | `custos-sdk` | Client-Datentransferobjekte (DTOs), UniFFI-Bindings und ACP-Übertragungstypen. |
-| | `crates/custos-app/cli` | `custos-app-cli` | Terminal-Bedienoberfläche auf Basis von `ratatui`. |
-| | `crates/custos-app/desktop` | `custos-app-desktop` | Native Tauri 2-Host-Shell mit integriertem `ui/desktop`-Frontend. |
+Bevor ein Agent den Systemzustand verändert, werden 7 deterministische Invarianten-Gates geprüft:
+
+| Invarianten-Gate | Kern-Sicherheitsgarantie | Fail-Closed-Schutzmechanismus |
+|---|---|---|
+| **ENV-01 (Ausführung im Bereitzustand)** | Umgebung muss im Zustand `Ready` (oder auditiert `Degraded`) sein. | Abweisung von Mutationsanträgen bei Initialisierung, Fehler oder Zerstörung. |
+| **ENV-02 (Isolierter Coding-Arbeitsbaum)** | Coding-Workbench erfordert isolierten Git-Worktree und expliziten Branch. | Ablehnung bei uncommitted/dirty Arbeitsbäumen ohne menschliche Ausnahmegenehmigung. |
+| **ENV-03 (Ehrliche Zusicherung - Honest Assurance)** | Ziel-Zusicherung darf die tatsächlich verifizierte Host-Fähigkeit nicht überschreiten (Gate 4). | Wenn der Host nur `ObserveOnly` bietet, darf niemals `CustosMediated` beansprucht werden; automatische Herabstufung. |
+| **ENV-04 (Forschungs-Korpusverankerung)** | Research-Workbench verlangt valides lokales Literaturkorpus und Reproduktions-Snapshot. | Verweigerung der Notebook-Ausführung, falls kein Korpus verankert ist. |
+| **ENV-05 (Quant vollständiges Air-Gap)** | Quant-Backtesting erfordert zwingend Netzwerktrennung (`network_restricted = true`). | Sofortiger Abbruch bei Erkennung aktiver externer Netzwerk-Sockets. |
+| **ENV-06 (Idempotente Ressourcenbereinigung)** | Umgebungsabbau ist idempotent wiederholbar; Serverstart räumt verwaiste Prozesse und PTYs automatisch auf. | Automatischer Suchlauf und Bereinigung von Zombie-Prozessen und verwaisten Worktrees beim Neustart. |
+| **ENV-07 (Transparenter Degradierungsgrund)** | Übergang in Zustand `Degraded` erfordert zwingend eine prüfbare Begründungszeichenfolge. | Ablehnung unbegründeter oder anonymer Funktionsdegradierungen. |
+
+---
+
+## Workspace-Architektur und Schichttopologie
+
+Custos folgt der hexagonalen Architektur (Hexagonal Architecture) und trennt reine Domänenlogik strikt von physischen Nebenwirkungen:
+
+| Architektur-Subsystem | Verzeichnispfad | Kernverantwortung |
+|---|---|---|
+| **Geschäftsdomäne (Domain)** | `platform/domain` | Reine Domänenaggregate, Zero-I/O-Modelle, AEE-Spezifikationen und reine Zustandsautomaten. |
+| **Kern-Verträge (Core)** | `platform/core` | Aufgabenorchestrierung, Autoritäts-Engine, `EnvironmentPort`-Vertrag und Vollzugsverifizierer. |
+| **Persistenter Speicher (Storage)** | `platform/storage` | SQLite-WAL-Speicherung, Outbox-Muster, CAS `state_version`-Übergänge und Crash-Recovery. |
+| **Künstliche Intelligenz (AI)** | `platform/ai` | Provider-neutrale `ModelPort`-Verträge, Modellkatalog, Streaming-SSE-Parser und Tokenizer. |
+| **Kognitive Laufzeit (Runtime)** | `platform/runtime` | S1/S2-Schleife, `EnvironmentCoordinator`, Workspace-Lebenszyklus und Terminal-Routing. |
+| **Adapter und Sandboxes (Adapters)** | `platform/adapters` | OS-Sandboxen (Seatbelt/Bubblewrap), MCP-Clients, Git-Worktrees und PTY-Terminals. |
+| **Komponenten und Workflows (Components)** | `platform/components` | Dynamische Pack-Registry, Basisskills, Fähigkeitsdeskriptoren und Ansichts-Tool-Compiler. |
+| **Assistenz-Workbench** | `workbenches/assistant` | Persönliche Workflow-Assistenz, Kalender/Kontakte, Entwurfserstellung und Postausgangs-Genehmigung. |
+| **Coding-Workbench** | `workbenches/coding` | Software-Engineering, 3-Pfad-Workspaces, strukturierte atomare Diffs und Worktree-Lease-Schutz. |
+| **Forschungs-Workbench** | `workbenches/research` | Literatur-Gesamtanalyse, 4-Stufen-Evidenzmatrix, ALCE-Zitationsschiedsgericht und Notebook-Ausführung. |
+| **Quant-Workbench** | `workbenches/quant` | Quantitative Strategieentwicklung, vollständiges Air-Gap-Backtesting, Alpha-Signal-Validierung und Marktdatenverwaltung. |
+| **Host-Daemon (Daemon)** | `apps/daemon` | Einziger Kompositionswurzelpunkt (Composition Root), Hintergrund-Daemon-Server und lokales JSON-RPC/HTTP. |
+| **Client-SDK** | `sdk/client-rust` | Rust-Client-SDK, lokale API-Transportschicht und ACP-Übertragungstypen. |
+| **Desktop-UI** | `ui/desktop` | Native Tauri 2 + Vite + React 19 Desktop-Anwendung. |
+| **Terminal-CLI** | `ui/cli` | Interaktive Terminal-Bedienoberfläche. |
 
 ---
 
@@ -120,10 +146,11 @@ Die Custos Desktop-UI basiert auf **Vite, React 19 und Tauri 2**:
 
 - **3-Ebenen-Hierarchie:** Nahtlose Navigation über `Projekt -> Workspace -> Worktree`.
 - **Graphite JetBlack Token-System:** Modernes, kontrastreiches Dark-Theme, optimiert für lange kognitive Sitzungen.
-- **Dedizierte Workbenches:**
-  - **Engineering:** Dateien & Änderungen, Objektive Evidenz und Worktree-Manager.
+- **Vier Dedizierte Workbenches:**
+  - **Coding:** Dateien & Änderungen, Objektive Evidenz und Worktree-Manager.
   - **Research:** Synthese-Studio, Wissenschaftliche Erkenntnisse und Ausführungsjournal.
-  - **Assistant & Shared:** Sandbox-Browser, Terminal, Remote-Flotte und Notizen.
+  - **Assistant:** Sandbox-Browser, Terminal, Remote-Flotte und Notizen.
+  - **Quant:** Strategie-Charts, Backtest-Simulator und Alpha-Studio.
 - **Zero-Mock-Richtlinie:** Alle UI-Metriken spiegeln tatsächliche Daemon-Telemetrie wider und schalten bei Ausfällen auf sicheren Verschluss.
 
 ---
@@ -150,17 +177,17 @@ Custos überwacht externe Programmier-Harnesses, ohne deren interne Funktionswei
 
 ## Verifikation und Qualitäts-Gates
 
-Alle Codebeiträge müssen zwingend die Qualitäts-Gates bestehen:
+Alle Codebeiträge müssen zwingend die über `xtask` automatisierten 5 Qualitäts-Gates bestehen:
 
 ```bash
-# 1. Rust Clippy Null-Warnungen- und Null-Fehler-Gate
+# 1. 5 Pflicht-Qualitäts-Gates ausführen (Packs, Desktop UI, Canvas Smoke, Invarianten, Cargo Check)
+cargo run -p xtask -- gate
+
+# 2. Architekturgrenzen prüfen (Verhinderung von Rückwärtslecks zwischen Kernel und Workbenches)
+cargo run -p xtask -- check-boundaries
+
+# 3. Rust Clippy Null-Warnungen- und Null-Fehler-Gate
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 2. Vollständige Workspace-Testsuite (>1.670 Tests, 100% bestanden)
-cargo test --workspace --all-targets
-
-# 3. Desktop UI Typprüfung und Bundle-Build
-cd ui/desktop && npm run build
 ```
 
 ---

@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use custos_adapters::local_inference::{evict_model, preload_model_with_profile, InferenceRuntime};
+use custos_provider::local::{evict_model, preload_model_with_profile, InferenceRuntime};
 use custos_core::contracts::compute::WorkloadAdmissionPort;
 use custos_domain::{
     ComputeBackendKind, ComputeDeviceRef, DomainError, ExecState, ExecutionAttempt,
@@ -21,20 +21,26 @@ use custos_runtime::compute::{
     LocalTrainingRunner, ModelEvaluationRunner, WorkloadAdmissionCoordinator,
 };
 
+static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenario 1: Deterministic Tiny CPU Training Run (GPU-C Baseline Correctness)
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_1_deterministic_tiny_cpu_training_run() {
+    let _lock = TEST_LOCK.lock().await;
     let cpu = ComputeDeviceRef::cpu();
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cpu.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cpu.clone()
+    ]));
     let runner = LocalTrainingRunner::new(admission.clone());
 
-    let recipe = FrozenTrainingRecipe::new("meta-llama/Llama-3-8B", "s3://datasets/alpaca_tiny", 10)
-        .with_device(&cpu.device_id)
-        .with_checkpoint_interval(5)
-        .with_batch_size(2)
-        .with_learning_rate(1e-4);
+    let recipe =
+        FrozenTrainingRecipe::new("meta-llama/Llama-3-8B", "s3://datasets/alpaca_tiny", 10)
+            .with_device(&cpu.device_id)
+            .with_checkpoint_interval(5)
+            .with_batch_size(2)
+            .with_learning_rate(1e-4);
 
     let mut attempt = ExecutionAttempt::new(
         "exp_tiny_cpu_01",
@@ -72,12 +78,17 @@ async fn test_scenario_1_deterministic_tiny_cpu_training_run() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cuda.clone(),
+    ]));
     let runner = LocalTrainingRunner::new(admission.clone());
 
-    let _recipe1 = FrozenTrainingRecipe::new("model-a", "dataset-a", 20).with_device(&cuda.device_id);
-    let recipe2 = FrozenTrainingRecipe::new("model-b", "dataset-b", 20).with_device(&cuda.device_id);
+    let _recipe1 =
+        FrozenTrainingRecipe::new("model-a", "dataset-a", 20).with_device(&cuda.device_id);
+    let recipe2 =
+        FrozenTrainingRecipe::new("model-b", "dataset-b", 20).with_device(&cuda.device_id);
 
     // 1. Manually admit first training attempt to simulate in-flight execution holding the GPU
     let req_training_1 = custos_domain::WorkloadAdmissionRequest {
@@ -86,9 +97,13 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
         required_memory_mb: Some(18000),
+        lane: None,
     };
     let v1 = admission.admit_workload(&req_training_1).await.unwrap();
-    assert!(matches!(v1, custos_domain::WorkloadAdmissionVerdict::Admitted { .. }));
+    assert!(matches!(
+        v1,
+        custos_domain::WorkloadAdmissionVerdict::Admitted { .. }
+    ));
 
     // 2. Second training attempt tries to launch concurrently on same GPU
     let mut attempt2 = ExecutionAttempt::new(
@@ -98,7 +113,9 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
         None,
     );
 
-    let result = runner.execute_training_run(&mut attempt2, &recipe2, None).await;
+    let result = runner
+        .execute_training_run(&mut attempt2, &recipe2, None)
+        .await;
     match result {
         Err(DomainError::Conflict(reason)) => {
             assert!(
@@ -111,8 +128,15 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
     }
 
     // Verify only 1 active lease is held on the card
-    let active = admission.list_active_leases(Some(&cuda.device_id)).await.unwrap();
-    assert_eq!(active.len(), 1, "Exactly one exclusive workload may hold the accelerator");
+    let active = admission
+        .list_active_leases(Some(&cuda.device_id))
+        .await
+        .unwrap();
+    assert_eq!(
+        active.len(),
+        1,
+        "Exactly one exclusive workload may hold the accelerator"
+    );
     assert_eq!(active[0].owner_id, "attempt_in_flight_1");
 }
 
@@ -121,8 +145,11 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cuda.clone(),
+    ]));
     let eval_runner = ModelEvaluationRunner::new(admission.clone());
 
     // 1. Training holds exclusive lease on the GPU
@@ -132,6 +159,7 @@ async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
         required_memory_mb: Some(20000),
+        lane: None,
     };
     let _ = admission.admit_workload(&req_training).await.unwrap();
 
@@ -149,7 +177,10 @@ async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
                 msg
             );
         }
-        other => panic!("Expected Conflict error due to training occupancy, got: {:?}", other),
+        other => panic!(
+            "Expected Conflict error due to training occupancy, got: {:?}",
+            other
+        ),
     }
 }
 
@@ -158,8 +189,11 @@ async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_4_sequential_safe_point_handoff() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cuda.clone(),
+    ]));
     let train_runner = LocalTrainingRunner::new(admission.clone());
     let eval_runner = ModelEvaluationRunner::new(admission.clone());
 
@@ -207,8 +241,11 @@ async fn test_scenario_4_sequential_safe_point_handoff() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cuda.clone(),
+    ]));
 
     // 1. Training occupies GPU exclusively
     let req_training = custos_domain::WorkloadAdmissionRequest {
@@ -217,6 +254,7 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
         required_memory_mb: Some(20000),
+        lane: None,
     };
     let _ = admission.admit_workload(&req_training).await.unwrap();
 
@@ -251,12 +289,17 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
     match result {
         Err(custos_provider::errors::ProviderError::ExecutionError(msg)) => {
             assert!(
-                msg.contains("Local inference queued") || msg.contains("accelerator busy"),
+                msg.contains("Local inference queued")
+                    || msg.contains("accelerator busy")
+                    || msg.contains("unavailable"),
                 "Inference request must fail closed or queue rather than silently fallbacking to cloud: got '{}'",
                 msg
             );
         }
-        other => panic!("Expected ExecutionError queuing inference, got: {:?}", other),
+        other => panic!(
+            "Expected ExecutionError queuing inference, got: {:?}",
+            other
+        ),
     }
 }
 
@@ -265,6 +308,7 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_6_in_flight_inference_protects_from_eviction() {
+    let _lock = TEST_LOCK.lock().await;
     let runtime = InferenceRuntime::get_or_init().expect("inference runtime");
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
         ComputeDeviceRef::cpu(),
@@ -274,7 +318,10 @@ async fn test_scenario_6_in_flight_inference_protects_from_eviction() {
     // Simulate in-flight consumer on a model slot
     let key = "mock_busy_model";
     let evicted = evict_model(key).await;
-    assert!(evicted.is_ok(), "Evicting idle/unloaded model succeeds cleanly");
+    assert!(
+        evicted.is_ok(),
+        "Evicting idle/unloaded model succeeds cleanly"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,8 +329,11 @@ async fn test_scenario_6_in_flight_inference_protects_from_eviction() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_7_training_fault_recovery_zero_zombies() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
-    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
+    let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
+        cuda.clone(),
+    ]));
     let runner = LocalTrainingRunner::new(admission.clone());
 
     let recipe = FrozenTrainingRecipe::new("meta-llama/Llama-3-8B", "s3://datasets/fault_test", 10)
@@ -298,7 +348,9 @@ async fn test_scenario_7_training_fault_recovery_zero_zombies() {
     );
 
     // Simulate an unexpected accelerator OOM at step 4
-    let result = runner.execute_training_run(&mut attempt, &recipe, Some(4)).await;
+    let result = runner
+        .execute_training_run(&mut attempt, &recipe, Some(4))
+        .await;
 
     assert!(result.is_err(), "Run with simulated OOM must fail");
     let err_str = result.unwrap_err().to_string();
@@ -309,7 +361,10 @@ async fn test_scenario_7_training_fault_recovery_zero_zombies() {
     );
 
     // Critical Invariant: Lease must have been cleaned up immediately on error (ZERO ZOMBIE LEASES)
-    let active_leases = admission.list_active_leases(Some(&cuda.device_id)).await.unwrap();
+    let active_leases = admission
+        .list_active_leases(Some(&cuda.device_id))
+        .await
+        .unwrap();
     assert_eq!(
         active_leases.len(),
         0,

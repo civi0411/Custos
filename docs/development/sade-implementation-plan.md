@@ -40,7 +40,7 @@ Every claim below is tagged:
 | V16 | **UI**: screen and workbench lens are synchronised in two opposite effects. Effect A (workbench -> screen) at `ScreenContext.tsx:126-184`; effect B (screen -> workbench) at `:454-461`. Lens writers: `AppTopBar.tsx:310`, `app/dashboard/page.tsx:106`, `app/history/page.tsx:78`. Both effects also re-run on every `screens` change (including `lastUsedAt` writes). | Read |
 | V17 | **UI**: `ActiveWorkbench` is declared inside a shell component (`components/shell/AppHeader.tsx:36`) and imported as a type by `OrcaTabbedContainer`, `TabQuickLaunchMenu`, `ConversationPane`, `AgentHarnessSelector`. Domain types depend on a presentation file. | grep | Read |
 | V18 | **UI**: `JobActivityDock.tsx` has zero importers and is not exported from `components/shell/index.ts`. `StatusBar.tsx` and `AppStatusBar.tsx` coexist; only `AppStatusBar` is mounted (`app/layout.tsx:85`). | grep | Read |
-| V19 | **UI**: `npx tsc --noEmit` exits 0 and `node --test tools/canvas-smoke.mjs` reports 29 pass / 0 fail on the current tree. | commands | Ran |
+| V19 | **UI**: `npx tsc --noEmit` exits 0 and `node --test tests/desktop/canvas-smoke.mjs` reports 29 pass / 0 fail on the current tree. | commands | Ran |
 
 Not yet reproduced (Unverified): the lens/screen effect race described in section 3; zombie-claim behaviour under
 interleaved release/mark-dispatched; peak memory under notebook output flood.
@@ -78,7 +78,7 @@ cargo metadata --no-deps --format-version 1 --offline
 cargo test -p custos-runtime --lib --offline
 cargo test -p custos-domain -p custos-core -p custos-persistence --lib --offline
 npm --prefix ui/desktop run build
-node --test tools/canvas-smoke.mjs
+node --test tests/desktop/canvas-smoke.mjs
 git diff --check
 ```
 
@@ -140,7 +140,7 @@ Done when: no second copy of any shell component exists; future `core/` paths ar
 ### A2 - One owner for screen/workbench synchronisation
 
 Maps to: V16. Files: `ui/desktop/src/context/ScreenContext.tsx`, `ui/desktop/src/context/AppContext.tsx`
-(read-only unless noted), new `ui/desktop/src/context/screenReconcile.ts`, `tools/canvas-smoke.mjs`.
+(read-only unless noted), new `ui/desktop/src/context/screenReconcile.ts`, `tests/desktop/canvas-smoke.mjs`.
 
 Design (data flows one way):
 - `activeWorkbench` (AppContext) stays the lens intent, persisted under `custos.workspace.mode.v2` as today.
@@ -154,7 +154,7 @@ Design (data flows one way):
 - Hydration guard: while `hydratedKey !== storageKey` (`ScreenContext.tsx:120`), the reconciler returns "keep".
 
 Tests (extend the existing harness; it already transpiles pure TS through `typescript` and `node:test`, so no new
-dependency): in `tools/canvas-smoke.mjs`, load `screenReconcile.ts` the same way `canvas.ts` is loaded and add:
+dependency): in `tests/desktop/canvas-smoke.mjs`, load `screenReconcile.ts` the same way `canvas.ts` is loaded and add:
 1. Lens change with an inconsistent active screen selects the most recently used screen of that workbench.
 2. Lens change when no screen exists for the workbench returns "create default" with the correct tab set
    (`conversation+terminal`, `conversation+lab`, `conversation+tasks`).
@@ -163,7 +163,7 @@ dependency): in `tools/canvas-smoke.mjs`, load `screenReconcile.ts` the same way
 5. Regression for V16: simulate lens `engineering -> research` in the same commit as a `screens` replacement; the final
    state must be research, not the old workbench. Write it against the old two-effect semantics first to show it fails.
 
-Verify: `node --test tools/canvas-smoke.mjs`; `npm run build`; manual check: click each of the three
+Verify: `node --test tests/desktop/canvas-smoke.mjs`; `npm run build`; manual check: click each of the three
 lenses from the top bar, from Dashboard and from History; switch project; reload; confirm lens, screen and tab set agree
 each time.
 Rollback: revert PR; persisted screen layout format is unchanged, so no data repair.
@@ -186,8 +186,8 @@ Tests: `tsc`, build, smoke. Rollback: revert (pure move/delete).
 
 Maps to: V13 (UI half). Files: `.github/workflows/ui.yml` (new).
 Job: `actions/setup-node` (`package.json` has no `engines` field: pin the Node version used for local builds and record it in the workflow), `npm ci`, `npx tsc --noEmit`,
-`npm run build`, `node --test tools/canvas-smoke.mjs`. No new dependency. Path filter on `ui/desktop/**` and
-`tools/canvas-smoke.mjs`. Both `package-lock.json` and `pnpm-lock.yaml` exist: pick the one the team uses and state it in
+`npm run build`, `node --test tests/desktop/canvas-smoke.mjs`. No new dependency. Path filter on `ui/desktop/**` and
+`tests/desktop/canvas-smoke.mjs`. Both `package-lock.json` and `pnpm-lock.yaml` exist: pick the one the team uses and state it in
 the workflow; do not run both.
 Done when: a PR that breaks type-check or canvas invariants is red.
 
@@ -453,7 +453,7 @@ implemented / experimental / unsupported.
    Alternative: keep a shared generated list. Recommended: daemon-owned, since the daemon is the authority.
 4. **B1 scope**: make the whole `cargo test --workspace` blocking, or only the critical crate set if the workspace is not
    green today. Decided after the local run.
-5. **UI regression tests** use the existing `node:test` harness (`tools/canvas-smoke.mjs`); no test framework added.
+5. **UI regression tests** use the existing `node:test` harness (`tests/desktop/canvas-smoke.mjs`); no test framework added.
    Component-level interaction tests would need a new dependency and are out of scope unless requested.
 6. **Documentation language.** `.agents/rules/documentation_language.md` requires English under `docs/`; the master plan
    and several neighbours are Vietnamese. This file follows the rule. Translating or mirroring the rest under

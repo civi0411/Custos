@@ -16,3 +16,6 @@ chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+custos-runtime = { workspace = true }

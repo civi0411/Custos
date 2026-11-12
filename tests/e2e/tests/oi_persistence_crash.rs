@@ -8,8 +8,8 @@
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::oi::OiPlannerPort;
 use custos_core::contracts::storage::{DecisionPort, ReplanPort, WorkflowRevisionPort};
-use custos_core::decision::DecisionSnapshotExtractor;
-use custos_core::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
+use custos_runtime::oi::DecisionSnapshotExtractor;
+use custos_runtime::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
 use custos_domain::{
     DecisionRecord, ExecutionTopology, NodePlacement, ReplanBrief, ReplanRecord, ReplanTrigger,
     RevisionNode, Task, TaskContract, WorkflowRevision,

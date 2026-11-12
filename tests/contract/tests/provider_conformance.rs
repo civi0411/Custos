@@ -1,6 +1,6 @@
 //! Provider Contract Conformance Tests
 
-use custos_adapters::providers::fake::FakeProvider;
+use custos_provider::cloud::fake::FakeProvider;
 use custos_provider::assert_provider_conformance;
 
 #[tokio::test]

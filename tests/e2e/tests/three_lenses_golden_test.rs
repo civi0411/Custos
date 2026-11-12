@@ -8,8 +8,7 @@
 //! 5. Project/workspace switch preserves history, drafts, and context scope without leaking active runs or permissions.
 
 use custos_domain::{
-    ConversationTurn, DomainError, SessionMode, SessionStatus, TurnActorKind,
-    WorkbenchLens,
+    ConversationTurn, DomainError, SessionMode, SessionStatus, TurnActorKind, WorkbenchLens,
 };
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::session::SessionManager;
@@ -31,7 +30,10 @@ async fn test_g08_same_chat_across_three_lenses_retains_unified_journal() {
         .await
         .expect("user message appended");
     session_manager
-        .append_assistant_message(&session.id, "I propose analyzing the research papers first.")
+        .append_assistant_message(
+            &session.id,
+            "I propose analyzing the research papers first.",
+        )
         .await
         .expect("assistant message appended");
 
@@ -60,7 +62,7 @@ async fn test_g08_same_chat_across_three_lenses_retains_unified_journal() {
         .record_tool_call(
             &session.id,
             "read_file",
-            r#"{"path": "crates/custos-core/src/lib.rs"}"#,
+            r#"{"path": "platform/core/src/lib.rs"}"#,
         )
         .await
         .expect("tool call recorded in coding lens");
@@ -72,7 +74,11 @@ async fn test_g08_same_chat_across_three_lenses_retains_unified_journal() {
         .expect("get unified journal");
 
     // Verify all turns and lens transitions exist in chronological order
-    let types: Vec<&str> = journal.entries.iter().map(|e| e.entry_type.as_str()).collect();
+    let types: Vec<&str> = journal
+        .entries
+        .iter()
+        .map(|e| e.entry_type.as_str())
+        .collect();
     assert!(types.contains(&"user_message"));
     assert!(types.contains(&"assistant_message"));
     assert!(types.contains(&"workbench_opened"));
@@ -145,16 +151,17 @@ async fn test_g08_lens_switch_idempotency_and_no_permission_leakage() {
 
 #[tokio::test]
 async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
-    use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
+    use custos_runtime::bridge::BridgeService;
     use custos_core::TaskService;
-    use custos_bridge::BridgeService;
+    use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let assistant = Arc::new(store.assistant().clone());
-    let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
+    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc()));
+    let dispatcher =
+        LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
 
     let session_a = "session_alpha";
     let session_b = "session_beta";
@@ -166,13 +173,15 @@ async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
     };
 
     // 1. Create and save draft under Session A
-    let create_resp = dispatcher.handle_request(request(serde_json::json!({
-        "id": "draft_001",
-        "title": "Executive Summary",
-        "kind": "document",
-        "content": "Initial draft text for Alpha",
-        "session_id": session_a,
-    }))).await;
+    let create_resp = dispatcher
+        .handle_request(request(serde_json::json!({
+            "id": "draft_001",
+            "title": "Executive Summary",
+            "kind": "document",
+            "content": "Initial draft text for Alpha",
+            "session_id": session_a,
+        })))
+        .await;
     assert!(create_resp.is_success(), "{:?}", create_resp.error);
     let draft_a = create_resp.result.unwrap();
     assert_eq!(draft_a["id"], "draft_001");
@@ -180,18 +189,23 @@ async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
     assert_eq!(draft_a["status"], "draft");
 
     // 2. Attempting to hijack or update Session A's draft under Session B MUST BE REJECTED
-    let hijack_resp = dispatcher.handle_request(request(serde_json::json!({
-        "id": "draft_001",
-        "title": "Executive Summary Hijacked",
-        "kind": "document",
-        "content": "Malicious text from Beta",
-        "session_id": session_b,
-    }))).await;
+    let hijack_resp = dispatcher
+        .handle_request(request(serde_json::json!({
+            "id": "draft_001",
+            "title": "Executive Summary Hijacked",
+            "kind": "document",
+            "content": "Malicious text from Beta",
+            "session_id": session_b,
+        })))
+        .await;
     assert!(
         !hijack_resp.is_success(),
         "Cross-session draft modification must be strictly rejected"
     );
-    assert!(hijack_resp.error.unwrap().contains("Draft scope cannot be changed"));
+    assert!(hijack_resp
+        .error
+        .unwrap()
+        .contains("Draft scope cannot be changed"));
 
     // 3. Verify Session A's draft was NOT modified
     let fetched = assistant
@@ -204,16 +218,17 @@ async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
 
 #[tokio::test]
 async fn test_g08_draft_payload_lock_guarantees_immutability_after_review() {
-    use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
+    use custos_runtime::bridge::BridgeService;
     use custos_core::TaskService;
-    use custos_bridge::BridgeService;
+    use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let assistant = Arc::new(store.assistant().clone());
-    let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
+    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc()));
+    let dispatcher =
+        LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
 
     let session_id = "session_locked";
     let request = |params| ApiRequest {
@@ -224,13 +239,15 @@ async fn test_g08_draft_payload_lock_guarantees_immutability_after_review() {
 
     // 1. Create draft
     let initial_content = "Approved specification content: version 1.0";
-    let created = dispatcher.handle_request(request(serde_json::json!({
-        "id": "draft_spec",
-        "title": "Spec v1",
-        "kind": "document",
-        "content": initial_content,
-        "session_id": session_id,
-    }))).await;
+    let created = dispatcher
+        .handle_request(request(serde_json::json!({
+            "id": "draft_spec",
+            "title": "Spec v1",
+            "kind": "document",
+            "content": initial_content,
+            "session_id": session_id,
+        })))
+        .await;
     assert!(created.is_success(), "{:?}", created.error);
 
     // 2. Approve draft with payload lock

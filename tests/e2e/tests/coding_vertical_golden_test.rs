@@ -62,7 +62,11 @@ async fn test_g09_normal_path_bugfix_in_real_repo_with_matching_diff_metadata() 
     // Create src/calculator.rs with bug
     std::fs::create_dir_all(ws_path.join("src")).unwrap();
     let calc_file = ws_path.join("src/calculator.rs");
-    std::fs::write(&calc_file, "pub fn add(a: i32, b: i32) -> i32 {\n    a - b\n}\n").unwrap();
+    std::fs::write(
+        &calc_file,
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a - b\n}\n",
+    )
+    .unwrap();
 
     let lib_file = ws_path.join("src/lib.rs");
     std::fs::write(&lib_file, "pub mod calculator;\n").unwrap();
@@ -109,7 +113,10 @@ async fn test_g09_normal_path_bugfix_in_real_repo_with_matching_diff_metadata() 
     .expect("patch_preview succeeds");
     let preview_output = preview_receipt.output_data.expect("output_data present");
     assert_eq!(preview_output["simulated"], true);
-    assert!(preview_output["preview"].as_str().unwrap().contains("add_preview"));
+    assert!(preview_output["preview"]
+        .as_str()
+        .unwrap()
+        .contains("add_preview"));
 
     // Verify disk was NOT mutated by preview
     let unmutated = std::fs::read_to_string(&calc_file).unwrap();
@@ -169,14 +176,27 @@ async fn test_g09_fault_path_user_bytes_preserved_under_dirty_repo() {
 
     // Initial commit
     std::fs::create_dir_all(ws_path.join("src")).unwrap();
-    std::fs::write(ws_path.join("src/lib.rs"), "pub fn stable() -> bool { true }\n").unwrap();
-    Command::new("git").current_dir(ws_path).args(["add", "."]).output().unwrap();
-    Command::new("git").current_dir(ws_path).args(["commit", "-m", "Base commit"]).output().unwrap();
+    std::fs::write(
+        ws_path.join("src/lib.rs"),
+        "pub fn stable() -> bool { true }\n",
+    )
+    .unwrap();
+    Command::new("git")
+        .current_dir(ws_path)
+        .args(["add", "."])
+        .output()
+        .unwrap();
+    Command::new("git")
+        .current_dir(ws_path)
+        .args(["commit", "-m", "Base commit"])
+        .output()
+        .unwrap();
 
     // User creates uncommitted dirty files in the repo:
     // File 1: Modified existing tracked file
     let user_scratch = ws_path.join("src/user_scratch.rs");
-    let user_scratch_content = "pub fn work_in_progress() -> &'static str {\n    \"my uncommitted secret notes\"\n}\n";
+    let user_scratch_content =
+        "pub fn work_in_progress() -> &'static str {\n    \"my uncommitted secret notes\"\n}\n";
     std::fs::write(&user_scratch, user_scratch_content).unwrap();
 
     // File 2: Untracked user notes file
@@ -198,9 +218,13 @@ async fn test_g09_fault_path_user_bytes_preserved_under_dirty_repo() {
     )
     .with_task_id("task_fix");
     let dummy_permit = make_permit("task_fix", &agent_fix_intent.id);
-    custos_core::contracts::sandbox::SandboxPort::execute(&adapter, &agent_fix_intent, &dummy_permit)
-        .await
-        .unwrap();
+    custos_core::contracts::sandbox::SandboxPort::execute(
+        &adapter,
+        &agent_fix_intent,
+        &dummy_permit,
+    )
+    .await
+    .unwrap();
 
     // ASSERTION QUYẾT ĐỊNH (G09): User bytes MUST BE PRESERVED!
     let scratch_after = std::fs::read_to_string(&user_scratch).unwrap();
@@ -230,7 +254,14 @@ async fn test_g09_fault_path_user_bytes_preserved_under_dirty_repo() {
     exec_ws.status = WorkspaceStatus::Ready;
     let dirty = ws_provider.inspect_dirty(&exec_ws).await.unwrap();
     assert!(dirty.modified_files.contains(&"src/lib.rs".to_string()));
-    assert!(dirty.untracked_files.contains(&"src/user_scratch.rs".to_string()) || dirty.modified_files.contains(&"src/user_scratch.rs".to_string()));
+    assert!(
+        dirty
+            .untracked_files
+            .contains(&"src/user_scratch.rs".to_string())
+            || dirty
+                .modified_files
+                .contains(&"src/user_scratch.rs".to_string())
+    );
     assert!(dirty.untracked_files.contains(&"user_todo.txt".to_string()));
 }
 
@@ -305,9 +336,13 @@ async fn test_g09_path_traversal_and_symlink_escape_denied() {
     )
     .with_task_id("task_esc");
     let dummy_permit = make_permit("task_esc", &escape_intent.id);
-    let receipt = custos_core::contracts::sandbox::SandboxPort::execute(&adapter, &escape_intent, &dummy_permit)
-        .await
-        .expect("SandboxPort returns receipt even on failure");
+    let receipt = custos_core::contracts::sandbox::SandboxPort::execute(
+        &adapter,
+        &escape_intent,
+        &dummy_permit,
+    )
+    .await
+    .expect("SandboxPort returns receipt even on failure");
     assert_eq!(
         receipt.status,
         ReceiptStatus::Failure,

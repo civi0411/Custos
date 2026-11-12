@@ -5,15 +5,14 @@
 //! 2. `security_containment_and_rejection`: Containment traversal denial, risk authorization gates, failure receipts.
 //! 3. `daemon_proof_closure_completion`: Process-level proof closure gate requiring verified evidence bundles.
 
-use custos_core::capability::{DeterministicGate, ToolGate};
+use custos_core::contracts::ToolGate;
 use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_core_domain::{
+use custos_testkit::DeterministicGate;
+use custos_domain::{
     Action, ContractEvidence, DomainError, EvidenceKind, ReceiptStatus, RiskLevel, TaskContract,
     TaskStatus, VerificationClaim,
 };
-use custos_daemon::custos_local_api;
-use custos_domain as custos_core_domain;
-use custos_local_api::{LocalApiClient, ProcessTransport};
+use custos_sdk::local_api::{LocalApiClient, ProcessTransport};
 use std::path::{Path, PathBuf};
 
 fn resolve_daemon_binary() -> PathBuf {

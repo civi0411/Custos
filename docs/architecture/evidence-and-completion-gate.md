@@ -55,7 +55,7 @@ pub enum EvidenceKind {
 
 ## 2. The Completion Gate
 
-The `CompletionGate` is an independent verification module within `crates/custos-core`. It is the **sole component** with authority to transition a task from `Running` to `Succeeded`.
+The `CompletionGate` is an independent verification module within `platform/core` (`custos-core`). It is the **sole component** with authority to transition a task from `Running` to `Succeeded`.
 
 ```mermaid
 flowchart TD

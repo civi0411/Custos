@@ -6,7 +6,7 @@
 //! - `graph_runtime_execution`: Validates full execution through GraphRuntime & WorkerExecutor.
 
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_core::decision::DecisionSnapshotExtractor;
+use custos_runtime::oi::DecisionSnapshotExtractor;
 use custos_domain::oi::DecisionSnapshot;
 use custos_domain::task::TaskContract;
 use custos_persistence::SqliteTaskStore;
@@ -75,7 +75,7 @@ mod engine_planning_overhead {
 mod admissibility_and_compilation {
     use super::*;
     use custos_core::contracts::oi::OiPlannerPort;
-    use custos_core::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
+    use custos_runtime::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
     use custos_domain::workflow::{RevisionNode, WorkflowRevision};
     use custos_runtime::oi::engine::OiEngine;
     use custos_runtime::workflow::revision_loader::RevisionLoader;

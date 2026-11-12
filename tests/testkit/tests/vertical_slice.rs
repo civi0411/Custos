@@ -2,7 +2,6 @@
 //! Kernel -> Context Compiler -> Model -> Authority -> Sandbox -> Outbox -> Evidence -> Kernel
 //! plus the negative paths that Custos.md's invariants demand.
 
-use custos_core::context::{CompileContextRequest, ContextCompiler};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::{
     KernelPort, MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxPort,
@@ -14,6 +13,7 @@ use custos_domain::{
 };
 use custos_provider::request::ProviderRequest;
 use custos_provider::ModelProvider;
+use custos_runtime::context::{CompileContextRequest, ContextCompiler};
 use custos_testkit::Harness;
 
 fn exec_intent(task_id: &str, risk: RiskLevel) -> ActionIntent {
@@ -55,7 +55,10 @@ async fn vertical_slice_links_all_ports() {
 
     // 3. Context Compiler (Vĩ): 8-step pipeline produces a sealed ContextPack
     let mut files = std::collections::HashMap::new();
-    files.insert("src/lib.rs".into(), "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into());
+    files.insert(
+        "src/lib.rs".into(),
+        "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into(),
+    );
     let pack = ContextCompiler::with_memory_files(&h.workspace, files)
         .unwrap()
         .compile(&CompileContextRequest {
@@ -262,6 +265,50 @@ async fn completion_is_refused_without_required_evidence() {
         .complete_task(&task.id, "done".into(), vec![passing])
         .await
         .is_ok());
+}
+
+#[tokio::test]
+async fn completion_rejects_foreign_task_evidence() {
+    let h = Harness::new();
+    let task_a = h
+        .kernel
+        .create_task_with_contract("task_a".into(), contract_requiring_test_result())
+        .await
+        .unwrap();
+    h.kernel
+        .transition_task(&task_a.id, TaskStatus::Queued)
+        .await
+        .unwrap();
+    h.kernel
+        .transition_task(&task_a.id, TaskStatus::Running)
+        .await
+        .unwrap();
+
+    let task_b = h.kernel.create_task("task_b".into()).await.unwrap();
+
+    // Verify passing evidence for task_b
+    let passing_b = h
+        .kernel
+        .verify_evidence(&EvidenceBundle::new(
+            &task_b.id,
+            "command_exit_code",
+            "Tests pass for task_b",
+            serde_json::json!({ "exit_code": 0 }),
+        ))
+        .await
+        .unwrap();
+    assert!(passing_b.passed);
+    assert_eq!(passing_b.task_id, task_b.id);
+
+    // Attempting to complete task_a using task_b's evidence MUST fail proof closure (F01)
+    let res = h
+        .kernel
+        .complete_task(&task_a.id, "done".into(), vec![passing_b])
+        .await;
+    assert!(
+        res.is_err(),
+        "completion gate must strictly reject evidence bound to a foreign task (F01 fix)"
+    );
 }
 
 #[tokio::test]

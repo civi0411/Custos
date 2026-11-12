@@ -57,24 +57,29 @@ flowchart LR
 
 ---
 
-## 三大专业领域视图
+## 四大专业领域工作台 (Vertical Workbenches)
 
-Custos 为不同认知领域提供定制的交互模型与验证引擎：
+Custos 为不同认知领域提供定制的交互模型、领域模型与验证引擎：
 
-### 1. 工程视图 (Engineering Lens - 编程工作台)
+### 1. 编程工作台 (Coding Workbench - `workbenches/coding`)
 - **三路执行工作区 (3-Path Workspaces)：** 严格隔离标准仓库 (canonical repo)、暂存分支 (staging fork) 与验证沙箱。
 - **原子补丁包 (Atomic Patch Bundles)：** 在暂存前对结构化 Diff 强制执行自动语法校验与 Lint 检查。
-- **工作树租约隔离 (Worktree Lease Isolation)：** 对同一工作树的并发写操作施加栅栏保护，杜绝竞态条件与数据丢失。
+- **工作树租约隔离 (Worktree Lease Isolation)：** 对同一工作树的并发写操作施加栅栏保护，杜绝竞态条件与数据丢失 (`ENV-02`)。
 
-### 2. 研究视图 (Research Lens - 科研工作台)
+### 2. 科研工作台 (Research Workbench - `workbenches/research`)
 - **论断溯源层级 (Claim Grounding Hierarchy)：** 确立四层认知严密性体系：`L0 未溯源`、`L1 文献支撑`、`L2 同行评审`、`L3 实证复现`。
 - **引用覆盖率仲裁机 (Citation Coverage Oracle)：** 严格对照已发表论文的 DOI/文献，拒绝模型的自言自语式完成。
-- **综合演练室 (Synthesis Studio)：** 将多来源文献调研转化为可检验的假设与可复现的实验批次。
+- **综合演练室与 Notebook 内核：** 将多来源文献调研转化为可检验的假设与可复现的实验批次，并与密码学 `EnvSnapshot` 锚定 (`ENV-04`)。
 
-### 3. 助理视图 (Assistant Lens - 个人助理与通用工作台)
+### 3. 助理工作台 (Assistant Workbench - `workbenches/assistant`)
 - **发件箱审批队列 (Outbox Approval Queue)：** 对外发送通信与高危外部修改强制暂存在持久的发件箱中等待审批。
 - **常备授权规则 (Standing Grants)：** 支持对常规例行任务进行基于策略的委托，同时对高危操作保留人工升级通道。
-- **全集成操作环境：** 统一安全接入沙箱浏览器、PTY 终端、远程服务器机群与持久化笔记。
+- **逻辑作用域锚定：** 直接锚定在项目的逻辑作用域上，不伪造任何多余的 Git 检出。
+
+### 4. 量化工作台 (Quant Workbench - `workbenches/quant`)
+- **市场数据确定性分区：** 将策略与确定性的历史数据分区锚定，彻底杜绝未来函数 (Look-ahead bias)。
+- **物理离线沙箱回测 (Air-Gap)：** 回测期间强制切断网络连接 (`network_restricted = true`)，严防策略泄露或意外实盘报单 (`ENV-05`)。
+- **Alpha 策略实证检验：** 在策略晋升前自动化评估夏普比率、索提诺比率及最大回撤指标。
 
 ---
 
@@ -93,24 +98,45 @@ Custos 为不同认知领域提供定制的交互模型与验证引擎：
 
 ---
 
-## 工作区 Crates 与架构拓扑
+## 智能体执行环境 (AEE) 与 7 大不变量门禁
 
-Custos 严格划分纯业务领域逻辑与外部副作用，划分为以下分层 Cargo 包：
+自主智能体绝不允许在空虚、未锚定或不可审计的环境中运行 (`sade-foundations.md`)。Custos 形式化定义了 **智能体执行环境 (Agent Execution Environment - AEE)** 聚合，跨越纯领域模型 (`EnvironmentSpec`, `EnvironmentProfile`, `EnvironmentState`, `EnvSnapshot`, `EnvironmentAssurance`)、核心端口 (`EnvironmentPort`) 及运行时协调器。
 
-| 分层 | Crate 路径 | 包名称 | 核心职责 |
-|---|---|---|---|
-| **Layer 0 (Domain)** | `crates/custos-domain` | `custos-domain` | 纯领域实体、数据模型、状态机与零 I/O 不变量。 |
-| **Layer 1 (Core)** | `crates/custos-core` | `custos-core` | 任务编排调度、权限仲裁引擎与完成态验证器。 |
-| | `crates/custos-persistence` | `custos-persistence` | SQLite WAL 持久化、Outbox 模式、CAS `state_version` 状态流转与崩溃恢复。 |
-| | `crates/custos-provider` | `custos-provider` | 厂商中立的 `ModelPort` 契约、流式 SSE 解析器与 Token 计量器。 |
-| **Layer 2 (Runtime & Adapters)** | `crates/custos-bridge` | `custos-bridge` | 会话至任务晋升 (Session-to-Task)、运行中转向 (Steering) 与 IPC 路由。 |
-| | `crates/custos-runtime` | `custos-runtime` | S1/S2 认知循环、上下文压缩 (RTK)、分层记忆系统与执行规划器。 |
-| | `crates/custos-adapters` | `custos-adapters` | 操作系统沙箱、MCP 客户端适配器、本地推理 Sidecar、Git 工作树与协议转换器。 |
-| **Layer 3 (Domain Packs)** | `crates/custos-packs` | `custos-packs` | 领域工作流：工程包 (Engineering)、科研包 (Research) 与助理包 (Assistant)。 |
-| **Layer 4 (Composition & Hosts)** | `crates/custos-daemon` | `custos-daemon` | 唯一组装根节点 (Composition Root)、后台守护服务与本地 HTTP/JSON-RPC。 |
-| | `crates/custos-sdk` | `custos-sdk` | 客户端数据传输对象 (DTO)、UniFFI 绑定与 ACP 传输类型。 |
-| | `crates/custos-app/cli` | `custos-app-cli` | 基于 `ratatui` 构建的终端操作界面。 |
-| | `crates/custos-app/desktop` | `custos-app-desktop` | 原生 Tauri 2 宿主外壳，集成 `ui/desktop` 前端。 |
+在任何智能体任务修改状态前，系统将评估 7 大确定性不变量门禁：
+
+| 不变量门禁 | 核心安全保证 | 失败防御机制 (Fail-Closed) |
+|---|---|---|
+| **ENV-01 (就绪态执行)** | 环境必须处于 `Ready` 就绪态（或已审计降级状态）。 | 初始化中、失败或已销毁状态一律拒绝状态修改。 |
+| **ENV-02 (编程隔离树)** | Coding 视图严格要求隔离的 Git 工作树及明确分支。 | 共享未提交的脏工作树在未经人工豁免前拒绝执行。 |
+| **ENV-03 (诚实隔离保证)** | 目标隔离保证绝不能超过宿主机实测具备的防护力 (Gate 4)。 | 宿主机仅提供 `ObserveOnly` 时严禁声称 `CustosMediated`，自动降级。 |
+| **ENV-04 (科研语料绑定)** | Research 视图严格要求有效的本地文献语料目录及重现 Snapshot。 | 语料目录未锚定时拒绝运行 Notebook 单元代码。 |
+| **ENV-05 (量化完全离线)** | 量化策略回测必须完全断网隔离 (`network_restricted = true`)。 | 检测到任何活动的外部网络 Socket 时立即终止执行。 |
+| **ENV-06 (幂等资源回收)** | 环境注销操作可幂等重复执行；服务启动自动回收孤儿进程与 PTY。 | 重启时自动扫描并清理僵尸进程与无主工作树。 |
+| **ENV-07 (透明降级原因)** | 任何向 `Degraded` 状态的迁移必须包含人类可审计的原因字符串。 | 拒绝匿名或未记录理由的功能降级。 |
+
+---
+
+## 工作区架构与分层拓扑
+
+Custos 遵循六边形架构 (Hexagonal Architecture)，严格划分纯业务领域逻辑与底层物理副作用：
+
+| 架构子系统 | 物理目录路径 | 核心职责 |
+|---|---|---|
+| **业务领域层 (Domain)** | `platform/domain` | 纯领域聚合标识、零 I/O 模型、AEE 特征规约及纯状态机。 |
+| **核心契约层 (Core)** | `platform/core` | 任务调度服务、权限引擎、`EnvironmentPort` 契约及验收核验器。 |
+| **持久存储层 (Storage)** | `platform/storage` | SQLite WAL 持久化、Outbox 模式、CAS `state_version` 状态流转与崩溃恢复。 |
+| **人工智能层 (AI)** | `platform/ai` | 厂商中立的 `ModelPort` 契约、模型目录、流式 SSE 解析器与 Token 计量。 |
+| **认知运行时 (Runtime)** | `platform/runtime` | S1/S2 认知循环、`EnvironmentCoordinator`、工作区生命周期及终端会话路由。 |
+| **适配与沙箱层 (Adapters)** | `platform/adapters` | 操作系统沙箱 (Seatbelt/Bubblewrap)、MCP 客户端、Git 工作树与 PTY 终端。 |
+| **组件与工作流 (Components)** | `platform/components` | 动态 Pack 注册中心、基础技能、能力描述符及按视图披露工具编译器。 |
+| **助理工作台** | `workbenches/assistant` | 个人工作流助理、日历联系人、待办草稿及发件箱人工审批。 |
+| **编程工作台** | `workbenches/coding` | 软件工程、三路工作区、结构化原子 Diff 及工作树租约保护。 |
+| **科研工作台** | `workbenches/research` | 文献综合研判、四级溯源矩阵、ALCE 引用仲裁及 Notebook 计算。 |
+| **量化工作台** | `workbenches/quant` | 量化策略开发、完全离线回测、Alpha 信号检验与行情分区管理。 |
+| **宿主守护进程 (Daemon)** | `apps/daemon` | 唯一组装根节点 (Composition Root)、后台常驻服务与本地 JSON-RPC/HTTP API 调度。 |
+| **客户端 SDK** | `sdk/client-rust` | Rust 客户端 SDK、本地 API 通信传输层与 ACP 交互结构体。 |
+| **桌面端界面** | `ui/desktop` | 原生 Tauri 2 + Vite + React 19 桌面交互程序。 |
+| **终端命令行** | `ui/cli` | 交互式终端命令行操作工具。 |
 
 ---
 
@@ -120,10 +146,11 @@ Custos Desktop 采用 **Vite、React 19 和 Tauri 2** 构建：
 
 - **三级架构体系：** 清晰层级导航 `项目 -> 工作区 -> 工作树 (Project -> Workspace -> Worktree)`。
 - **Graphite JetBlack 设计令牌：** 高对比度现代暗色调主题，专为高强度长时间作业优化。
-- **专用工作台 (Workbenches)：**
-  - **工程 (Engineering)：** 文件与变更、客观证据、工作树管理。
+- **四大专用工作台 (Workbenches)：**
+  - **编程 (Coding)：** 文件与变更、客观证据、工作树管理。
   - **科研 (Research)：** 综合演练室、科学发现、运行账本。
-  - **助理与通用 (Assistant & Shared)：** 沙箱浏览器、终端、远程集群、持久笔记。
+  - **助理 (Assistant)：** 沙箱浏览器、终端、远程集群、持久笔记。
+  - **量化 (Quant)：** 策略分析图表、回测模拟器、Alpha 策略工作室。
 - **零 Mock 策略 (Zero-Mock Policy)：** 界面所有指标直连守护进程真实遥测，服务异常时安全降级。
 
 ---
@@ -150,17 +177,17 @@ Custos 包装并监管主流编程 Harness，不侵入其内部核心逻辑：
 
 ## 质量门禁与验证
 
-所有提交的代码必须无条件通过强制质量门禁：
+所有提交的代码必须通过 `xtask` 自动化执行的 5 大强制质量门禁：
 
 ```bash
-# 1. Rust Clippy 零警告零错误硬门禁
+# 运行全部 5 大质量门禁 (Packs 契约, 桌面 UI 构建, Canvas Smoke 烟雾测试, 架构不变量, Cargo Check)
+cargo run -p xtask -- gate
+
+# 检查架构层级边界，严防 Kernel 与 Workbench 之间的逆向泄露
+cargo run -p xtask -- check-boundaries
+
+# 全量工作区 Clippy 静态检查 (0 警告容忍)
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 2. 全量工作区测试套件 (>1,670 单元/集成测试，100% 通过)
-cargo test --workspace --all-targets
-
-# 3. 桌面端前端类型检查与打包构建
-cd ui/desktop && npm run build
 ```
 
 ---

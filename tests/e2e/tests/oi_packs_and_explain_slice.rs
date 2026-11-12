@@ -6,10 +6,11 @@
 //! - `local_api_rpc_transport`: Daemon local API dispatch and strongly-typed client integration.
 //! - `comparative_benchmarks`: OI vs Baseline benchmark suite across canonical pack fixtures.
 
-use custos_bridge::BridgeService;
+use custos_runtime::bridge::BridgeService;
 use custos_core::TaskService;
-use custos_daemon::custos_local_api::{ExplainPlanRequest, LocalApiClient};
+use custos_daemon::custos_local_api::ExplainPlanRequest;
 use custos_daemon::LocalApiDispatcher;
+use custos_sdk::local_api::LocalApiClient;
 use custos_domain::oi::{DecisionSnapshot, ExecutionTopology};
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::oi::ExplainService;
@@ -21,16 +22,16 @@ use std::sync::Arc;
 // ─────────────────────────────────────────────────────────────────────────────
 mod domain_pack_specifications {
     use super::*;
-    use custos_packs::assistant::fixtures::{
+    use custos_workbench_assistant::fixtures::{
         assistant_agenda_fixture, assistant_draft_reply_fixture,
     };
-    use custos_packs::assistant::profile::assistant_profile;
-    use custos_packs::engineering::fixtures::{
+    use custos_workbench_assistant::profile::assistant_profile;
+    use custos_workbench_coding::fixtures::{
         engineering_refactor_fixture, engineering_repair_fixture,
     };
-    use custos_packs::engineering::profile::engineering_profile;
-    use custos_packs::research::fixtures::{research_survey_fixture, research_synthesis_fixture};
-    use custos_packs::research::profile::research_profile;
+    use custos_workbench_coding::profile::engineering_profile;
+    use custos_workbench_research::fixtures::{research_survey_fixture, research_synthesis_fixture};
+    use custos_workbench_research::profile::research_profile;
 
     #[test]
     fn test_engineering_pack_invariants() {
@@ -148,7 +149,7 @@ mod explain_service_engine {
 // ─────────────────────────────────────────────────────────────────────────────
 mod local_api_rpc_transport {
     use super::*;
-    use custos_packs::engineering::fixtures::engineering_repair_fixture;
+    use custos_workbench_coding::fixtures::engineering_repair_fixture;
 
     struct LocalApiTestHarness {
         client: LocalApiClient,
@@ -203,7 +204,7 @@ mod local_api_rpc_transport {
 // ─────────────────────────────────────────────────────────────────────────────
 mod comparative_benchmarks {
     use super::*;
-    use custos_packs::benchmark::OiBenchmarkRunner;
+    use custos_runtime::oi::benchmark::OiBenchmarkRunner;
 
     #[test]
     fn test_benchmark_suite_across_all_domain_packs() {

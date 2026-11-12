@@ -52,25 +52,25 @@ Heterogeneous hardware acceleration requires deterministic, cooperative resource
 
 ## 2. Component Structure
 
-### 2.1 Pure Domain Models (`crates/custos-domain/src/research/experiment.rs`)
+### 2.1 Pure Domain Models (`platform/domain/src/evidence/experiment_attempt/` & `fleet/compute/training.rs`)
 - `FrozenTrainingRecipe`: Immutable launch spec containing model, dataset URI, split, learning rate, batch size, and deterministic SHA-256 content digest.
 - `TrainingStepTelemetry`: Monotonic step index, epoch, loss, learning rate, and memory usage.
 - `TrainingExecutionReceipt`: Terminal receipt detailing total steps, final loss, created checkpoints, and final execution state.
 - `ModelEvaluationSpec`: Target candidate checkpoint ID, held-out dataset URI, rubric version, sample limit, and target device.
 - `ModelEvaluationReport`: Scored report capturing sample count, pass/fail counts, accuracy, loss, and `passed_hurdle` boolean.
 
-### 2.2 Local Training Runner (`crates/custos-runtime/src/compute/training.rs`)
+### 2.2 Local Training Runner (`platform/runtime/src/environment/compute/training.rs`)
 - Coordinates the lifecycle: `Planned` $\to$ `Preflighted` $\to$ `Submitting` $\to$ `Submitted` $\to$ `Running` $\to$ `Completed` $\to$ `Collected`.
 - Demands exclusive admission before launching training steps.
 - Produces valid `TrainingCheckpointManifest` records with `CheckpointCommitStatus::CommittedProtected` at scheduled step boundaries.
 - Reclaims the compute lease unconditionally upon completion, early cancellation, or simulated OOM.
 
-### 2.3 Model Evaluation Runner (`crates/custos-runtime/src/compute/evaluation.rs`)
+### 2.3 Model Evaluation Runner (`platform/runtime/src/environment/compute/evaluation.rs`)
 - Coordinates evaluation against held-out validation datasets.
 - Rejects parallel model loading when the target accelerator is held by an active training run.
 - Computes accuracy and loss metrics, releasing the lease immediately upon completion.
 
-### 2.4 Local Inference Coexistence Seam (`crates/custos-adapters/src/local_inference/mod.rs`)
+### 2.4 Local Inference Coexistence Seam (`platform/ai/src/local/local_inference/mod.rs`)
 - Integrates `InferenceRuntime` with `WorkloadAdmissionPort`.
 - Checks admission before loading model weights into hardware backends (`llama.cpp` / `MLX`).
 - Tracks active requests on `ModelSlot` via `active_requests: AtomicUsize` and RAII `InFlightGuard`.

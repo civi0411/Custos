@@ -115,7 +115,7 @@ Implemented in `tests/e2e/tests/oi_measured_optimization_golden_test.rs`:
 ## 5. Quality Gate Status
 
 - **Golden Suite (G06, G07, G08, G09, G10, G11, G12):** 40/40 PASS.
-- **Zero-I/O Domain Boundary:** `bash ./scripts/check_deps.sh --strict` PASS.
+- **Zero-I/O Domain Boundary:** `bash ./xtask/scripts/check_deps.sh --strict` PASS.
 - **Workspace Clippy:** 0 warnings (`-D warnings`).
 - **Desktop UI Bundle:** `npm run build` PASS (992ms).
-- **Canvas Smoke:** `node tools/canvas-smoke.mjs` 42/42 PASS.
+- **Canvas Smoke:** `node tests/desktop/canvas-smoke.mjs` 42/42 PASS.

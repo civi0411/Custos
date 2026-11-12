@@ -1,6 +1,6 @@
 # Quant Finance Domain Pack Specification
 
-> **Scope**: `crates/custos-packs/src/quant/`  
+> **Scope**: `workbenches/quant/src/`  
 > **Classification**: Architecture Reference  
 > **Status**: Canonical Specification (Phase 3 / F08)
 

@@ -4,7 +4,7 @@
 //! 1. `start_and_checkpoint_lifecycle`: Task creation, start_run, Running transition, and integrity checkpointing.
 //! 2. `graceful_cancellation_lifecycle`: Cancellation request, zero uncertain side effects, and terminal cancellation transition.
 
-use custos_adapters::providers::fake::FakeProvider;
+use custos_provider::cloud::fake::FakeProvider;
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_domain::{
@@ -298,7 +298,7 @@ mod daemon_api_spine_roundtrip {
 mod workspace_lease_isolation_in_start_run {
     use super::*;
     use custos_core::contracts::RunPort;
-    use custos_runtime::workflow::WorkspaceLeaseManager;
+    use custos_runtime::workspace::WorkspaceLeaseManager;
 
     #[tokio::test]
     async fn test_gate_c_workspace_lease_allocation_and_release() {

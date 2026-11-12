@@ -1,12 +1,30 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+> **Execution Telemetry & Supervision Cohesion Baseline:** All execution observability, hierarchical step spans waterfall, deterministic anomaly watchdogs, error signature deduplication, and OTLP ingestion live strictly inside canonical bounded contexts: `platform/domain/src/task/run/` (`step_span.rs`, `finding.rs`, `watchdog.rs`), `platform/core/src/contracts/workflow.rs`, `platform/storage/src/repositories/run/` (`telemetry.rs`, `telemetry_queries.rs`, `runs.rs`), `platform/runtime/src/workflow/supervision/`, `apps/daemon/src/application/workflow/telemetry.rs`, and native Desktop 3-tier JetBlack UI (`ui/desktop/src/app/dashboard/` and shared `run-inspector/`). Zero parallel `supervision` bounded context or disconnected run tables exist.
+
+> **Current Topic-Cohesion Baseline (Wave 1 & Wave 2):** All wire protocol DTOs/envelopes reside in `sdk/protocol` (`custos-protocol`) so `sdk/client-rust` (`custos-sdk`) depends strictly on `custos-protocol` + `custos-domain` and `platform/core` (`custos-core`) stays transport-agnostic without `custos-protocol`. `platform/domain` keeps Ring 1 purity (concrete Ring 3 pipeline invariants reside in `workbenches/*/src/`). In `platform/ai`, `contracts/` stays pure Zero-I/O, unified model catalog/canonical/pricing lives in `catalog/`, vendor codecs/transport/realtime live in `cloud/`, local inference in `local/` (with lazy `LlamaCppBackend` initialization on demand so daemon boot allocates zero GPU/Metal resources), routing in `routing/`, and static datasets in `data/` (no `keyring`; OAuth PKCE & keychain vault live in `platform/adapters/src/{connectors/oauth,host/vault}`). In `platform/core`, `TrustedKernel` sits in `kernel/trusted.rs` while `platform/runtime/src/` is organized into 6 clean pillars (`agent/{runtime_port,s1,skills}`, `context/`, `environment/{compute,coordinator,notebook,terminal,workspace}`, `oi/`, `session/{bridge,journal,manager}`, `workflow/`) with zero `reqwest` and zero OS subprocess calls. Physical I/O adapters reside in `platform/adapters/src/` across `harnesses/` (+ `data/harnesses.json`), `host/{binaries,caffeinate,documents,integrations,notebook,operations,packages,sandbox,telemetry,terminal,vault,worker,workspace}`, and `connectors/{a2a,compute,mcp,oauth,roaming}`. `platform/components/src/` is flattened (`{lib,module,registry,verifier,migrations}`) without `engine/` or `reqwest`. `apps/daemon` decomposes `LocalApiDispatcher` into 4 bounded sub-contexts (`kernel`, `env`, `providers`, `workbenches` in `src/api/contexts.rs`), allocates workbench repos/modules/Python kernels strictly on demand (releasing them on `packages.disable`), and delegates all OS/Git/GH/SSH/agent-browser drivers to `custos-adapters::host`, while `apps/cli` is a headless pure-Rust CLI client over `custos_sdk::LocalApiClient` without Tauri. Historical snapshot tables below labeled `crates/custos-*` remain archived baseline inventories and are superseded by these live ownership paths and `cargo xtask check-boundaries`.
+
+**Support-root cleanup** retains the active Rust SDK, xtask and NPM release wrapper. Reference schemas move to `tests/contract/fixtures/schemas`. Root examples, the metadata-only VS Code package, uncompiled SDK protocol copies and unsupported Goose Python/Kotlin/UniFFI scaffolding are retired. Live protocol definitions now compile in `sdk/protocol` (`custos-protocol`). Historical counts below keep their original snapshot scope.
+
+**Current per-file execution map** is [canonical plan §16](modular-workbench-refactor-plan.md#platform-file-plan), with the [current ledger](platform-refactor-file-map.csv) and [snapshot hashes](platform-refactor-baseline.json). The ledger covers 1,381 files across platform, workbenches, apps, SDK, UI, tests and build/distribution consumers, including 638 platform files. Each row records current path, proposed destinations, action, packet, rationale, caller candidates and review depth. Current metadata captures 17 Cargo workspace packages including tests and xtask. No production paths or symbols are moved by this planning update.
+
+**Current physical owners** use `platform/ai`, `platform/adapters/src/host/{execution,workspace,terminal,sandbox,documents,harness}`, `platform/adapters/src/connectors` and `platform/runtime/src/bridge`. Research and Quant already have Rust crates under `workbenches/<id>/src`. Common runtime/storage/adapters/SDK still import vertical implementations, so the extraction is transitional. Scope and counts in historical catalog sections below remain labeled by their original snapshot. The current CSV is structural placement plus selected source/caller review, not a per-line semantic certification.
+
+**Current full-refactor map:** [Canonical plan](modular-workbench-refactor-plan.md) replaces the earlier fixed-crate execution assumptions with platform + vertical workbench packages + optional capabilities, using `9cd903b` plus existing dirty changes. [Per-file CSV](modular-workbench-file-map.csv) covers all 1,156 captured files under crates/ui with hash, topic, target candidate, action, packet and review depth; it is not a semantic audit of every line or an automatic rename list. Current metadata still has 12 product Cargo packages. No source files or public interfaces were moved by this documentation pass; keep legacy file counts below historical and preserve user-deleted blocks.
+
+**Read the assembly before the file catalog:** [SADE block map §§10–13](../architecture/sade-agent-system-design.md#10-cohesive-assembly-blocks-inside-the-current-crates) maps current crate homes to owned state, constructors, ports, lifetimes and workbench contribution units. [A01–A09 evidence](workbench-core-and-controls-audit.md#crate-assembly-follow-up) follows all product manifests/entry points and selected production construction/skill/storage paths. Its 608-file Rust `src` scan excludes SQL/integration tests; historical file counts below have different scopes. This documentation pass moves no production files or interfaces. Detailed implementation remains in P00–P11; no new composition framework or per-workbench backend is proposed.
+
+**Installable-workbench placement proposal:** [Modular plan](modular-workbench-refactor-plan.md) records the initial `vi/f0a7efa` migration seams and target placements in §§5–6/14–15. Its §§19–25 update the subsequent partial working-tree package contracts/inventory/WorkerLease/UI registry/Library and define composition, data ownership, activation and delivery gates; their presence is not verified release support. Keep source in current crates/UI homes and produce release bundles through xtask. Current metadata has 12 product Cargo packages, including two apps inside the canonical app group; the historical 11 groups do not require renaming/splitting packages to match a number. Documentation changes do not alter production contracts or certify source counts.
+
+**Comprehensive execution map:** [Plan §§27–33](modular-workbench-refactor-plan.md#27-phạm-vi-refactor-bắt-buộc-và-cấu-trúc-đích) gives backend/frontend target homes and the detailed P00–P11 caller/data/test/retirement sequence. Existing homes remain canonical; new submodules are proposed only when the relevant implementation packet needs them. No production file, symbol or schema count changed in this documentation pass. The audit's C01–C16 and mounted Screen warning are prerequisites for the advertised journeys, not evidence of completed refactoring.
+
 **Current crates + UI planning entry:** [convergence §12](sade-frontend-backend-convergence-plan.md#12-refactor-crates-và-desktop-theo-ownership) maps AppContext, ScreenContext, shell, resources, settings, API and the 11 crate groups into implementation packets; its 195-file count is the earlier planning baseline, not a refreshed inventory. [Closure §13](sade-frontend-backend-convergence-plan.md#13-đóng-các-đường-refactor-đang-chuyển-tiếp) maps the remaining work to `runtime/workflow/task_runtime.rs`, domain Run FSM, ScreenContext/AppContext, `context/app/`, API helpers and shell consumers. Topic hook/helper files now exist in the dirty checkout, but existence does not mean their production callers have migrated. This documentation update adds no production files or symbols. Keep canonical component homes from UI rules; retire replaced state, effects and writers only after caller and restore tests pass.
 
 **Repo Intelligence removal:** subsystem scanner/graph/query/coordinator riêng đã được bỏ theo quyết định sản phẩm. Không triển khai hoặc phục hồi các placement Repo Intelligence trong những snapshot/kế hoạch lịch sử bên dưới. Giữ file/search/Git/worktree, context compiler và SourceSpan của Engineering; Nexus vẫn là development utility độc lập.
 
 **Removal file map:** retire `runtime/src/context/repo_intelligence/{lib,scanner,graph,llm_view,coordinator}.rs`, `core/src/repo/{mod,security}.rs`, and `domain/src/repo/{query,snapshot}.rs`. Keep `domain/src/repo/{mod,span}.rs` as the source locator used by Engineering recipes. Remove retired module exports; `repo_explain_slice.rs` uses explicit fixture files to test context/evidence/restart without a scanner. No API, migration, frontend or Nexus deletion is required.
 
-Current inventory after modularization: **808 files under crates/, including 554 Rust files**. Existing historical per-file tables below reflect recent module extractions.
+Captured full-refactor inventory: **872 files under crates/ (626 Rust files), 284 files under ui/**, including non-source assets/configs. See the per-file CSV and baseline JSON for hashes/scope. The earlier 808/554 count and detailed tables below are historical, not updated per-file semantic audit results.
 
 | Retained file | Lines | Responsibility / exports |
 |---|---:|---|
@@ -100,7 +118,7 @@ Navigation target: ActivityRail owns app-level Work and Supervision destinations
 
 Home/navigation correction: ActivityRail owns the Work and Supervision routes and closes management surfaces; RootLayout hosts embedded full-content Settings/Connections while retaining Outlet state. Existing SettingsModal/AiSetupModal accept an embedded presentation flag. WorkspaceSidebar remains the contextual owner for active scope and one primary list at a time; no new navigation store or backend. Historical follow-up sizes in this paragraph are not current; consult the source inventory rows below.
 
-Desktop owner: Vinh. `components/shell/ActivityRail.tsx` owns app-level Work/Supervision navigation and footer configuration entries; Chats/Tasks stay in the contextual sidebar, not duplicated on the rail. `components/workbenches/ScreenSwitcherBar.tsx` lists only Screens belonging to the current workbench and handles selection, pin, rename and close; `types/screen.ts::screensForWorkbench` is the shared legacy-aware filter. `context/ScreenContext.tsx` owns per-project Screen state and refuses to close the final Screen of a workbench. `app/dashboard/page.tsx` owns daemon session-run aggregation, filters and attention selection; `components/workbenches/engineering/ActivityPane.tsx` owns the reused exact run inspector. `features/settings/SettingsModal.tsx` owns preferences/advanced diagnostics; `features/ai-setup/AiSetupModal.tsx` owns Connections & Tools over existing configuration panes. No new backend file, crate, schema or dependency is introduced. Current checks: `tools/canvas-smoke.mjs` passes 31 regressions; TypeScript/Vite build passes with existing bundle-size and ineffective dynamic-import warnings. Current line counts are recorded below.
+Desktop owner: Vinh. `components/shell/ActivityRail.tsx` owns app-level Work/Supervision navigation and footer configuration entries; Chats/Tasks stay in the contextual sidebar, not duplicated on the rail. `components/workbenches/ScreenSwitcherBar.tsx` lists only Screens belonging to the current workbench and handles selection, pin, rename and close; `types/screen.ts::screensForWorkbench` is the shared legacy-aware filter. `context/ScreenContext.tsx` owns per-project Screen state and refuses to close the final Screen of a workbench. `app/dashboard/page.tsx` owns daemon session-run aggregation, filters and attention selection; `components/workbenches/engineering/ActivityPane.tsx` owns the reused exact run inspector. `features/settings/SettingsModal.tsx` owns preferences/advanced diagnostics; `features/ai-setup/AiSetupModal.tsx` owns Connections & Tools over existing configuration panes. No new backend file, crate, schema or dependency is introduced. Current checks: `tests/desktop/canvas-smoke.mjs` passes 31 regressions; TypeScript/Vite build passes with existing bundle-size and ineffective dynamic-import warnings. Current line counts are recorded below.
 
 ### Desktop reference research tooling
 
@@ -109,7 +127,7 @@ Desktop owner: Vinh. `components/shell/ActivityRail.tsx` owns app-level Work/Sup
 | [`workbench-core-and-controls-audit.md`](workbench-core-and-controls-audit.md) | Source-backed core/panel/action atlas and Custos gap analysis | Research documentation, desktop Vinh |
 | [`workbench-control-inventory-panels.md`](workbench-control-inventory-panels.md) | Generated navigation index for all control-bearing component files | Research evidence only |
 | [`workbench-control-inventory.json`](workbench-control-inventory.json) | Generated JSX control/action declarations and source hashes, not domain state | Research evidence only |
-| [`tools/workbench-control-audit.cjs`](../../tools/workbench-control-audit.cjs) | Read-only TypeScript AST inventory using the existing desktop compiler; no source execution | Desktop research tooling, Vinh |
+| [`xtask/scripts/workbench-control-audit.cjs`](../../xtask/scripts/workbench-control-audit.cjs) | Read-only TypeScript AST inventory using the existing desktop compiler; no source execution | Desktop research tooling, Vinh |
 
 This adds one research tool and three evidence documents; no production file, crate, dependency, schema or persistence owner changes. Exact scan counts are generated in the report, not mixed into product code metrics.
 
@@ -129,7 +147,7 @@ Existing backend owners in this slice: `custos-runtime/src/terminal/{pty,coordin
 
 Current desktop interaction refactor: `components/common/WorkbenchPane.tsx` owns compact pane controls and states; `hooks/useTerminalSession.ts` owns exact terminal binding and explicit lifecycle calls shared by Coding Agents and Terminal. `XTerminalView.tsx` owns serialized output delivery and visual clearing. `components/workbenches/workbenchResources.tsx` owns the resource catalogue and pure reference helpers; `ResourceContent.tsx` owns typed resource-to-pane rendering; `OrcaTabbedContainer.tsx` retains canvas layout and compatibility exports. Existing research/Copilot panes keep their daemon operations and receive the tab's bound session/workspace. No new crate, dependency or canonical datastore is introduced. Source line counts and validation results are refreshed after implementation.
 
-Desktop owner: Vinh. Existing `ui/desktop/src/types/canvas.ts` owns pure recursive layout types, reducer and restore validation; `components/workbenches/OrcaTabbedContainer.tsx` renders resource groups and split interactions; `context/AppContext.tsx` owns versioned, scoped tab preferences; `components/shell/AppWorkspaceShell.tsx` owns lens toolbars, central resource navigation and canvas visibility; `FilesChangesPane.tsx` is the sole Files tree/content and diff viewer, while `RightSidebar.tsx` is context-only and does not fetch or render duplicate file/change lists; `WorkspaceSidebar.tsx` owns project/workspace/worktree navigation. Full Files/Changes, Research and Copilot workflows are central resource tabs; the Inspector cannot edit files, stage/commit, approve or dispatch. `tools/canvas-smoke.mjs` validates layout invariants with the existing TypeScript compiler and Node tests. No new production module, backend file, crate, dependency or schema is added. Existing file counts remain unchanged; one tooling test is added. Current line counts are recorded below.
+Desktop owner: Vinh. Existing `ui/desktop/src/types/canvas.ts` owns pure recursive layout types, reducer and restore validation; `components/workbenches/OrcaTabbedContainer.tsx` renders resource groups and split interactions; `context/AppContext.tsx` owns versioned, scoped tab preferences; `components/shell/AppWorkspaceShell.tsx` owns lens toolbars, central resource navigation and canvas visibility; `FilesChangesPane.tsx` is the sole Files tree/content and diff viewer, while `RightSidebar.tsx` is context-only and does not fetch or render duplicate file/change lists; `WorkspaceSidebar.tsx` owns project/workspace/worktree navigation. Full Files/Changes, Research and Copilot workflows are central resource tabs; the Inspector cannot edit files, stage/commit, approve or dispatch. `tests/desktop/canvas-smoke.mjs` validates layout invariants with the existing TypeScript compiler and Node tests. No new production module, backend file, crate, dependency or schema is added. Existing file counts remain unchanged; one tooling test is added. Current line counts are recorded below.
 
 | Existing source | Lines | Responsibility |
 |---|---:|---|
@@ -241,7 +259,7 @@ Validation (current interaction pass): 35 Node smoke tests pass; desktop TypeScr
 
 > **Classification:** Normative Engineering Specification & Master Codebase Catalog  
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
-> **Team RACI Allocation:** See [Team Work Allocation](../../dev_docs/TEAM_WORK_ALLOCATION.md).  
+> **Team RACI Allocation:** See [Team Work Allocation](legacy-team/TEAM_WORK_ALLOCATION.md).
 > **Generated By:** Custos Nexus (Local AST & Tree-sitter Call Graph Indexer).
 
 > **Workspace restructuring index:** [Master Part 1/15](../../Custos.md), [workspace/UI](../architecture/agent-workspace-and-ui.md), [skills/capabilities](../architecture/capability-catalog-and-skills.md) and [migration plan](workspace-restructuring-plan.md) define the current target. `ui/desktop` is the main product frontend; `ui/cli` is an existing React frontend, distinct from the Rust CLI at `crates/custos-app/cli`. Hosts remain under `crates/custos-app`; no ADE/UI crate or `custos-gui` was created. Domain features stay in packs; shared orchestration in runtime; I/O in adapters/persistence. This docs-first change adds documentation only: source paths and historical catalog counts are not migration results. Current uncommitted Repo Intelligence changes are preserved and require their own catalog/build audit.
@@ -252,7 +270,7 @@ Validation (current interaction pass): 35 Node smoke tests pass; desktop TypeScr
 
 > **Protocol-boundary index:** [Part 7](../../Custos.md#phần-7-protocol-và-hub-layer) owns the decisions; [protocol and connectivity boundaries](../architecture/protocol-and-connectivity-hubs.md) owns the implementation plan. The current [daemon main](../../crates/custos-daemon/src/main.rs) serves loopback TCP, loopback HTTP and stdio JSONL; the HTTP listener falls back to a dynamic loopback port if its configured bind fails. These listeners require a separate auth/origin/threat-model audit before being called a hardened Local API boundary. [Bridge](../../crates/custos-bridge/src/lib.rs) imports SQLite persistence only in tests via a dev-dependency, not the production bridge path. Mock/simulated MCP and roaming A2A paths still exist; ACP, CAP and real A2A conformance remain target/optional work.
 
-> **OI decision index:** [Part 14](../../Custos.md#phần-14-orchestration-intelligence-oi-s1-s2-meta) and [cognitive/orchestration design](../architecture/cognitive-fabric-and-orchestration.md) define a **single-worker-first target**. Existing [`cognitive/routing.rs`](../../crates/custos-runtime/src/cognitive/routing.rs), [`cognitive/arbiter.rs`](../../crates/custos-runtime/src/cognitive/arbiter.rs), [`workflow/machine.rs`](../../crates/custos-runtime/src/workflow/machine.rs) and [`workflow/scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) are implementation inventory, not proof of a calibrated OI/typed plan compiler/replan loop. Pack templates are under [`custos-packs`](../../crates/custos-packs/); policy/effect authority remains in `custos-core`, and concrete wiring belongs to `custos-daemon`. No OI code file/crate was added by this documentation decision; preserve existing source catalog counts until code changes.
+> **OI decision index:** [Part 14](../../Custos.md#phần-14-orchestration-intelligence-oi-s1-s2-meta) and [cognitive/orchestration design](../architecture/cognitive-fabric-and-orchestration.md) define a **single-worker-first target**. Existing [`cognitive/routing.rs`](../../crates/custos-runtime/src/cognitive/routing.rs), [`cognitive/arbiter.rs`](../../crates/custos-runtime/src/cognitive/arbiter.rs), [`workflow/machine.rs`](../../crates/custos-runtime/src/workflow/machine.rs) and [`workflow/scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) are implementation inventory, not proof of a calibrated OI/typed plan compiler/replan loop. Pack templates are under [`custos-packs`](../../crates/custos-packs); policy/effect authority remains in `custos-core`, and concrete wiring belongs to `custos-daemon`. No OI code file/crate was added by this documentation decision; preserve existing source catalog counts until code changes.
 
 Tài liệu này là bản đồ toàn cảnh chi tiết đến **từng file mã nguồn** của toàn bộ repository Custos, bao gồm cấu trúc 11 canonical product crates, vai trò kiến trúc của từng file, các struct/trait/enum cốt lõi và các mối liên kết phụ thuộc.
 
@@ -303,28 +321,26 @@ Mọi thay đổi kiến trúc trong repository bắt buộc phải được ph�
 
 Khi Người dùng và Agent đạt được sự thống nhất về một thay đổi kiến trúc hoặc cấu trúc file:
 
-1. **Bước 1 — Xác lập Đồng thuận (Consensus):** Thống nhất rõ ràng về layer, crate chịu trách nhiệm, chủ sở hữu (Vĩ, Trường, hay Vinh), và các ràng buộc bất biến (ví dụ: Zero-I/O cho `custos-domain`).
+1. **Bước 1 — Xác lập Đồng thuận (Consensus):** Thống nhất rõ ràng về layer/ring, package chịu trách nhiệm, chủ sở hữu (Vĩ, Trường, hay Vinh), và các ràng buộc bất biến (ví dụ: Zero-I/O cho `custos-domain`).
 2. **Bước 2 — Cập nhật `Custos.md`:** Cập nhật nội dung vào đúng chương mục trong [`Custos.md`](../../Custos.md).
-3. **Bước 3 — Cập nhật `docs/` đúng chủ đề:** Cập nhật tài liệu chuyên môn tương ứng trong [`docs/architecture/`](../architecture/), [`docs/reference/`](../reference/), hoặc [`docs/development/`](../development/).
+3. **Bước 3 — Cập nhật `docs/` đúng chủ đề:** Cập nhật tài liệu chuyên môn tương ứng trong [`docs/architecture/`](../architecture), [`docs/reference/`](../reference), hoặc [`docs/development/`](.).
 4. **Bước 4 — Chèn đúng chỗ vào `codebase-architecture.md` (Tài liệu này):**
-   - Xác định đúng Crate tại Mục 3 bên dưới.
-   - Thêm dòng mới vào bảng danh mục tệp tin theo đúng chuẩn 4 cột:
-     `| Cột 1: Link file mã nguồn | Cột 2: Số dòng | Cột 3: Vai trò kiến trúc | Cột 4: Các Struct / Trait / Hàm cốt lõi |`
-     (ví dụ cụ thể: `| [`src/action.rs`](../../crates/custos-domain/src/authority/action.rs) | 163 | Vai trò... | Các Struct... |`)
-   - Cập nhật số lượng file và tổng số dòng mã trên đầu mục của crate.
+   - Xác định đúng Package tại Mục 2 bên dưới.
+   - Cập nhật đường dẫn tương ứng (ví dụ `platform/domain/src/authority/action.rs`).
+   - Ghi nhận các struct/trait/hàm cốt lõi và kiểm tra với `cargo xtask check-boundaries`.
 5. **Bước 5 — Triển khai Code & Xác thực:** Viết code, kiểm tra `cargo check --workspace` và `cargo test`.
    - **LỆNH CẤM NGHIÊM NGẶT:** Cấm tuyệt đối việc nhảy cóc vào Bước 5 để viết code thay đổi kiến trúc trước khi hoàn thành Bước 1, 2, 3, 4!
 
 ### 0.3 Hướng Dẫn Đọc Dành Cho Coding Agents Trước Khi Viết Code
 
-- **Định vị trước khi sửa:** Trước khi thêm struct, trait, hoặc chỉnh sửa logic, Agent PHẢI tra cứu Mục 2 (Ma trận Crate) và Mục 3 (Danh mục chi tiết từng crate) của tài liệu này để biết code nên đặt ở đâu.
+- **Định vị trước khi sửa:** Trước khi thêm struct, trait, hoặc chỉnh sửa logic, Agent PHẢI tra cứu Mục 1–2 của tài liệu này để biết code nên đặt ở package nào.
 - **Tuân thủ ranh giới bất biến:**
-  - `custos-domain`: Tuyệt đối Zero-I/O, không async, không tokio, không rusqlite, không reqwest.
-  - `custos-core`: Hạt nhân điều phối, chỉ phụ thuộc vào `custos-domain`.
-  - `custos-persistence`: SQLite WAL mode, single-writer connection, chống WAL starvation.
-  - `custos-bridge`: Cầu nối phiên, CẤM gọi trực tiếp vào `custos-persistence`.
-  - `custos-daemon`: Điểm ráp nối duy nhất (Sole Composition Root).
-- **Không tạo thư mục rác:** Mọi mã nguồn chỉ được phép nằm trong 11 canonical product crates, `schemas/`, `tests/`, `tools/`, `ui/`, hoặc `xtask/`. Tuyệt đối không tạo các thư mục rác như `scratch/`, `templates/`, `services/`.
+  - `custos-domain` (`platform/domain`): Tuyệt đối Zero-I/O, không tokio, rusqlite, reqwest, fs.
+  - `custos-core` (`platform/core`): Hạt nhân điều phối, chỉ phụ thuộc vào `custos-domain` (cấm `custos-protocol`, `workbenches`).
+  - `custos-persistence` (`platform/storage`): SQLite WAL mode, single-writer connection, chống WAL starvation.
+  - `platform/runtime`: Session bridge & runtime orchestration, KHÔNG phụ thuộc production vào `custos-persistence` (đi qua ports).
+  - `custos-daemon` (`apps/daemon`): Điểm ráp nối duy nhất (Sole Composition Root).
+- **Không tạo thư mục rác:** Source dùng các owner `platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `ui/`, `xtask/`. Reference schemas nằm tại `tests/contract/fixtures/schemas/`. Tuyệt đối không tạo các thư mục rác như `scratch/`, `templates/`, `services/`.
 
 ---
 
@@ -332,57 +348,63 @@ Khi Người dùng và Agent đạt được sự thống nhất về một thay
 
 ```text
 Custos/
-├── Cargo.toml                       # Root Cargo workspace manifest (quản lý 11 product crates + tests + xtask)
+├── Cargo.toml                       # Root Cargo workspace manifest (20 workspace crates theo 3-ring layout)
 ├── rust-toolchain.toml              # Phiên bản Rust toolchain cố định
 ├── deny.toml                        # Cấu hình cargo-deny (bảo mật chuỗi cung ứng, license audit)
 │
-├── crates/                          # [TRỤC 11 CANONICAL PRODUCT CRATES]
-│   ├── custos-domain/               # Layer 0: Thực thể miền thuần túy (Zero I/O, no async)
-│   ├── custos-core/                 # Layer 1: Task Kernel, Authority Engine, Completion Gate
-│   ├── custos-persistence/          # Layer 1: SQLite WAL persistence, schema migrations, Outbox, CAS
-│   ├── custos-provider/             # Layer 1: Trait ProviderPort, token streaming, wire transformers
-│   ├── custos-bridge/               # Layer 2: Session-to-Task promotion, Local API routing
-│   ├── custos-runtime/              # Layer 2: Session lifecycle, Agent loop, Cognition S1/S2, Context Compiler
-│   ├── custos-adapters/             # Layer 2: OS Sandbox (Seatbelt/Bubblewrap), MCP, Local Inference, Harnesses
-│   ├── custos-packs/                # Layer 3: Engineering Pack, Research Pack, Assistant Pack workflows
-│   ├── custos-daemon/               # Layer 4: Điểm ráp nối duy nhất (Sole Composition Root), background service
-│   ├── custos-sdk/                  # Layer 4: Client bindings (Rust, Python, Kotlin/Java) & versioned DTOs
-│   └── custos-app/
-│       ├── cli/                     # Layer 4: Terminal TUI operator interface (ratatui, clap)
-│       └── desktop/                 # Layer 4: Desktop GUI app interface (Tauri, Webview)
+├── platform/                        # [RING 1 & 2 — SHARED PLATFORM KERNEL & SERVICES]
+│   ├── domain/                      # Layer 0: Thực thể miền thuần túy (custos-domain: Zero-I/O, no async)
+│   ├── core/                        # Layer 1: Task Kernel, Authority Engine, Completion Gate, Port Traits (custos-core)
+│   ├── storage/                     # Layer 1: SQLite WAL persistence, migrations, Outbox, CAS (custos-persistence)
+│   ├── ai/                          # Layer 1: ModelPort contracts, catalog, cloud codecs, local inference, routing (custos-provider)
+│   ├── runtime/                     # Layer 2: Agent loop/S1, context, environment, OI, session bridge, workflow (custos-runtime)
+│   ├── adapters/                    # Layer 2: OS sandbox, harnesses, MCP/A2A/ACP/roaming/OAuth/compute, host drivers (custos-adapters)
+│   └── components/                  # Layer 3 base: Pack registry, module activation, migrations, verifiers (custos-packs)
 │
-├── schemas/                         # Versioned cross-process JSON Schemas
-├── tests/                           # Workspace test suites (contract, e2e, crash, test-support)
+├── workbenches/                     # [RING 3 — OPTIONAL VERTICAL WORKBENCHES]
+│   ├── assistant/                   # Assistant workbench: drafts, outbox, domain & repository (custos-workbench-assistant)
+│   ├── coding/                      # Coding workbench: recipes, skills, AST/workspace verifiers (custos-workbench-coding)
+│   ├── research/                    # Research workbench: claims, synthesis, ALCE/citation verifiers, repos (custos-workbench-research)
+│   └── quant/                       # Quant workbench: market/backtest/orders, pipeline verifiers (custos-workbench-quant)
+│
+├── sdk/                             # [WIRE PROTOCOL & CLIENT SDK]
+│   ├── protocol/                    # Wire DTOs, Local API envelopes/methods/transport trait (custos-protocol)
+│   └── client-rust/                 # Rust client SDK over LocalApiClient & ProfileResolver (custos-sdk)
+│
+├── apps/                            # [EXECUTABLES & COMPOSITION ROOT]
+│   ├── daemon/                      # Sole Composition Root, 4-context Local API & HTTP/IPC server (custos-daemon)
+│   ├── cli/                         # Pure-Rust headless CLI over custos-sdk (custos-app-cli, zero Tauri)
+│   └── desktop/native/              # Thin Tauri 2 desktop native host (custos-app-desktop)
+│
+├── tests/                           # Workspace test suites (contract, e2e, testkit, desktop smoke, fixtures)
 ├── evals/                           # Quality benchmarks, token cost tracking, calibration
-├── tools/repo_intelligent/          # Custos Nexus: AST Tree-sitter & call-graph intelligence engine
-├── ui/                              # Web and desktop user interface components
-└── xtask/                           # Automation scripts & workspace management tasks
+├── ui/                              # Frontend surfaces (`ui/desktop` product React 19 UI; `ui/cli/bin` Node CLI)
+└── xtask/                           # Automation scripts, boundary checks & 5-gate release runner
 ```
 
 ---
 
-## 2. Ma Trận 11 Canonical Product Crates
+## 2. Ma Trận Phân Tầng & Workspace Crates
 
 | Layer | Product Crate | Người sở hữu (RACI) | Trách nhiệm kiến trúc cốt lõi | Quy tắc phụ thuộc |
 |---|---|:---:|---|---|
-| **Layer 0** | `crates/custos-domain` | **Vĩ** | Thực thể miền thuần túy (Task, Session, Evidence, Permit). | **Zero-I/O Tuyệt đối**: Không tokio, rusqlite, reqwest, fs. |
-| **Layer 1** | `crates/custos-core` | **Vĩ** | Task Kernel, Authority Engine, Completion Gate, Invariants. | Phụ thuộc độc quyền vào `custos-domain`. |
-| | `crates/custos-persistence` | **Trường** | SQLite WAL mode, schema migrations, Outbox, CAS storage. | Hiện thực hóa repository traits của Domain; single writer. |
-| | `crates/custos-provider` | **Vĩ** | ProviderPort, token streaming, wire format transformers. | Trừu tượng hóa mô hình; không phụ thuộc vendor SDK cụ thể. |
-| **Layer 2** | `crates/custos-bridge` | **Vinh** | Thăng cấp Session-to-Task, định tuyến Local API commands. | Cầu nối giữa Client/Protocol và Task Kernel nội bộ. |
-| | `crates/custos-runtime` | **Vinh + Vĩ** | Agent loop, Cognition S1/S2, Context Compiler 8 bước, Workflow. | Phụ thuộc `custos-core`, `custos-domain`, `custos-provider`. |
-| | `crates/custos-adapters` | **Trường + Vinh** | OS Sandboxes (Seatbelt/Bubblewrap), MCP client, Harnesses. | Đóng gói tương tác ngoại vi; mọi đầu vào là untrusted. |
-| **Layer 3** | `crates/custos-packs` | **Vĩ** | Engineering Pack, Research Pack, Assistant Pack workflows. | Phụ thuộc `custos-runtime` và `custos-core`. |
-| **Layer 4** | `crates/custos-daemon` | **Vĩ** | **Sole Composition Root**: Ráp nối storage, runtime, adapters. | Crate duy nhất được import concrete implementations. |
-| | `crates/custos-sdk` | **Vinh** | Versioned Client DTOs, UniFFI bindings (Python, Kotlin). | Thư viện client nhẹ; không mang runtime daemon hay database. |
-| | `crates/custos-app/cli` | **Vinh** | Terminal TUI operator interface (`ratatui`, `clap`). | Giao tiếp với Daemon độc quyền qua IPC socket / SDK. |
-| | `crates/custos-app/desktop` | **Vinh** | Desktop GUI app interface (Tauri, Webview). | Giao tiếp với Daemon độc quyền qua IPC socket / SDK. |
+| **Layer 0** | `platform/domain` (`custos-domain`) | **Vĩ** | Thực thể miền thuần túy (Task, Session, Evidence, Permit, `environment/{notebook,terminal}`). | **Zero-I/O Tuyệt đối**: Không tokio, rusqlite, reqwest, fs. |
+| **Layer 0.5** | `sdk/protocol` (`custos-protocol`) | **Vinh** | Wire DTOs, `local_api` envelopes/methods/`ApiTransport` trait, `worker`, `harness`, `a2a`, `profile`, `research`. | Chỉ phụ thuộc `custos-domain` (không phụ thuộc kernel/workbench/runtime). |
+| **Layer 1** | `platform/core` (`custos-core`) | **Vĩ** | Task Kernel (`kernel/trusted.rs`), Authority Engine, Completion Gate, Port Traits. | Phụ thuộc độc quyền vào `custos-domain` (cấm `custos-protocol`, `runtime`, `adapters`, `persistence`). |
+| | `platform/storage` (`custos-persistence`) | **Trường** | SQLite WAL mode, schema migrations, Outbox, CAS storage, `repositories/{shared_capabilities,...}`. | Hiện thực hóa repository traits; single writer. |
+| | `platform/ai` (`custos-provider`) | **Vĩ** | `contracts/`, `catalog/`, `cloud/{codecs,transport,realtime}`, `local/`, `routing/`, static `data/`. | `contracts/` cấm import `cloud/`; không `keyring` (vault/OAuth nằm trong adapters). |
+| **Layer 2** | `platform/runtime` (`custos-runtime`) | **Vinh + Vĩ** | 6 pillars: `agent/`, `context/`, `environment/{compute,coordinator,notebook,terminal,workspace}`, `oi/`, `session/{bridge,journal,manager}`, `workflow/`. | Không `reqwest`, không `std::process::Command`, không `custos-persistence` production edge. |
+| | `platform/adapters` (`custos-adapters`) | **Trường + Vinh** | `harnesses/` (+ `data/harnesses.json`), `connectors/{a2a,compute,mcp,oauth,roaming}`, `host/{operations,binaries,caffeinate,notebook,packages,telemetry,vault,workspace}`. | Đóng gói tương tác ngoại vi; cấm phụ thuộc `apps/*` hay `runtime`. |
+| **Layer 3** | `platform/components` & `workbenches/*` | **Vĩ** | `custos-packs` flattened (`{lib,module,registry,verifier,migrations}`) và specialist workbenches (`assistant`, `coding`, `research`, `quant`). | Không `reqwest`; phụ thuộc `core`/`runtime`/`adapters`; `--features lite` tách được workbenches. |
+| **Layer 4** | `apps/daemon` (`custos-daemon`) | **Vĩ** | **Sole Composition Root**: `src/{api/{admission,builder,commands,contexts}, auth, application, bootstrap}` với 4 sub-contexts (`kernel`, `env`, `providers`, `workbenches`). | Không dùng `custos-sdk`; OS/Git/telemetry drivers uỷ quyền `custos-adapters::host`. |
+| | `sdk/client-rust` (`custos-sdk`) | **Vinh** | Client transports (`LocalApiClient`, `ProcessTransport`, `TcpTransport`). | Phụ thuộc `custos-protocol` + `custos-domain` (cấm `custos-core` và `workbenches`). |
+| | `apps/{cli,desktop}` (`custos-app-*`) | **Vinh** | `apps/cli` (headless pure-Rust CLI qua `LocalApiClient`) và `apps/desktop/native` (Tauri client). | Giao tiếp qua `custos-sdk` / Local API; `apps/cli` không phụ thuộc `tauri`. |
 
 ---
 
 ## 3. Bản Đồ Chi Tiết Từng Crate & Từng File Mã Nguồn (Deep File Catalog)
 
-> Dữ liệu trích xuất trực tiếp bằng Custos Nexus thông qua phân tích cú pháp AST Tree-sitter và bảng chỉ mục SQLite (`nexus_index.db`).
+> **Archived Baseline Notice:** Dữ liệu dưới đây trích xuất từ bản chụp Custos Nexus trước đợt chuyển cấu trúc sang `platform/`, `workbenches/`, `sdk/`, `apps/`. Đường dẫn thực tế hiện hành xem ở Mục 1–2 và phần Baseline ở đầu tài liệu này.
 
 ### 3.1. Crate `custos-domain` — Layer 0: Pure Domain Core
 
@@ -415,6 +437,7 @@ Custos/
 | [`src/lib.rs`](../../crates/custos-domain/src/lib.rs) | 159 | Explicit module declarations và re-export bề mặt domain canonical | Domain public exports |
 | [`src/provider_config.rs`](../../crates/custos-domain/src/fleet/provider_config.rs) | 269 | Pure provider-account, local-model folder/artifact, persisted load-profile, hardware/preflight and volatile loaded-instance DTOs. | `ProviderConfig`, `ProbedModel`, `LocalModelFolder`, `LocalModelDescriptor`, `LocalModelLoadProfile`, `LoadedModelInstance` |
 | [`src/packet.rs`](../../crates/custos-domain/src/shared/packet.rs) | 3 | Module packet: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/packages.rs`](../../crates/custos-domain/src/shared/packages.rs) | 105 | Pure domain package identifiers, lifecycle state, distribution presets and boundary alias resolver | `struct ComponentId`, `fn canonical_component_id`, `enum DistributionPreset`, `enum PackageState` |
 | [`src/run.rs`](../../crates/custos-domain/src/task/run.rs) | 789 | Run/WorkerRun lifecycle and pure StartRunCommand with optional node_id/account/effort; correlated live DTOs | `Run`, `StartRunCommand`, `WorkerRun`, `LaunchAttempt`, `UsageRecord`, `LiveRunEvent`, `LiveRunSnapshot`, `LiveRunReplay` |
 | [`src/session.rs`](../../crates/custos-domain/src/session/session.rs) | 260 | Session compatibility model, canonical typed turn và session–Task attribution | `struct Session`, `struct ConversationTurn`, `struct SessionTaskBinding`, `enum WorkbenchLens` |
 | [`src/span.rs`](../../crates/custos-domain/src/shared/span.rs) | 90 | Quản lý phân đoạn thực thi Span, SpanState | `enum SpanState`, `fn fmt`, `struct Span`, `fn new` |
@@ -449,6 +472,8 @@ Custos/
 | [src/contracts/workflow.rs](../../crates/custos-core/src/contracts/workflow.rs) | 35 | Background workflow admission and session-scoped live snapshot/replay contract (Vĩ) | `WorkflowPort` |
 | [src/contracts/harness.rs](../../crates/custos-core/src/contracts/harness.rs) | 226 | Transport-neutral native observation and existing authority/profile contracts (Vinh + Vĩ) | `AgentRuntimePort, RunObserver, HarnessExecutionResult` |
 | [Credential vault contract](../../crates/custos-core/src/contracts/credentials.rs) | 90 | Pure vault and metadata contracts (Owner: Vĩ) | CredentialLocation, CredentialVault, CredentialVaultError, CredentialMetadata, CredentialOperation |
+| [src/contracts/quant.rs](../../crates/custos-core/src/contracts/quant.rs) | 55 | Quantitative Trading persistence & risk evaluation port contract (QuantPort) | `QuantPort, save_tearsheet, get_latest_tearsheet, save_order_ticket, get_market_bars` |
+| [src/contracts/research_ingress.rs](../../crates/custos-core/src/contracts/research_ingress.rs) | 116 | Trust boundary validation for research drafts received through Local API | `source_draft, passage_draft, claim_draft, experiment_draft` |
 | [`src/authority/approvals.rs`](../../crates/custos-core/src/authority/approvals.rs) | 51 | Quản lý yêu cầu phê duyệt người dùng (ApprovalManager) | `struct ApprovalManager`, `fn new`, `fn request_approval`, `fn get` |
 | [`src/authority/audit.rs`](../../crates/custos-core/src/authority/audit.rs) | 82 | Ghi nhật ký kiểm toán hành vi an toàn (AuditLog, AuditEntry) | `struct AuditEntry`, `struct AuditLog`, `fn new`, `fn record` |
 | [`src/authority/grants.rs`](../../crates/custos-core/src/authority/grants.rs) | 89 | Grant lookup and fail-closed actor/action/constraint matching; capability discovery is not authorization | `GrantStore`, `find_grant_for_action`, `constraints_match` |
@@ -534,7 +559,9 @@ Custos/
 | [Provider credential metadata](../../crates/custos-persistence/src/repositories/provider_credentials.rs) | 321 | Generation CAS, FULL durability, recovery and outbox (Owner: Trường) | CredentialMetadata, CredentialOperation |
 | [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 226 | SQLite Session and canonical journal repository, including session+journal deletion | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions`, `fn delete_session` |
 | [`src/repositories/span.rs`](../../crates/custos-persistence/src/repositories/span.rs) | 134 | Quản lý phân đoạn thực thi Span, SpanState | `struct SpanRepository`, `fn new`, `fn get_span`, `fn save_span` |
-| [`src/repositories/task.rs`](../../crates/custos-persistence/src/repositories/task.rs) | 312 | Mô hình nhiệm vụ cốt lõi: Task, TaskContract, TaskStatus, ContractEvidence | `struct TaskRepository`, `fn new`, `fn get_task`, `fn read_task` |
+| [`src/repositories/packages.rs`](../../crates/custos-persistence/src/repositories/packages.rs) | 225 | Package inventory, activation intent ledger, and lifecycle state transitions | `struct PackageRepository`, `struct PackageInventoryRow` |
+| [`migrations/0043_package_inventory.sql`](../../crates/custos-persistence/migrations/0043_package_inventory.sql) | 35 | Schema for package_inventory and package_activation_events with builtin seeds | `package_inventory`, `package_activation_events` |
+| [`migrations/0044_universal_resource_registry.sql`](../../crates/custos-persistence/migrations/0044_universal_resource_registry.sql) | 16 | Schema for universal resource registry connecting domain storage via URIs and digests | `resource_registry` |
 | [`src/store.rs`](../../crates/custos-persistence/src/store.rs) | 1,103 | SQLite-backed persistent storage implementing TaskStore, SessionStore, RunPort and related ports. | `struct SqliteTaskStore`, `fn new_in_memory`, `fn new`, `fn db` |
 
 ### 3.4. Crate `custos-provider` — Layer 1: Model Contracts
@@ -624,7 +651,7 @@ Custos/
 
 ### 3.6. Crate `custos-runtime` — Layer 2: Execution & Orchestration
 
-**Đường triển khai SADE:** [agent system and three-workbench interaction contract](../architecture/sade-agent-system-design.md) map `src/agent/` thành Custos-owned model worker, `src/workflow/` thành parent/child WorkerRun và scheduler, `src/oi/` thành lựa chọn topology, `src/context/` thành shared retrieval/context service ; Coding dùng capabilities đọc/tìm file hiện hữu. `src/engine/` có mã Goose-derived nhưng không được export từ `src/lib.rs`; không tính là agent loop production. Pack recipes nằm trong `custos-packs`, external agent loops trong `custos-adapters/src/harness/`, Task/authority/evidence trong core, và UI chỉ dùng daemon projections. Đây là mapping trách nhiệm đích lên các file hiện có, không chứng nhận từng đường chạy đã hoàn thành.
+**Đường triển khai SADE:** [agent system and modular workbench contract](../architecture/sade-agent-system-design.md) map `src/agent/` thành Custos-owned model worker, `src/workflow/` thành parent/child WorkerRun và scheduler, `src/oi/` thành lựa chọn topology, `src/context/` thành shared retrieval/context service; Coding dùng capabilities đọc/tìm file hiện hữu. `src/engine/` là inventory lịch sử và không còn tồn tại trong checkout follow-up; không đếm lại như code production hoặc đề xuất xóa lần nữa. Pack recipes nằm trong `custos-packs`, external agent loops trong `custos-adapters/src/harness/`, Task/authority/evidence trong core, và UI chỉ dùng daemon projections. §§10–13 của topic document giải thích assembly/lifetime hiện tại; đây là mapping đích, không chứng nhận mọi đường chạy đã hoàn thành.
 
 **Session placement:** Desktop giữ active session theo lens; mở lens không tự cấp quyền hoặc tạo một source-analysis subsystem. Repo Intelligence Rust đã được gỡ; Nexus không là backend sản phẩm.
 
@@ -1187,7 +1214,9 @@ Custos/
 | [`src/application/workspaces/mod.rs`](../../crates/custos-daemon/src/application/workspaces/mod.rs) | 1727 | Workspace, Git/worktree and GitHub use cases; remaining direct subprocess I/O is not yet port-extracted. | `handle_workspaces` |
 | [`src/application/research/mod.rs`](../../crates/custos-daemon/src/application/research/mod.rs) | 1620 | Research sources, claims, notebooks, reviews, synthesis, artifacts and notes. | `handle_research` |
 | [`src/application/compute.rs`](../../crates/custos-daemon/src/application/compute.rs) | 437 | Existing compute target and experiment operations, including remaining capability gaps. | `handle_compute` |
-| [`src/application/assistant.rs`](../../crates/custos-daemon/src/application/assistant.rs) | 537 | Drafts and durable Outbox approval/dispatch presentation; approval state is not a substitute for complete authority. | `handle_assistant` |
+| [`src/application/assistant/mod.rs`](../../crates/custos-daemon/src/application/assistant/mod.rs) | 22 | Assistant router module delegating to drafts and outbox handlers | `handle_assistant` |
+| [`src/application/assistant/drafts.rs`](../../crates/custos-daemon/src/application/assistant/drafts.rs) | 125 | Drafts CRUD use cases: list, get, save, delete | `handle_list, handle_get, handle_save, handle_delete` |
+| [`src/application/assistant/outbox.rs`](../../crates/custos-daemon/src/application/assistant/outbox.rs) | 338 | Durable Outbox approval/dispatch use cases: list, create, approve, dispatch | `handle_list, handle_create, handle_approve, handle_dispatch` |
 | [`src/application/providers/mod.rs`](../../crates/custos-daemon/src/application/providers/mod.rs) | 27 | Provider module router grouping accounts, local models, catalog and oauth | `handle_providers` |
 | [`src/application/providers/crud.rs`](../../crates/custos-daemon/src/application/providers/crud.rs) | 347 | Provider account CRUD, verification and usage accounting | `handle_providers_list`, `handle_providers_save`, `handle_providers_delete`, `handle_providers_usage` |
 | [`src/application/providers/local_models.rs`](../../crates/custos-daemon/src/application/providers/local_models.rs) | 609 | Local inference runtime operations: GGUF/MLX discovery, loading, unloading, profile | `handle_local_models_list`, `handle_local_models_load`, `handle_local_models_unload`, `handle_local_models_scan` |
@@ -1379,8 +1408,8 @@ Nexus remains a development utility in `tools/repo_intelligent/`, not a product 
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
-| [browser-native-smoke.mjs](../../tools/browser-native-smoke.mjs) | 128 | Dependency-free Node CDP fixture runner for manual native browser lifecycle and IPC isolation | Node executable |
-| [model-catalog-smoke.mjs](../../tools/model-catalog-smoke.mjs) | 89 | Node regression tests for account isolation, model-family aliases and exact reasoning variant routes (Owner: Vinh) | Node executable; 6 tests |
+| [browser-native-smoke.mjs](../../tests/desktop/browser-native-smoke.mjs) | 128 | Dependency-free Node CDP fixture runner for manual native browser lifecycle and IPC isolation | Node executable |
+| [model-catalog-smoke.mjs](../../tests/desktop/model-catalog-smoke.mjs) | 89 | Node regression tests for account isolation, model-family aliases and exact reasoning variant routes (Owner: Vinh) | Node executable; 6 tests |
 
 Frontend production build, desktop cargo check/build and Windows WebView2 native smoke checks pass. Native UI checks in production and development StrictMode cover skeleton, creation failure/Retry, closing while creation is pending, retained form state, mobile CSS width under app zoom, maximize, modal-hide requests, panel close/reopen and tab destruction. The Rust unit-test executable fails during Windows loader startup with STATUS_ENTRYPOINT_NOT_FOUND before running assertions; the native executable does run. Cross-platform certification and physical multi-monitor DPI checks are not claimed.
 
@@ -1490,7 +1519,7 @@ Conversation capability validation: 325 adapter tests and 46 daemon tests pass (
 
 Conversation model presentation uses a shared family/route projection in the existing ModelSelector module. A family groups catalog aliases within one provider service; endpoint and authentication remain properties of each exact account route and never grant access to another route. Catalog effort annotations select exact ID variants, while advertised parameter efforts use reasoning_effort. Labels take precedence over legacy ID suffixes. Conversation account choice is automatic under the saved Settings routing policy; known-unavailable accounts are excluded before reserving a route. A failed running request is not replayed. Display normalization preserves distinct versions and snapshots. Discovery deadlines must cover the provider probe window; OAuth Codex catalog refresh, rather than static IDs, supplies GPT-6. No new wire contract, dependency, crate or table is introduced.
 
-Model-family regression verification lives in tools/model-catalog-smoke.mjs and uses the existing desktop TypeScript compiler plus Node built-in tests, with no dependency installation. It verifies account/auth/endpoint isolation, catalog-label ID variants, distinct versions, exact effort routes and unavailable-route refusal. Physical ownership is desktop model presentation (Vinh); one tooling test file is added, with no production source file added.
+Model-family regression verification lives in tests/desktop/model-catalog-smoke.mjs and uses the existing desktop TypeScript compiler plus Node built-in tests, with no dependency installation. It verifies account/auth/endpoint isolation, catalog-label ID variants, distinct versions, exact effort routes and unavailable-route refusal. Physical ownership is desktop model presentation (Vinh); one tooling test file is added, with no production source file added.
 
 Model-family validation: six Node regression tests, browser fixtures for automatic policy routing and exact parameter/ID effort payloads, reload/availability behavior, and desktop TypeScript/production build pass. Live discovery from both configured OpenAI OAuth accounts returns gpt-6.1-sol, gpt-6-astra, gpt-6-sol and gpt-6-luna; the real-catalog browser check displays four deduplicated GPT-6 rows and one row each for Gemini 3.5 Flash and Flash Lite. These checks issue no inference request.
 
@@ -1605,5 +1634,5 @@ The master refactoring across all 11 canonical crates and desktop UI implements 
    - `cargo clippy --workspace --all-targets -- -D warnings`: PASS (0 warnings).
    - `cargo test --workspace`: PASS (100% across all 11 crates).
    - `npm --prefix ui/desktop run build`: PASS (0 errors).
-   - `node tools/canvas-smoke.mjs`: PASS (42/42 tests pass).
+   - `node tests/desktop/canvas-smoke.mjs`: PASS (42/42 tests pass).
 

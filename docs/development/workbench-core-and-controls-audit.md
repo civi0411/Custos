@@ -1,5 +1,7 @@
 # Desktop workbench core, panels and controls audit
 
+**Current source follow-up:** [Full crates/UI plan](modular-workbench-refactor-plan.md) contains the new findings, baseline checks and target; [file ledger](modular-workbench-file-map.csv) distinguishes all-file structural coverage from selected semantic traces. See the final audit section for scope and the independently reproduced completion gap.
+
 ## Reading guide and evidence standard
 
 This audit answers three different questions: what the two reference desktops contain, what each control is wired to, and which behavior belongs in Custos. It is research, not a claim that all reference features have been implemented or exercised in Custos.
@@ -43,7 +45,7 @@ The inventory preserves raw localization expressions, resolves static English la
 Reproduce the index from Custos:
 
 ```sh
-node tools/workbench-control-audit.cjs /path/to/AgentHub /tmp/workbench-control-inventory.json
+node xtask/scripts/workbench-control-audit.cjs /path/to/AgentHub /tmp/workbench-control-inventory.json
 ```
 
 Third-party expression fragments retain the upstream MIT notices in the inventory. The tool uses the existing desktop TypeScript dependency and parses both reference checkouts without importing their code. Research-tool owner: desktop/Vinh. It is not a product registry, database, schema or second capability service.
@@ -234,10 +236,310 @@ All three reuse the same resource/canvas, shared viewers, session projection and
 - [Control/action inventory and source hashes](workbench-control-inventory.json): searchable machine-readable evidence.
 - [Orca source study](orca-source-study.md): earlier ownership/orchestration mapping, complemented by this control-level audit.
 - [Open Science source study](open-science-source-study.md): research-specific provenance/run/reviewer mapping, with runtime-lane correction above.
-- [Implementation plan](../../plan.md): current implementation status and release gates; this research does not silently mark them complete.
+- [Implementation proposal](sade-worktree-plan-proposal.md): current implementation status and release gates; this research does not silently mark them complete.
 
 The audit is broad at static desktop inventory level and selective at semantic handler/backend trace level. It is not a claim to have manually reviewed every one of 6,767 source files, proved every transitive call, exercised every control, audited all security properties, or established that current upstream matches the local snapshots. Mobile controls, external service behavior and platform-specific native menu coverage remain separate work.
 
 ### Audit artifact validation
 
 The final scan has zero TypeScript parse diagnostics. A separate validation re-read all 6,767 source files and checked their SHA-256 hashes, checked all 4,448 control line locations, checked summary totals and verified local source links. Static English labels could be resolved for 2,025 declarations; unresolved/dynamic labels remain as source expressions rather than guessed names. Both upstream MIT notices accompany expression fragments in the generated JSON. The research generator passes `node --check`; targeted whitespace checks pass. No application build or runtime test is claimed for this documentation/tooling-only change.
+
+## Current Custos crates, UI and three-reference follow-up
+
+This follow-up audits the dirty `vi` checkout at HEAD `f0a7efa`. It extends the earlier reference study; it does not certify the earlier inventory as a scan of the current Custos renderer. Scope is architecture, source-traced high-risk paths and selected rendered navigation. No production source was changed by this audit, no native agent/kernel/broker order was started, and no upstream application was executed.
+
+The working tree changed during inspection: Quant panes gained empty initial states and a benchmark-data module. Findings below distinguish the initial observation from the later source. The migration now seeds **Assistant only**; the older plan's four-Builtin observation is historical and must not be repeated as current. Revalidate every finding against its file before applying a patch.
+
+### Coverage and confidence
+
+| Surface | Evidence obtained | Limit |
+|---|---|---|
+| Crates inventory | Enumerated and hashed 660 Rust/SQL source files, 183,359 lines at the later scan; inspected Cargo workspace dependency metadata | Inventory includes tests and source declarations; not a manual semantic audit of every line |
+| Desktop inventory | Enumerated and hashed 209 TS/TSX/CSS source files, 49,354 lines; traced registry, resource dispatch, AppContext, terminal/notebook and Quant controls | Counts change with ongoing edits; generated/build assets excluded |
+| Duplication probe | No byte-identical files larger than 150 bytes among the scanned source sets | Does not prove absence of semantic duplication, copied algorithms or unused exports |
+| UI navigation | Browser preview at loopback 1429; Coding, Research/Lab and Quant navigation observed without starting execution | Browser renderer, not packaged Tauri/OS parity; existing private transcript content is not reproduced here |
+| OrCa local | `package.json` version 1.4.214; agent launch routing/replay and earlier panel/terminal study | `.git` absent; cannot establish local snapshot equals latest remote |
+| Open Science local | Commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`; terminal ownership, artifact presentation, run/environment recording | Selected paths, not whole-repo behavior parity |
+| QuantDinger local | Commit `e75f0cfa9cd47de9259844fefbf20c2fa1464d45`; durable jobs, strategy lifecycle/command repository, review evidence and deployment topology | Main checkout does not contain the Vue client; frontend documentation/router were checked separately upstream |
+
+Raw inventory from this run was written to `/tmp/custos-workbench-audit-source-index.json` for the current session, not added as a second product registry. No CodeGraph directory was present at the inspected roots; source inspection and Cargo metadata were used instead.
+
+### Findings ordered by consequence
+
+**P1 means correctness/trust/work loss needs resolution before claiming the journey works. P2 means structure, presentation or maintenance debt.** Severity does not assert that an untrusted package already achieves native code execution or that a live broker is configured.
+
+| ID | Priority | Observed path and trigger | Consequence and required correction |
+|---|---|---|---|
+| C01 | P1 | [`application/packs.rs`](../../crates/custos-daemon/src/application/packs.rs), `packages.install`: missing URL or digest takes an `else` branch that supplies a path string, then calls `commit_installed`. Desktop `installPackage` sends ID/version only | UI can report installed without downloaded/verified bytes. Resolve an approved catalog entry or validate an already-shipped component explicitly; otherwise fail. An inventory row must not stand in for a physical installation |
+| C02 | P1 | [`adapters/packages/mod.rs`](../../crates/custos-adapters/src/packages/mod.rs), `scan_local_packages`: manifest/worker existence can produce `sha256:local_discovered`; [`runtime.rs`](../../crates/custos-daemon/src/runtime.rs) commits discoveries directly | Discovery bypasses trust/compatibility validation and can overwrite a disabled row as installed at restart. Treat it as a candidate; validate file manifest, signature/trust, platform and prior enablement before activation. Install and scan also use different roots: platform data-local versus home `.custos` |
+| C03 | P1 | [`repositories/packages.rs`](../../crates/custos-persistence/src/repositories/packages.rs): inventory update and event insert are separate autocommit statements; enable/disable uses component ID across versions and writes `'1'`/`'0'` into `enabled_in_profile`; enabled query ignores that field | Crash can split state/audit; profile/version selection is ambiguous. Use one transaction for state+event, explicit selected version/profile semantics, and caller command idempotency rather than a fresh generated ID on every install retry |
+| C04 | P1 | [`runtime.rs`](../../crates/custos-daemon/src/runtime.rs) creates an `Arc<DomainPackRegistry>` from inventory at bootstrap; enable/disable handlers mutate DB only; `require_pack_enabled` tests registry membership | Disable may leave current process admitted, while install may not activate until restart. One runtime composition owner must publish a new admitted snapshot or report restart-required truthfully; test direct RPC after enable/disable, not just switcher refresh |
+| C05 | P1 | [`research/mod.rs`](../../crates/custos-daemon/src/application/research/mod.rs) and [`quant.rs`](../../crates/custos-daemon/src/application/quant.rs) reject every method before distinguishing historical reads from new execution | Disabling a pack also blocks reading its sources/notebooks/notes/artifacts/results, conflicting with uninstall-retention design. Preserve Base historical viewers and scoped read APIs; gate new domain computation/effects separately |
+| C06 | P1 | [`AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) initializes all workbenches, keeps defaults on inventory failure and ignores empty results; [`registry.tsx`](../../ui/desktop/src/components/workbenches/registry.tsx) always includes Coding; unknown ID normalizes to Assistant | Offline/error can display unavailable workbenches, empty inventory can retain old state, future identity is lost. Model loading/error/known-empty explicitly; derive availability from canonical projection and preserve unsupported IDs |
+| C07 | P1 | [`QuantStrategyExplorer.tsx`](../../ui/desktop/src/components/shell/sidebar/QuantStrategyExplorer.tsx) contains three fixed strategies/two LIVE badges; [`WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) hardcodes Quant counts and Ready footer, Research study count 1 | Confirmed in rendered preview. Fake financial state and false readiness appear without records. Remove production demo portfolio/counts and derive real lifecycle; pending or empty is valid. Strategy selection and Alphas/Tearsheet/Risk buttons currently only toast |
+| C08 | P1 | [`TearsheetPane.tsx`](../../ui/desktop/src/components/workbenches/quant/TearsheetPane.tsx) queries fixed strategy ID and fills missing/zero metrics via `||` constants; [`RiskAuditPane.tsx`](../../ui/desktop/src/components/workbenches/quant/RiskAuditPane.tsx) auto-evaluates fixed NVDA order, two made-up fills and fixed PBO matrix on mount | Moving defaults to backend calls does not make results user evidence. Use selected strategy/run/input references; unknown metrics remain unknown, valid zero remains zero; opening a view must not submit synthetic analyses. Initial fake metrics were partly removed during inspection, but these fallback/input paths remained |
+| C09 | P1 | [`application/quant.rs`](../../crates/custos-daemon/src/application/quant.rs): missing/failed market-bar lookup falls through to supplied/default summary metrics and persists a tearsheet; discovery uses fixed p-values, fixed IC standard deviations and returns `verified` | A computed IC is not empirical evidence for fixed significance/IR; DB persistence can make defaults appear historical. Separate explicit imported summaries from computed runs, require provenance, preserve lookup failures, and bind verification to actual dataset/code/validation outputs |
+| C10 | P1 | [`pbo_cscv.rs`](../../crates/custos-packs/src/quant/verifiers/pbo_cscv.rs) accepts `pbo_probability <= 0.50` directly, including negative values, without checking trusted origin/range | A caller's scalar must not serve as independent verification. Reject non-probabilities, require trusted versioned assessment or compute from validated inputs. Trace how metadata is constructed before asserting exploit reachability |
+| C11 | P1 integration blocker | [`alce.rs`](../../crates/custos-packs/src/research/verifiers/alce.rs) calls substring/token overlap “NLI”, emits fixed confidence and can create `AssessmentStatus::Verified`; references found in this scan are exports/tests, not production callers | Do not wire this into completion as semantic proof. For example a premise denying that a treatment improves survival can contain the positive claim substring and hit `Entailed(0.98)` before negation handling. Keep it a labeled lexical signal or replace with evaluated assessment + uncertainty; citation/hash/locator validation remains separate |
+| C12 | P1 integration blocker | [`worker_lease.rs`](../../crates/custos-runtime/src/packages/worker_lease.rs) drains stdout to EOF before reading stderr; stderr uses unbounded `read_to_end`; no non-test caller found by repository source search | A worker filling stderr can block before stdout closes, causing a false timeout; large stderr can consume memory. Drain both concurrently with caps, cancellation and process-tree cleanup; validate operation identity/schema. Current helper tests do not prove the production application uses this lease |
+| C13 | P2 correctness | [`ResourceContent.tsx`](../../ui/desktop/src/components/workbenches/ResourceContent.tsx) resolves an explicit missing `tab.sessionId` by falling back to current session | A stale tab can display another conversation. Explicit invalid references need unavailable/rebind UI; only tabs intentionally following current selection may inherit it. Test cross-session restore and deletion |
+| C14 | P2 behavior | [`application/packs.rs`](../../crates/custos-daemon/src/application/packs.rs), jobs-run creates a Task with `contract: None`, appends “Started workbench job”, returns `created` and no Run handle | Creation is not execution. Either name it preparation and offer the shared admitted StartRun path, or return the real admitted/queued Run. LIST/GET readiness is duplicated hardcoded job-name logic, not current provider/input/engine readiness |
+| C15 | P2 integration | [`custos-packs/src/lib.rs`](../../crates/custos-packs/src/lib.rs) adds tool compiler and inventory skill factory with only test calls found; contribution files re-export central constants while ResourceContent still names all renderers | New abstractions have not replaced production paths. Complete one caller migration and remove its old path, or keep the helper explicitly experimental. One-line facade files do not provide downloadable modules or domain ownership |
+| C16 | P2 structure/UX | 11 TSX files exceeded the repository 600-line threshold at the scan; AppContext 2,519 lines, FilesChanges 1,004, Evidence 989, Synthesis 927, setup panes >1,100; repeated inline dark colors and monospaced microtext remain | Split by behavior/owner with caller tests, not arbitrary line chunks. Long file size is a maintenance signal, not proof of dead code or memory use. Keep one toolbar and contextual inspector; eliminate repeated titles/banners/cards rather than adding more wrappers |
+
+The later Alpha pane starts empty, but still sets every returned candidate to `verified`. The newly added `quantBenchmarkData.ts` calls bars “verified” without a supplier/version/checksum record; a name/comment is not provenance. If a tutorial dataset is retained, make it explicit opt-in with an immutable source record and separate user namespace. Do not silently ingest demonstration market data into normal research history.
+
+### What should stay in crates
+
+The current package dependency graph is materially healthier than the UI suggests. Domain has no production Custos dependency or detected filesystem/network/process calls in the inspected search. Core depends on domain; runtime depends on core/domain/provider; adapters implement external edges; persistence owns concrete storage. The desktop host depends on SDK/domain, not daemon/runtime/persistence. This is evidence to preserve those boundaries, not to rebuild all crates.
+
+| Existing home | Preserve | Refactor target |
+|---|---|---|
+| `custos-domain` | IDs, typed records, pure invariants, deterministic math | Keep domain algorithms pure; move orchestration out only when actually mixed. No model/client/worker I/O here |
+| `custos-core` | Authority, completion, transitions, ports | One authoritative admission path; never convert UI lens/package membership into a grant |
+| `custos-provider` | Model event/usage normalization and compatibility semantics | Audit callers of rich legacy types/formats before retirement. Large OpenAI/Anthropic format files are not automatically unused |
+| `custos-persistence` | Canonical writer, topic repositories, migration stream | Fix transactional package lifecycle and referential scope; shared registry must reference existing domain records |
+| `custos-runtime` | Run/worker/kernel/PTY lifecycle, scheduling, context, OI | Integrate or retire unused parallel helper paths; global resource ceilings and clear stateful lease ownership |
+| `custos-adapters` | Provider/harness/MCP/browser/notebook/market/compute I/O | Signature/path enforcement and bounded worker transport at the actual call boundary; do not scatter protocol-specific clients into packs |
+| `custos-packs` | Domain jobs/recipes/roles/verifier obligations | Separate declared capability from operational readiness; truthful evidence and no active-lens-only restriction on Assistant orchestration |
+| `custos-daemon` | API boundary, application use cases, composition | Publish one inventory/admission projection; transport handler should orchestrate topic service instead of implementing numerical/worker loops inline |
+| `custos-sdk` | Versioned client contracts and normalized errors | Keep lightweight; existing core/domain dependency requires DTO reachability review before any removal |
+| `custos-bridge` | Session/Task promotion and linkage | Keep presentation identity separate; bridge persistence dev-dependency is not a production violation |
+| `custos-app/{cli,desktop}` | Thin host/native shell and SDK consumer | Do not turn it into another business backend or mandatory hop between backend services |
+
+Unit tests under `src` behind `cfg(test)`, crate integration tests under `tests/`, and cross-crate testkit/e2e packages are normal Rust organization. They are not “rubbish” and generally are not linked into a release binary. Production-exported fixtures/bench helpers need caller review; a filename alone is not authorization to delete them. No source deletion list is justified by the byte-duplicate scan.
+
+### Agent-first workbench frame
+
+Custos should offer working material and an agent beside it. It should not require users to navigate a monitoring dashboard before opening a file, paper or strategy. The following is a target interaction design, not a claim that each viewer/connector exists today.
+
+| Workbench | Left navigation: choose real work | Center: repeatable, splittable resources | Right: support selected resource | Primary agent loop |
+|---|---|---|---|---|
+| Coding, informed by OrCa | Project/repo/worktree, conversations and Tasks; avoid repeating Create worktree under every collapsed row | Agent session/retained PTY, file editor, diff, test output, optional browser | Scope, actual harness/host/assurance, selected diff/test finding, permissions and cost | Select scope → ask/launch → inspect streamed work → review patch/tests → integrate |
+| Research, informed by Open Science | Study folder/corpus, sources, notebooks, methods and actual runs; Git optional | Conversation, exact PDF passage, notebook file, dataset/table, figure/report, run comparison | Citation/provenance, environment/kernel/GPU binding, selected run inputs and missing coverage | Question → sources → hypothesis/code → explicit experiment → artifacts/environment → review |
+| Quant, informed by QuantDinger | Real strategy revisions, datasets/universes, backtests and deployments; clear paper/signal/live labels | Agent-guided strategy editor + chart/table, backtest report/trades, comparison, execution workspace only when configured | Selected dataset/fees/slippage, leakage/holdout assumptions, risk assessment, actual broker/account/effect state | Idea → versioned strategy/data → backtest → inspect robustness → separately authorized deployment |
+| Assistant / shared | Conversations, Tasks, explicit connectors and approvals | Chat, note/draft, attachment/source viewer; may open specialist resource when installed | Selected context, account/recipient, permission/receipt/cost | Ask → gather selected context → draft/result → explicit allowed effect |
+
+Keep icon-only lens controls with accessible names, visible keyboard focus and tooltips. Use content to distinguish workbenches: Coding shows working tree/agent, Research source/experiment, Quant strategy/dataset. A tiny accent can reinforce identity; colorful portfolio cards and ALL-CAPS status badges cannot replace real data.
+
+Primary tabs identify **instances**: file path/revision, notebook ID, source/page, strategy revision, run ID. “Artifacts”, “Runs”, “Evidence” are discovery/inspection surfaces; opening a specific report or comparison belongs in the center. A right inspector may contain contextual metadata and links, not the sole full notebook/report/editor. Allow multiple resources of the same kind and cross-workbench composition without copying a conversation or restarting an agent.
+
+Unify the shell before polishing every pane: one top navigation row, one tab strip per group, one compact content toolbar, optional context line only if it adds information, and one inspector. Avoid repeat pane titles already in tabs, “Ready” footers without checks, large empty-state cards inside navigation, toast-only commands and nested full-page dashboards. Preserve current ScreenContext as layout owner; moving a resource is not executing it.
+
+### Reference transfer map: behavior before code
+
+| Reference evidence | Learn and adapt into Custos | Do not transplant |
+|---|---|---|
+| [OrCa agent launch](../../../orca/src/main/runtime/rpc/methods/agent-launch.ts), [pane documentation](https://www.onorca.dev/docs/model/tabs-panes-splits) | One launch intent, explicit structured-session versus PTY outcome, replay-aware operation identity, retained process across layout changes, exact tab references | Electron/preload runtime, second session/operation DB, all commerce/remote/mobile surfaces |
+| [Open Science terminal ownership](../../../open-science/apps/desktop/src/lib/terminalSessions.ts), [run recording](../../../open-science/apps/desktop/src-tauri/src/runs.rs), [artifact presentation](../../../open-science/apps/desktop/src/lib/artifacts.ts) | Hide/move versus destroy semantics; output discoverability from agent events; exact input/code/environment/output lineage; expensive environment capture outside write lock | File/JSONL event store alongside Custos canonical history, global unbounded run listing, every specialist viewer regardless of user need |
+| [QuantDinger jobs](../../../QuantDinger/backend_api_python/app/utils/agent_jobs.py), [command repository](../../../QuantDinger/backend_api_python/app/services/strategy_command_repository.py), [lifecycle](../../../QuantDinger/backend_api_python/app/services/strategy_lifecycle.py) | Submit+observe durable computation; bounded progress replay; idempotent start/stop/reconcile; execution failures classified separately from retryable market state | PostgreSQL/Redis/Celery/Kafka/Compose stack for Base, SaaS billing/admin/marketplace, numeric risk thresholds as universal policy |
+| [QuantDinger frontend README](https://github.com/OpenByteInc/QuantDinger-Vue/blob/main/README.md), [router](https://github.com/OpenByteInc/QuantDinger-Vue/blob/main/src/config/router.config.js) | Strategy editor, historical backtests and operational workspace are distinct contexts; preserve source-scoped conversations and job identity across navigation | Its entire navigation/sidebar into a desktop resource canvas. Backend Apache license does not establish permission to reuse frontend source under its separate source-available terms |
+
+The Quant frontend review here covers official product-area documentation and router source, not full view implementations. Before copying any code, inspect the exact frontend license and file provenance. This audit neither copies code nor issues a license-compliance conclusion. Upstream claims of features/performance are not Custos measurements.
+
+### Architecture and data flow to implement within existing boundaries
+
+```mermaid
+flowchart TD
+    UI[Shared shell, Screen and resource views] --> SDK[SDK and versioned Local API]
+    SDK --> APP[Daemon application services]
+    APP --> ADMIT[Core: Task scope, authority, budget, completion]
+    APP --> INV[Canonical inventory and capability projection]
+    ADMIT --> RT[Runtime: scheduler, context, supervised runs and leases]
+    RT --> MP[ModelPort: Custos-owned agent loop]
+    RT --> HP[AgentRuntimePort: native harness loop]
+    RT --> WP[Capability and compute ports]
+    MP --> IO[Adapters: models, agents, tools, kernels, connectors]
+    HP --> IO
+    WP --> IO
+    IO --> OBS[Observations, receipts, artifact references]
+    OBS --> VER[Pack-specific verifier and core completion gate]
+    APP --> DB[Persistence: canonical SQLite and artifact metadata]
+    VER --> DB
+    DB --> EVENTS[Event cursor and read projections]
+    EVENTS --> UI
+    OBS --> CAS[Artifact store or scoped external files]
+```
+
+| Data concern | Shared owner | Domain specialization and invariant |
+|---|---|---|
+| Session/Task/Run | Existing canonical repositories and command/event ledger | Lens is a view, not another transcript or permission store. Views may share references without inheriting grants |
+| Source and payload | Versioned metadata plus CAS/scoped user paths | Coding snapshot + dirty bytes; Research source/passage/code/env; Quant data adjustment/timezone/fees/strategy revision. Snapshot references must exist before claiming reproducibility |
+| Resource addressing | Existing source/artifact/notebook records; optional registry as locator | `resource_registry` currently lacks scope/version ownership fields; do not use its URI or `physical_path` alone as permission or a deletion target |
+| Engine and execution | Runtime supervisor, native adapters, durable attempt IDs | Local process, notebook kernel and remote GPU job have distinct cancel/reconnect semantics; closing UI cannot silently duplicate or terminate work |
+| Verification | Versioned verifier records and core criterion gate | Locator/exit/hash are operational facts; lexical overlap or self-reported numeric score is not trusted semantic/statistical evidence |
+| Installation | Verified managed package bytes + profile enablement | Catalog/discovered/installed/enabled/ready/running/granted are separate; retained historical data remains readable without compute pack |
+| Shared optimization | Context compiler, budget ledger, runtime/OI under hard policy | Context selection, cache reuse and S1 judgments cannot lower acceptance requirements or auto-enable egress; report unknown spend honestly |
+
+Keep deterministic pure domain algorithms in domain if they remain cohesive. Long-running backtests/parsing/training run as scheduled bounded work, not inline inside a busy API handler or a rendering lifecycle. No new hub, graph database or microservice is needed to repair these paths. Optional engines share compatible dependencies by explicit capability; they do not require installing an entire other workbench UI.
+
+### Repair order linked to the modular packaging campaign
+
+| Order | Changes to deliver together | Existing campaign | Review gate |
+|---|---|---|---|
+| 1 | Remove fake strategy/count/Ready states; null/unknown metrics; stop synthetic mount analyses; truthful created versus started copy | P00–P02 | Empty/offline profile renders no fake LIVE, performance or successful verification; deliberate fixture imports visibly isolated |
+| 2 | Physical verified install, trusted discovery, one package root; atomic command/state/event; profile/version enablement | P03–P06 | Missing URL/catalog payload fails; disabled stays disabled after restart; duplicate command and crash fixtures |
+| 3 | Refresh backend admission and UI availability from one versioned snapshot; retain historical reads | P04–P07 | Disable denies new execution through direct API, while prior source/report/history opens; in-flight version remains pinned |
+| 4 | Wire actual launch/observe to Coding; bounded workers where used; explicit notebook/kernel/resource lifecycle | P05–P07 | Move/split/reopen does not relaunch; stderr flood does not deadlock or grow unbounded; cancel/uncertain remain honest |
+| 5 | Research exact provenance and evaluated support; Quant versioned strategy/dataset, computed versus imported metrics and independent assessment | P07 and pack vertical gates | Citation-negation counterexample stays uncertain/rejected; missing bars cannot produce a computed report; negative probability cannot pass |
+| 6 | Replace monolithic hardcoded pane/availability maps with one contribution seam; split state subscriptions and pane subviews by actual responsibility | P08–P11 | Shared resource identities/drafts survive navigation; optional bytes/load/RSS measured; no old execution path or duplicated writers |
+
+Small fixes should retire their old path immediately after caller coverage, rather than adding a new helper and leaving it unused. Maintain the existing [modular workbench plan](modular-workbench-refactor-plan.md) as the implementation campaign; this audit is an evidence ledger, not a second target architecture.
+
+### Checks performed and outstanding proof
+
+- `cargo metadata --offline --no-deps`: current package/dependency map obtained; dev-dependencies separated from production.
+- `cargo check --workspace --all-targets --offline`: exit 0 on this working-tree snapshot.
+- `npm --prefix ui/desktop run build`: exit 0, TypeScript/Vite completed. Quant pane chunks are emitted in the same build; this does not prove independently downloadable UI.
+- `node tests/desktop/canvas-smoke.mjs`: 43 passed, 0 failed. This is useful regression coverage but did not reject the fake portfolio or fixed statistical inputs above.
+- `cargo test -p custos-packs alce --offline`: 3 existing tests passed. They check the current heuristic cases; they do not cover the negated-substring counterexample or establish semantic calibration.
+- Browser navigation: Quant fake portfolio observed; Research notebook displayed retained output with previous-epoch warning and execution disabled without workspace. That warning/disable is useful truthful behavior to preserve.
+- Preview logs also emitted React's cross-component render update warning (`AppProvider` updated while `ScreenProvider` renders). `ScreenContext.tsx::selectScreen` calls AppContext setters inside a `setScreens(previous => ...)` updater; close-screen selection also performs cross-owner updates inside that updater. Keep state updaters pure and resolve navigation transitions outside them; verify select/close/restore under Strict Mode. This is an additional runtime finding, not covered by the green tree-operation smoke tests.
+- Production implementation is unchanged by this audit. Full Rust tests, packaged desktop, cross-OS process cleanup, live models/brokers/cloud GPU, accessibility contrast across themes and performance budgets remain unverified here.
+
+Release evidence must include the actual snapshot tested. Passing these checks is not evidence that all three upstream cores were absorbed, all unused code was removed, research claims were semantically verified or a Quant strategy is safe for live execution.
+
+## Review of the supplied master architectural design
+
+The entire supplied 229-line document, headed `CUSTOS MASTER ARCHITECTURAL DESIGN`, was read. It is treated as a design proposal, not a new authority superseding `Custos.md`. It usefully summarizes the agent-first shell, zero fabricated production data, retained work, historical access and audit repair waves. The corrections below are required before its diagrams/contracts can guide implementation without ambiguity. This review modifies documentation only and does not certify the changing working tree.
+
+### Section-by-section assessment
+
+| Proposal section | Keep | Correct before adoption |
+|---|---|---|
+| Overview diagram | UI→application admission→supervised execution, shared data | Show ModelPort/native AgentRuntimePort/capability execution, observation/evidence and event return path. Upstream product names are references, not four engines to instantiate |
+| §1 invariants | Pure domain, canonical single writer, zero fake UI, one lifecycle owner | Keep canonical responsibility groups rather than forbid the already-existing twelfth Cargo package. Logical writer != dedicated thread; define durability, not merely WAL |
+| §2 crate map | Existing topic homes and thin app/SDK boundaries | Dependency graph is authoritative over numbered layers; bridge currently depends on runtime for linkage. Do not create `repository_git` or `tools/package-builder` just because the draft names them |
+| §3 data | Versioned metadata + out-of-band large artifacts and data-preserving uninstall | URR is locator metadata, not the filesystem/CAS. Separate immutable snapshots, mutable user projects, rebuildable indexes and secrets; hot/cold is not their authority model |
+| §4 workbenches | Coding resources, Research grounding/experiments, Quant author/backtest/deploy separation | Avoid Git-only conversations, commit-only parity, WorkerLease=Jupyter, hard cap by declaration, and Assistant-as-kernel. Capture environment/dependency provenance, not just a four-field tuple |
+| §5 UI | Center work, optional contextual inspection, exact missing-reference behavior | Chat is a full peer working resource, not always a bottom strip; provider/model belongs to run/session, not necessarily globally. Icon-only switcher, optional sidebars and theme accessibility remain required |
+| §6 packages | Trusted bytes, profile enablement, immutable versions, preserved history | Installation, enablement, UI loading, readiness and running are separate state dimensions; verify catalog metadata before transfer and payload integrity after transfer |
+| §7 waves | Existing P00–P11 campaign and C01–C16 references | Physical install/signature work is P06, not fully closed by Wave B metadata. Apply safety containment early; full semantic/worker integrations belong to their actual later packets |
+| §8 conclusion | One coherent architecture and retirement of competing implementations | Remove “everything must follow this new SSOT” until changes are reconciled in existing master/topic/catalog and supported by implementation evidence |
+
+### Source-backed corrections and decisions
+
+| ID | Design issue | Custos-specific correction and evidence |
+|---|---|---|
+| D01 | Absolute 11-Cargo-crate rule | Fresh `cargo metadata --offline --no-deps` returns 12 product packages: ten service/library packages and `custos-app-cli`/`custos-app-desktop`. Preserve canonical responsibility grouping; neither split nor merge solely to achieve a number |
+| D02 | All structured writes through one dedicated writer thread | `connection.rs` currently uses `Arc<Mutex<Connection>>` and a reader pool, not a dedicated writer actor. Keep one writer authority and short transactions. An actor/thread is an implementation option after measuring blocking/queue behavior, not an architecture prerequisite |
+| D03 | WAL implies durable decision commits | Current connection config sets `synchronous=NORMAL`. WAL/NORMAL can retain consistency but lose recently acknowledged transactions after OS/power failure. Define the canonical decision/authority/outbox durability requirement and validate FULL where required; avoid row-level FULL/NORMAL fiction on one shared connection. See [SQLite durability settings](https://sqlite.org/pragma.html#pragma_synchronous) |
+| D04 | `resource_registry` already has `resource_id` and complete data semantics | Migration 0044 uses `uri` as primary key, with kind/component/MIME/digest/size/path/provenance. It does not provide project/profile ACL, resource version, owner lifecycle or GC policy. Treat missing fields as contract gaps to reconcile with existing repositories, not existing guarantees |
+| D05 | URR is “cold blobs” | Registry is a metadata lookup. CAS stores immutable content; a project folder may be mutable/external; indexes/cache are derived; credentials remain separate. A user notebook, Git checkout or checkpoint is not automatically a cold immutable blob |
+| D06 | Parquet/zstd mandatory for all market resources | Reasonable candidate for versioned historical tabular snapshots, not the execution queue or low-latency mutable order book. Use bounded live buffers/event journal and produce snapshots/partitioned historical files as needed; measure query/ingest cost before adding a data engine. [Arrow dataset API](https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html) supports selective reads, not automatic optimal storage for every workload |
+| D07 | Assistant is the shared core orchestrator | Assistant is a default interaction/domain capability. Kernel owns authority/state, runtime owns execution, OI proposes constrained plans, S1 supplies bounded judgments, S2/native harness reasons. No Assistant agent must run permanently or sit on every Coding/Research request |
+| D08 | Three fixed specialist engines | Reuse common execution lanes: Custos-owned model loop, native harness, deterministic tool/compute, remote job. Packs select semantics and verifiers; each does not get a separate Task engine. An installed local coder model is inference, becoming a coding agent only through an admitted harness/tool loop |
+| D09 | Global scheduler and lease imply hard CPU/RAM limit | Resource admission/reservation is distinct from actual measurement and OS/device enforcement. Current worker budget declares output/time/memory, and current compute admission performs capacity/exclusive-sharing checks; neither proves full hard limits. Report requested/reserved/observed/enforced/unsupported separately; bound aggregate usage, queues and priority, not just each request independently |
+| D10 | Python worker or enum flag implies Jupyter support | `NotebookDriverPort` is a custom persistent Python worker interface, and the package worker currently writes a request to stdin and awaits completion. Adding `StatefulKernel` enum does not implement Jupyter channels/messages. Keep this driver honestly labeled; a Jupyter adapter is optional behind the existing boundary with versioned conformance |
+| D11 | Interrupt, shutdown and lease expiry are interchangeable | Current `interrupt_scoped` takes the worker away and increments epoch; it loses Python memory. UI must disclose that current semantic or implement a real interrupt preserving state. Jupyter has distinct interrupt, restart and shutdown operations; closing a view invokes none. Expiry/reclaim requires explicit state-loss policy, and remote jobs need acknowledged stop/reconcile. See [Jupyter kernel manager](https://jupyter-client.readthedocs.io/en/stable/api/jupyter_client.html) |
+| D12 | Every Coding session must belong to a Git worktree | Bind actual operations to appropriate resources: checkout for Git mutation, folder for non-Git editing, execution host for remote process, none for general read-only chat. Existing `WorkspaceKind` includes Git, Folder and RemoteSsh. Scope binding does not itself establish OS isolation or intercept native harness tools |
+| D13 | Exact-base equals original commit | A dirty worktree differs from HEAD; staged/untracked bytes and relevant paths matter. Bind patch to actual source snapshot/preconditions, then revalidate at dispatch. Native harness direct effects need truthful provider-governed assurance unless interception/isolation is established |
+| D14 | Four lineage fields establish reproducibility | Also retain environment/toolchain/dependency lock, invocation/parameters, input versions, random seeds where relevant, engine/model/method versions, output digests and execution host. Missing data stays unknown; hardware nondeterminism may prevent bit-identical reproduction. Git commit optional for non-Git studies |
+| D15 | Connected broker plus grant means LIVE | Separate configured, reachable/authenticated, permissioned, actually running deployment and observed fills. Backtest, simulated paper and broker-paper are distinct. Network timeouts require idempotency/receipt/reconciliation, and live risk/lifecycle gates are independent of successful backtest |
+| D16 | One linear package state machine | Model immutable installed versions, per-profile enablement, per-process contribution/engine activation, per-attempt execution and per-action grant separately. A package may be installed+disabled while an old admitted run drains; two profiles may differ. No single Running→Stopped arrow describes all of this |
+| D17 | Full verification before download | Authenticate catalog/manifest first, download into bounded staging next, verify actual bytes/file inventory/compatibility next, then promote and commit availability. Pre-download metadata trust and post-download payload verification are distinct checks |
+| D18 | Signature plus checksum is full update trust | Define trusted root/key lifecycle, artifact identity, channel, freshness/expiry, revoked keys, anti-rollback and offline policy. [TUF](https://theupdateframework.github.io/specification/latest/) illustrates rollback/freeze/mix-and-match threats; using its design principles does not require introducing a homegrown protocol or claiming TUF conformance |
+| D19 | Atomic promotion makes DB and files one transaction | SQLite cannot atomically commit arbitrary filesystem or remote effects. Persist intent, perform verified transfer/promotion outside the DB transaction, commit transition/event, and reconcile each crash window. Rename/flush semantics differ by filesystem/platform |
+| D20 | Dynamic Host API is a universal plugin sandbox | Same-origin imported JavaScript can access shared page state. Tauri capabilities restrict window/webview IPC exposure, not every component's JS behavior or Rust code. Signed first-party M2 UI is the initial trust model; untrusted third-party plugins need a separately reviewed isolation boundary. [Tauri capability limits](https://v2.tauri.app/security/capabilities/#security-boundaries) |
+| D21 | Runtime-installable Rust pack through trait polymorphism | Traits compose code inside the host build; default Rust ABI is not stable. First-party trusted policy may remain host-compiled in M1; optional engines use versioned process protocols and M2 UI uses a compatible Host API. [Rust ABI reference](https://doc.rust-lang.org/reference/items/external-blocks.html#abi) |
+| D22 | Every navigation operation must be a pure function outside updater | Pure state updaters/reducers are required, but event handlers/effects may coordinate navigation legitimately. Prohibit cross-provider setters/execution inside state updaters; do not prohibit all navigation side effects such as persisting layout or restoring focus |
+
+### Corrected architecture model
+
+```mermaid
+flowchart TD
+    UI[Shared shell: conversation and resource views] --> API[SDK and Local API]
+    API --> APP[Application services]
+    APP --> CAP[Installed, enabled and ready capability snapshot]
+    APP --> K[Kernel: state, scope, authority, budget and completion]
+    K --> R[Runtime orchestration and resource supervision]
+    R --> OI[Optional OI and bounded S1 judgments]
+    R --> M[ModelPort: Custos-owned agent loop]
+    R --> H[AgentRuntimePort: native agent loop]
+    R --> C[Capability or compute port]
+    M --> A[Concrete adapters]
+    H --> A
+    C --> A
+    A --> OBS[Observations, receipts and artifact references]
+    OBS --> EV[Domain evaluation plus core completion gate]
+    EV --> DB[Canonical SQLite via persistence]
+    APP --> DB
+    OBS --> ART[Managed artifacts or scoped external resources]
+    DB --> EVENTS[Versioned projections and event replay]
+    EVENTS --> UI
+```
+
+Coding, Research and Quant contribute jobs, tools, viewers and acceptance obligations along these same lanes. OrCa/Open Science/QuantDinger inform domain behavior; their product names are not runtime identities. OI/S1 may assist context/topology/worker selection without becoming authority or mandatory latency on the direct path.
+
+### Corrected package lifecycle and data placement
+
+Installation progression is `candidate → authenticated metadata → downloading/staged → payload verified → installed version`, with explicit failure/cancel/reconcile paths. Enablement is a separate per-profile choice; UI/engine readiness is a separate process-local observation; a running attempt has its own pinned version, grant and terminal/uncertain status. Disable blocks new admissions while preserving authorized cleanup/history; remove waits for references/leases or reports why blocked. An allowed rollback is explicit release policy, not silent downgrade to arbitrary old signed bytes.
+
+Use four storage responsibilities instead of labeling everything hot or cold:
+
+1. **Canonical metadata:** tasks/sessions/runs/authority/outbox/evidence/package lifecycle, versioned domain records and source/artifact references.
+2. **Payloads and external resources:** immutable CAS objects, versioned large datasets/checkpoints, and mutable user folders/repositories addressed under explicit ownership and scope.
+3. **Derived state:** rebuildable search/vector/symbol/UI projections and caches; bounded telemetry, not another evidence store.
+4. **Secrets:** platform credential backend; only references and redacted connection metadata in canonical records.
+
+Registry metadata may index payloads but never owns all their lifecycle by itself. Do not duplicate raw payload between a new URR store and existing CAS. Do not delete user data merely because its workbench package is removed. Readable history remains subject to normal scope/ACL and retention, not public access for every installed plugin.
+
+### Additional closure gates implied by this review
+
+| Gate | What must be demonstrated | Plan packet |
+|---|---|---|
+| Durability | Actual PRAGMA/storage profile, short transaction behavior, backup and OS/power-loss limitation; no memory-only approval acknowledged as durable | P00/P03 |
+| Stateful execution | Honest custom Python versus Jupyter label; interrupt state-loss disclosure; kernel death/epoch/output invalidation; lease expiry does not silently strand remote billing | P02/P07 |
+| Update trust | Authenticated metadata, verified payload, expiry/revocation/anti-rollback/offline rules, atomic state+event and filesystem crash reconciliation | P06/P09/P10 |
+| Work scope | Non-Git folder study/coding and resource-free Assistant; native tool assurance cannot inherit mediated label from UI shell | P01/P04/P07 |
+| Resource budget | Requested/reserved/observed/enforced values; global aggregate and bounded output streams; supported OS limitation visible | P07/P11 |
+| Provenance | Dirty/non-Git code inputs, environment/dependencies/parameters, source versions and immutable outputs; unknown fields do not become verified | P07/P09 |
+| UI composition | Full conversation alongside peers, run-specific provider/model, inspector optional, theme contrast and no global run authority from lens | P05/P08 |
+
+The supplied document is suitable as a concise architectural overview **after correction**, not as an independent implementation spec. The existing modular plan §§27–33 remains the delivery queue. Official technical documentation supports the individual constraints above; it does not prove Custos is optimal, secure, Jupyter-compatible or cheaper before measurement.
+
+## Crate assembly follow-up
+
+This pass read Cargo metadata for every product package, enumerated all `src` Rust modules, read each package entry point and traced selected bootstrap/port/storage/skill paths. The structural scan covered 608 Rust files under product `src` directories at that scan; this excludes migrations and crate integration tests, so it is not the earlier 660 Rust/SQL inventory scope. File text was scanned for module/entry/I/O candidates, not parsed into a complete call graph or manually certified line by line. The source remains dirty and evolving.
+
+| Product package | Rust src files | Main topic areas |
+|---|---:|---|
+| domain | 81 | authority, context/evidence, workspace, task/session, research/quant, OI/fleet/shared |
+| core | 65 | kernel, authority, evidence, contracts, context/graph policy |
+| provider | 48 | canonical model port/events/turn, bridge, catalog and compatibility types |
+| persistence | 42 | connection/migrations, topic repositories, store implementations, artifacts |
+| bridge | 3 | session promotion/attachment/steering service |
+| runtime | 101 | workflow/agent, cognitive/OI/context, resource coordinators and integrations |
+| adapters | 129 | provider/harness, local inference, physical resources/tools and protocols |
+| daemon | 52 | bootstrap, API transport, topic application handlers and credentials |
+| packs | 64 | domain recipes/skills/verifiers and registry/benchmark metadata |
+| SDK | 11 | Local API client, wire compatibility and profile resolution |
+| app CLI | 9 | SDK-based product entry and terminal presentation |
+| app desktop | 3 | thin Tauri host |
+
+These counts are evidence of structural coverage, not a target size. Test code embedded in the same files is included; the simple I/O candidate scan split at the first `cfg(test)` marker and cannot establish production reachability on its own.
+
+### Additional assembly findings
+
+| ID | Finding and current evidence | Required disposition |
+|---|---|---|
+| A01 | `daemon/runtime.rs` falls back to all four components when `list_enabled_components()` errors | Optional execution must fail closed with visible inventory error; do not widen availability on DB failure. Connect this to C04/C06 tests |
+| A02 | `LocalApiDispatcher::new` constructs terminal/files/Python/MCP/default packs; outer bootstrap constructs and replaces several of them. `with_pack_registry` and `with_packs` both set the same registry | One explicit composition root creates selected instances, transport receives dependencies, test constructors remain clearly fixtures. Construction currently does not itself prove Python was spawned, but hidden ownership/defaults make readiness unreliable |
+| A03 | `TaskRuntime` accepts many optional ports via builder; dispatcher similarly allows partial production configuration | Validate mandatory dependencies before accepting work, distinguish intentionally unavailable capability from missing required wiring. Do not replace it with an arbitrary string ServiceLocator |
+| A04 | Runtime concrete skills implement file/HTTP/process I/O; pack `CargoTestSkill` constructs `SandboxedProcess` directly | Retain domain skill semantics/recipes in packs, move physical mechanics behind existing ports/adapters and enforce admission at the caller. Source declarations are not proof that these skills are all wired into current production tool dispatch |
+| A05 | `SandboxedProcess` clears/filter env and invokes `Command::output`, without proving OS file/network isolation or bounded output. Its `stdout_tail`/`stderr_tail` slice by byte offset and can cut a UTF-8 character | Audit actual subprocess execution path, use bounded capture/process-tree semantics and truthful isolation labels. Add multibyte-output regression before preserving/moving helper; no claim of live exploit reachability from this static trace |
+| A06 | Provider compatibility files include filesystem image reads, canonical catalog `from_file/to_file` and reqwest error conversion | Move actual acquisition/storage mechanics outward while retaining pure conversion/legacy bridges and attribution. Error conversion alone is not I/O; do not bulk move all vendor format code or claim the provider crate is already entirely pure |
+| A07 | Adapter llama.cpp dependencies are non-optional; native feature is empty; daemon eagerly initializes the native inference runtime | Establish API-only build profile and real optional dependency/cfg coverage, then lazy native engine activation or compatible optional worker. Initialization is not proof of model weights loaded; measure both binary/build and process footprint |
+| A08 | `WorkloadAdmissionCoordinator` and its attachment APIs exist, but no daemon composition call to `with_admission_coordinator`/`set_admission_coordinator` was found in this scan | Do not claim the resource scheduler governs every model/kernel/job. Trace and wire the actual production resource owners to one admitted accounting policy, or label the path ungoverned/unsupported. Do not create a second scheduler |
+| A09 | `StoragePort` is a composite of existing topic traits; SqliteTaskStore implements many narrow ports. Batch writer has only its own test caller found; SDK depends on core/domain; broad re-exports obscure actual imports | Keep narrow consumer interfaces and the shared store implementation. Do not claim all writes use batch writer or that SDK links the daemon. Reduce public aliases/deps only after reachability/compatibility audit; retained tests are not bloat |
+
+The assembly specification is [SADE design §§10–13](../architecture/sade-agent-system-design.md#10-cohesive-assembly-blocks-inside-the-current-crates). It defines block ownership/lifetimes, constructor injection, workbench/skill/executor separation and measurement gates. These are targets integrated into the existing P00–P11 queue, not new crates, schemas, services or a rewritten product runtime.
+# Current full crates and UI refactor audit
+
+The source-backed continuation is now [modular-workbench-refactor-plan.md](modular-workbench-refactor-plan.md), §§1–2 for inventory/findings and §§3–13 for target/migration/acceptance. The [per-file CSV](modular-workbench-file-map.csv) captures 1,156 files under crates/ui; 915 source-extension files contain 250,394 lines including tests/generated code. Full-content structural scanning is separate from selected semantic production traces. Historical counts/findings below retain their snapshot scope.
+
+Current baseline `9cd903b` plus user changes passes Rust all-target check, desktop and CLI UI builds, canvas 43/43 and core completion 7/7. A temporary Cargo harness independently reproduced `foreign_task_claim_accepted=true`: current completion gate accepts a passing Task B claim for Task A's required TestResult. The plan records this alongside SPY-to-BTC verified-data fabrication, worker result identity/stateful/enforcement gaps, package truth/trust boundaries and UI ownership/distribution debt. No production remediation was performed in this audit; build/test success is not a clean-bill certification.
+
+The user explicitly waived the fixed 11-crate constraint. Target packages own UI and domain behavior vertically; optional shared capabilities own execution-heavy resources; platform retains common authority/state/storage. Existing deletion of block facades and other source changes were preserved. The current master working copy uses legacy long-form sections; only its architecture-plan reference was synchronized, not restored to an earlier rewritten version.
+
+---

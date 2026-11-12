@@ -15,10 +15,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify Architecture Boundaries
-        continue-on-error: true
         run: |
-          bash scripts/check_deps.sh
-          bash scripts/check_naming.sh
+          bash xtask/scripts/check_deps.sh
+          bash xtask/scripts/check_layering.sh
+          bash xtask/scripts/check_naming.sh
 
       - name: Install cargo-deny
         continue-on-error: true
