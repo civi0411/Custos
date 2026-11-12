@@ -1,0 +1,27 @@
+[package]
+name = "custos-protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Canonical wire schemas, envelopes, and IPC contracts for Custos SADE"
+
+[dependencies]
+custos-domain = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+async-trait = { workspace = true }
+dirs = { workspace = true }
+agent-client-protocol = { workspace = true }
+agent-client-protocol-schema = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["agent-client-protocol-schema"]
+
