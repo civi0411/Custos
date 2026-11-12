@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
 import { resolveResources, workbenchResourceIds } from '@/components/workbenches/OrcaTabbedContainer';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 
 interface UseResourcePickerOptions {
   isResourcePickerOpen: boolean;

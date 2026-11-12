@@ -1,0 +1,493 @@
+/* ============================================================
+   WORKBENCH IDENTITY
+   One calm shell; workbench identity is a small editorial cue.
+   ============================================================ */
+
+.custos-workspace,
+[data-workbench="copilot"] {
+  --workbench-accent: var(--wb-copilot);
+  --workbench-accent-soft: var(--wb-copilot-bg);
+  --workbench-accent-border: var(--wb-copilot-border);
+  --workbench-accent-glow: var(--wb-copilot-glow);
+  background: var(--color-canvas);
+  color: var(--color-editor-fg);
+}
+
+.custos-workspace[data-workbench="engineering"],
+.custos-workspace[data-workbench="code"],
+.custos-workspace[data-workbench="coding"],
+[data-workbench="engineering"],
+[data-workbench="code"],
+[data-workbench="coding"] {
+  --workbench-accent: var(--wb-engineering);
+  --workbench-accent-soft: var(--wb-engineering-bg);
+  --workbench-accent-border: var(--wb-engineering-border);
+  --workbench-accent-glow: var(--wb-engineering-glow);
+}
+
+.custos-workspace[data-workbench="research"],
+[data-workbench="research"] {
+  --workbench-accent: var(--wb-research);
+  --workbench-accent-soft: var(--wb-research-bg);
+  --workbench-accent-border: var(--wb-research-border);
+  --workbench-accent-glow: var(--wb-research-glow);
+}
+
+.custos-workspace[data-workbench="copilot"],
+[data-workbench="copilot"] {
+  --workbench-accent: var(--wb-copilot);
+  --workbench-accent-soft: var(--wb-copilot-bg);
+  --workbench-accent-border: var(--wb-copilot-border);
+  --workbench-accent-glow: var(--wb-copilot-glow);
+}
+
+.workbench-accent {
+  color: var(--workbench-accent);
+}
+
+.workbench-accent-bg {
+  background-color: var(--workbench-accent);
+}
+
+.workbench-accent-border {
+  border-color: var(--workbench-accent-border, color-mix(in srgb, var(--workbench-accent) 46%, transparent));
+}
+
+.workbench-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--workbench-accent);
+  box-shadow: 0 0 6px var(--workbench-accent-glow, transparent);
+  flex-shrink: 0;
+}
+
+.workbench-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background-color: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  border: 1px solid var(--workbench-accent-border);
+}
+
+.workbench-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--color-canvas-inset);
+}
+
+.workbench-switcher__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: -0.005em;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.workbench-switcher__item:hover {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+}
+
+.workbench-switcher__item[aria-selected="true"] {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+}
+
+.workbench-switcher__item[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--workbench-accent);
+}
+
+.workbench-kicker {
+  color: var(--workbench-accent);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.workbench-panel {
+  background: var(--color-surface-1);
+  border-color: var(--color-border-muted);
+}
+
+.workbench-composer {
+  background: var(--color-surface-1);
+  border-radius: 12px;
+}
+
+.workbench-composer:focus-within {
+  border-color: var(--color-border-emphasis);
+}
+
+.workbench-primary-action {
+  background: var(--workbench-accent);
+  color: #171717;
+}
+
+.workbench-primary-action:hover {
+  filter: brightness(1.08);
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+
+/* ============================================================
+   SADE DOMAIN BADGES
+   ============================================================ */
+
+.badge-copilot {
+  background: var(--color-copilot-subtle);
+  color: var(--color-copilot);
+  border: 1px solid var(--color-copilot-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.badge-coding {
+  background: var(--color-coding-subtle);
+  color: var(--color-coding);
+  border: 1px solid var(--color-coding-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.badge-research {
+  background: var(--color-research-subtle);
+  color: var(--color-research);
+  border: 1px solid var(--color-research-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Task state pills */
+.state-active {
+  color: var(--color-task-active);
+}
+
+.state-blocked {
+  color: var(--color-task-blocked);
+}
+
+.state-unknown {
+  color: var(--color-task-unknown);
+}
+
+.state-done {
+  color: var(--color-task-done);
+}
+
+.state-failed {
+  color: var(--color-task-failed);
+}
+
+.state-draft {
+  color: var(--color-task-draft);
+}
+
+/* ============================================================
+   ACTIVE LENS INDICATOR — left border on nav item
+   ============================================================ */
+
+.lens-indicator-copilot {
+  border-left: 2px solid var(--color-copilot);
+}
+
+.lens-indicator-coding {
+  border-left: 2px solid var(--color-coding);
+}
+
+.lens-indicator-research {
+  border-left: 2px solid var(--color-research);
+}
+
+/* ============================================================
+   WORKBENCH PANE HEADER — tight, dense
+   ============================================================ */
+
+.pane-header {
+  height: 2rem;
+  /* 32px — same as VS Code tab bar */
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-fg-muted);
+  gap: 8px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pane-header .pane-title {
+  color: var(--color-editor-fg);
+  font-weight: 500;
+}
+
+/* ============================================================
+   TASK STRIP — persistent anchor bar
+   ============================================================ */
+
+.task-strip {
+  height: 2.25rem;
+  /* 36px */
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border-default);
+  gap: 8px;
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ============================================================
+   NAVIGATION RAIL — ultra minimal
+   ============================================================ */
+
+.nav-rail {
+  width: 2.5rem;
+  /* 40px */
+  background: var(--color-canvas);
+  border-right: 1px solid var(--color-border-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-rail-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-subtle);
+  transition: background-color 0.1s, color 0.1s;
+  position: relative;
+}
+
+.nav-rail-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+}
+
+.nav-rail-btn.active {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+}
+
+/* Domain-specific active states */
+.nav-rail-btn.active-copilot {
+  color: var(--color-copilot);
+}
+
+.nav-rail-btn.active-coding {
+  color: var(--color-coding);
+}
+
+.nav-rail-btn.active-research {
+  color: var(--color-research);
+}
+
+/* ============================================================
+   LENS SWITCHER TABS
+   ============================================================ */
+
+.lens-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.lens-tab:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+}
+
+.lens-tab.active-copilot {
+  background: var(--color-copilot-subtle);
+  color: var(--color-copilot);
+}
+
+.lens-tab.active-coding {
+  background: var(--color-coding-subtle);
+  color: var(--color-coding);
+}
+
+.lens-tab.active-research {
+  background: var(--color-research-subtle);
+  color: var(--color-research);
+}
+
+
+/* ============================================================
+   CLAIM MATRIX — Research workbench
+   ============================================================ */
+
+.claim-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-muted);
+  font-size: 0.8125rem;
+}
+
+.claim-row:last-child {
+  border-bottom: none;
+}
+
+.claim-status-supported {
+  color: var(--color-task-active);
+}
+
+.claim-status-unknown {
+  color: var(--color-task-unknown);
+}
+
+.claim-status-contradicted {
+  color: var(--color-task-failed);
+}
+
+/* ============================================================
+   STATUS DOT INDICATOR
+   Always shown with text label, never color-only.
+   ============================================================ */
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.status-dot.active {
+  background: var(--color-task-active);
+}
+
+.status-dot.blocked {
+  background: var(--color-task-blocked);
+}
+
+.status-dot.unknown {
+  background: var(--color-task-unknown);
+}
+
+.status-dot.done {
+  background: var(--color-task-done);
+}
+
+.status-dot.failed {
+  background: var(--color-task-failed);
+}
+
+.status-dot.running {
+  background: var(--color-task-active);
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
+
+
+
+/* ============================================================
+   SIDEBAR SESSION LIST ITEM
+   ============================================================ */
+
+.session-item {
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.08s;
+  border: 1px solid transparent;
+}
+
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-item.active {
+  background: rgba(88, 166, 255, 0.06);
+  border-color: rgba(88, 166, 255, 0.20);
+}
+
+.session-item-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-editor-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-item-preview {
+  font-size: 0.75rem;
+  color: var(--color-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.session-item-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--color-fg-subtle);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+

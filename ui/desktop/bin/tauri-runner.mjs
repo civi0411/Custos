@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const targetDir = path.resolve(__dirname, '../../../crates/custos-app/desktop');
+const targetDir = path.resolve(__dirname, '../../../apps/desktop/native');
 
 let tauriJs = path.resolve(__dirname, '../node_modules/@tauri-apps/cli/tauri.js');
 if (!fs.existsSync(tauriJs)) {

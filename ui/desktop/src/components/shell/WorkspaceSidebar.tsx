@@ -2,16 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useScreenContext } from '@/context/ScreenContext';
 import {
-  FolderGit2,
   FolderPlus,
   Plus,
   RefreshCw,
   Search,
   Clock,
   HelpCircle,
-  FlaskConical,
-  Bot,
-  TrendingUp,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { WorkspaceDetectionResult } from '@/types/domain';
@@ -27,6 +23,7 @@ import { QuantStrategyExplorer } from './sidebar/QuantStrategyExplorer';
 import { EngineeringWorkspaceTree } from './sidebar/EngineeringWorkspaceTree';
 import { RecentActivityFlyout } from './sidebar/RecentActivityFlyout';
 import { useProjectGroups } from './sidebar/useProjectGroups';
+import { buildWorkbenchSidebarConfig, hasActiveRecentActivity } from './sidebar/workbenchConfig';
 
 export * from './sidebar/types';
 
@@ -190,99 +187,21 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     getAgentActivity,
   });
 
-  const workbenchConfig = useMemo(() => {
-    switch (activeWorkbench) {
-      case 'research':
-        return {
-          title: 'Research Study',
-          icon: FlaskConical,
-          iconColor: 'text-amber-400',
-          badge: 'STUDY',
-          badgeClass: 'bg-amber-400/10 text-amber-300 border-amber-400/20',
-          searchPlaceholder: 'Search studies, findings, claims...',
-          allLabel: 'All Studies',
-          allCount: 1,
-          activeLabel: 'Active',
-          activeCount: researchPath ? 1 : 0,
-          footerStatus: researchDetection?.name || 'Research Study Ready',
-        };
-      case 'copilot':
-        return {
-          title: 'Autonomous Tasks',
-          icon: Bot,
-          iconColor: 'text-emerald-400',
-          badge: 'SUPERVISOR',
-          badgeClass: 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20',
-          searchPlaceholder: 'Search tasks, operations...',
-          allLabel: 'All Tasks',
-          allCount: tasks.length,
-          activeLabel: 'Action Needed',
-          activeCount: tasks.filter((t) => t.status === 'Blocked' || t.metadata?.approval_required === 'true').length,
-          footerStatus: 'Copilot Supervisor Ready',
-        };
-      case 'quant':
-        return {
-          title: 'Quant Strategies',
-          icon: TrendingUp,
-          iconColor: 'text-workbench-accent',
-          badge: 'PORTFOLIO',
-          badgeClass: 'bg-violet-400/10 text-violet-300 border-violet-400/20',
-          searchPlaceholder: 'Search alphas, backtests, risk audits...',
-          allLabel: 'All Strategies',
-          allCount: 3,
-          activeLabel: 'Live Alphas',
-          activeCount: 2,
-          footerStatus: 'Quant Risk Engine · Ready',
-        };
-      case 'engineering':
-      default: {
-        const totalWorktrees = projectGroups.reduce(
-          (acc, g) => acc + g.workspaces.reduce((wAcc, ws) => wAcc + ws.worktrees.length, 0),
-          0
-        );
-        const activeWorktrees = projectGroups.reduce(
-          (acc, g) =>
-            acc +
-            g.workspaces.reduce(
-              (wAcc, ws) => wAcc + ws.worktrees.filter((wt) => wt.isDirty || wt.isRunning || wt.isBlocked).length,
-              0
-            ),
-          0
-        );
-        return {
-          title: 'Project Workspaces',
-          icon: FolderGit2,
-          iconColor: 'text-white/80',
-          badge: projectGroups[0]?.isMultiRepo ? 'MULTI-REPO' : 'MONOREPO',
-          badgeClass: 'bg-white/10 text-white/80 border-white/20',
-          searchPlaceholder: 'Search workspaces, branches...',
-          allLabel: 'All Worktrees',
-          allCount: totalWorktrees,
-          activeLabel: 'Active Worktrees',
-          activeCount: activeWorktrees,
-          footerStatus: activeWorkspace ? `${activeWorkspace.name} · Ready` : 'Ready',
-        };
-      }
-    }
-  }, [activeWorkbench, projectGroups, tasks, researchPath, researchDetection, activeWorkspace]);
+  const workbenchConfig = useMemo(
+    () =>
+      buildWorkbenchSidebarConfig({
+        activeWorkbench,
+        researchPath,
+        researchDetection,
+        tasks,
+        projectGroups,
+        activeWorkspace,
+      }),
+    [activeWorkbench, projectGroups, tasks, researchPath, researchDetection, activeWorkspace]
+  );
 
   const hasActiveRecent = useMemo(
-    () =>
-      allSessions.some(
-        (s) =>
-          s.taskStatus === 'running' ||
-          s.taskStatus === 'blocked' ||
-          s.messages?.some((m) => m.runStatus === 'running' || m.runStatus === 'blocked')
-      ) ||
-      tasks.some(
-        (t) =>
-          t.status === 'running' ||
-          t.status === 'Active' ||
-          t.status === 'Blocked' ||
-          String(t.status).toLowerCase() === 'running' ||
-          String(t.status).toLowerCase() === 'blocked' ||
-          t.metadata?.approval_required === 'true'
-      ),
+    () => hasActiveRecentActivity(allSessions, tasks),
     [allSessions, tasks]
   );
 
@@ -526,7 +445,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             handleOpenStudyFolder={handleOpenStudyFolder}
           />
         ) : activeWorkbench === 'quant' ? (
-          <QuantStrategyExplorer onShowToast={onShowToast} />
+          <QuantStrategyExplorer onShowToast={onShowToast} onOpenTab={_onOpenTab} />
         ) : (
           <EngineeringWorkspaceTree
             projectGroups={projectGroups}

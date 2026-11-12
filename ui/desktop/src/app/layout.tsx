@@ -12,6 +12,7 @@ import {
   HelpModal,
   GitHubAuthModal,
 } from '@/components/modals';
+import { WorkbenchLibraryModal } from '@/features/workbench-library/WorkbenchLibrary';
 
 /**
  * RootLayout
@@ -115,6 +116,8 @@ export const RootLayout: React.FC = () => {
         isOpen={isGitHubAuthOpen}
         onClose={() => setIsGitHubAuthOpen(false)}
       />
+
+      <WorkbenchLibraryModal />
 
       {/* Floating System Toast */}
       <Toast message={toastMessage} />

@@ -1,7 +1,7 @@
 import React from 'react';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { CreateTaskModal } from '@/components/tasks/CreateTaskModal';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import type { ExecutionWorkspace, Task, CreateTaskParams } from '@/types/domain';
 import type { Session } from '@/types';

@@ -4,7 +4,7 @@ import { appendConversationDraft, readConversationDraft } from '@/components/cha
 import { Session } from '@/types';
 import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTab } from '@/components/workbenches/OrcaTabbedContainer';
 import { WorkspaceSidebar, type SidebarTool } from '@/components/shell/WorkspaceSidebar';
-import { type ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
 import { RightSidebar } from '@/components/shell/RightSidebar';
 import { useAppContext } from '@/context/AppContext';
