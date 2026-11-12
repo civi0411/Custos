@@ -1,0 +1,7 @@
+{
+  "id": "remote-agents",
+  "name": "Remote Agents & A2A Capability",
+  "version": "0.1.0",
+  "description": "Agent-to-agent cross-delegation and remote coordination",
+  "category": "protocol_capability"
+}

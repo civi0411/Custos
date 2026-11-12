@@ -1,0 +1,7 @@
+{
+  "id": "documents",
+  "name": "Scoped Source Acquisition Capability",
+  "version": "0.1.0",
+  "description": "Bounded UTF-8 file acquisition; PDF decoding and OCR require separate implementations",
+  "category": "data_capability"
+}

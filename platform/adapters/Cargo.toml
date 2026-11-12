@@ -1,0 +1,66 @@
+[package]
+name = "custos-adapters"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Custos Adapters: Model Providers, MCP, Sandboxes, Local Inference"
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls"]
+live-websocket = []
+roaming = ["dep:iroh", "dep:iroh-relay"]
+
+[dependencies]
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-provider = { workspace = true }
+custos-protocol = { workspace = true }
+
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true, features = ["compat"] }
+tokio-stream = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+reqwest = { workspace = true }
+rmcp = { workspace = true, features = ["transport-io"] }
+schemars = { workspace = true }
+indoc = { workspace = true }
+which = { workspace = true }
+bytes = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+rand = { workspace = true }
+shell-words = { workspace = true }
+regex = { workspace = true }
+dirs = { workspace = true }
+keyring = { workspace = true }
+base64 = { workspace = true }
+async-stream = { workspace = true }
+encoding_rs = "0.8"
+sha2 = { workspace = true }
+fs2 = { workspace = true }
+iroh = { workspace = true, features = ["tls-aws-lc-rs"], optional = true }
+iroh-relay = { workspace = true, optional = true }
+once_cell = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+test-case = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "test-util", "time"] }
+tokio-stream = { workspace = true }
+env-lock = { workspace = true }
+wiremock = { workspace = true }
+flate2 = "1.1.9"
+reqwest = { workspace = true, features = ["gzip"] }

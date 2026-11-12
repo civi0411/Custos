@@ -1,0 +1,7 @@
+{
+  "id": "terminal",
+  "name": "Terminal & PTY Capability",
+  "version": "0.1.0",
+  "description": "Pseudo-terminal streams, process spawning, and shell session management",
+  "category": "system_capability"
+}

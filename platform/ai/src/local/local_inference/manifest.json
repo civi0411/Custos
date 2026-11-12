@@ -1,0 +1,7 @@
+{
+  "id": "local-inference",
+  "name": "Local Model Inference Capability",
+  "version": "0.1.0",
+  "description": "llama.cpp and local LLM discovery, preflight, and inference runtime",
+  "category": "ai_capability"
+}
