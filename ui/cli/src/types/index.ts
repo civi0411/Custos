@@ -82,6 +82,8 @@ export interface TerminalLine {
     mode?: OperationalMode;
     risk?: RiskLevel;
     filePath?: string;
+    oldCode?: string;
+    newCode?: string;
     additions?: number;
     deletions?: number;
     permitId?: string;

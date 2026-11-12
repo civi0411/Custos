@@ -113,19 +113,6 @@ export const ASCII_BANNER = `
   (Nhấn '/' để chọn mode: $custos-code, $custos-research, $custos-assistant)
 `;
 
-export const SAMPLE_DIFF = {
-  filePath: 'crates/runtime/src/handler.rs',
-  oldCode: `fn handle_request() {
-    todo!();
-}`,
-  newCode: `pub fn handle_request() -> Result<(), DomainError> {
-    tracing::info!("Executing verified task payload in isolated sandbox");
-    verify_execution_permit()?;
-    commit_audit_span("handler_exec")?;
-    Ok(())
-}`,
-};
-
 export const RISK_BADGES: Record<RiskLevel, { text: string; bg: string; color: string; border: string }> = {
   Low: {
     text: '[LOW RISK]',

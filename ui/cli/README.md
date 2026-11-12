@@ -1,16 +1,13 @@
 # Custos CLI
 
-Custos provides two interfaces from this package:
-
-- A terminal CLI for quick task and mode commands.
-- A React/Tauri interface with a terminal-first workspace and visual task views.
+The interactive Node terminal CLI (`bin/custos-cli.js`) connects to the Custos daemon over the local loopback API.
+For the pure-Rust headless CLI binary, see [`apps/cli`](../../apps/cli/Cargo.toml) (`cargo run -p custos-app-cli --`).
 
 ## Run
 
 ```text
-npm start              # terminal CLI
-npm run dev            # browser demo with clearly labeled mock data
-npm run tauri:dev      # desktop client connected through the Custos host
+npm start              # interactive Node terminal CLI (bin/custos-cli.js)
+cargo run -p custos-app-cli -- --help   # pure-Rust headless CLI
 ```
 
 Run `npm start -- help` to see grouped commands. In interactive mode, press `/` to open the searchable command palette and use the arrow keys to navigate.
@@ -18,7 +15,6 @@ Run `npm start -- help` to see grouped commands. In interactive mode, press `/` 
 ## Verify
 
 ```text
-npm run build
 node bin/custos-cli.js help
 node bin/custos-cli.js status
 ```

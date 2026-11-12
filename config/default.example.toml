@@ -1,4 +1,4 @@
-# DESIGN TARGET ONLY: current CLI reads --data-dir / AGENTHUB_DATA_DIR.
+# DESIGN TARGET ONLY: current CLI/daemon read --profile / CUSTOS_PROFILE / CUSTOS_PROFILE_DIR / CUSTOS_DB_PATH.
 # This file is not loaded by the starter runtime.
 schema_version = "1"
 [runtime]

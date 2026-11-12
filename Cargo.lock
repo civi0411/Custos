@@ -1342,29 +1342,22 @@ dependencies = [
  "base64 0.21.7",
  "bytes",
  "chrono",
- "config",
  "custos-core",
  "custos-domain",
+ "custos-protocol",
  "custos-provider",
  "dirs 5.0.1",
- "dotenvy",
  "encoding_rs",
  "env-lock",
- "etcetera",
  "flate2",
  "fs2",
  "futures",
- "include_dir",
  "indoc",
  "iroh",
  "iroh-relay",
  "keyring",
  "libc",
- "llama-cpp-2",
- "llama-cpp-sys-2",
- "minijinja",
  "once_cell",
- "pulldown-cmark",
  "rand 0.8.8",
  "regex",
  "reqwest",
@@ -1392,13 +1385,11 @@ dependencies = [
 name = "custos-app-cli"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "custos-domain",
  "custos-sdk",
  "serde",
  "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
  "tokio",
 ]
 
@@ -1416,25 +1407,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "custos-bridge"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "custos-core",
- "custos-domain",
- "custos-persistence",
- "custos-runtime",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -1465,19 +1437,23 @@ dependencies = [
  "blake3",
  "chrono",
  "custos-adapters",
- "custos-bridge",
  "custos-core",
  "custos-domain",
  "custos-packs",
  "custos-persistence",
+ "custos-protocol",
  "custos-provider",
  "custos-runtime",
- "custos-sdk",
+ "custos-workbench-assistant",
+ "custos-workbench-coding",
+ "custos-workbench-quant",
+ "custos-workbench-research",
  "dirs 5.0.1",
  "fs2",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -1505,13 +1481,14 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "custos-adapters",
  "custos-core",
  "custos-domain",
  "custos-runtime",
  "regex",
- "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -1533,6 +1510,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "custos-protocol"
+version = "0.1.0"
+dependencies = [
+ "agent-client-protocol",
+ "agent-client-protocol-schema",
+ "async-trait",
+ "chrono",
+ "custos-domain",
+ "dirs 5.0.1",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "custos-provider"
 version = "0.1.0"
 dependencies = [
@@ -1540,26 +1534,50 @@ dependencies = [
  "async-stream",
  "async-trait",
  "base64 0.21.7",
+ "bytes",
  "chrono",
+ "config",
+ "custos-core",
  "custos-domain",
+ "dirs 5.0.1",
+ "dotenvy",
+ "encoding_rs",
  "env-lock",
+ "etcetera",
+ "flate2",
+ "fs2",
  "futures",
+ "include_dir",
+ "indoc",
+ "libc",
+ "llama-cpp-2",
+ "llama-cpp-sys-2",
+ "minijinja",
  "once_cell",
+ "pulldown-cmark",
  "rand 0.8.8",
  "regex",
  "reqwest",
  "rmcp",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "shell-words",
  "strum",
  "tempfile",
  "test-case",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "unicode-normalization",
+ "url",
+ "urlencoding",
  "uuid",
+ "which",
+ "wiremock",
  "zstd",
 ]
 
@@ -1579,17 +1597,9 @@ dependencies = [
  "custos-domain",
  "custos-persistence",
  "custos-provider",
- "dirs 5.0.1",
  "futures",
- "include_dir",
- "indoc",
- "libc",
  "lru 0.12.5",
- "minijinja",
- "rand 0.8.8",
  "regex",
- "reqwest",
- "rmcp",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1608,14 +1618,10 @@ dependencies = [
 name = "custos-sdk"
 version = "0.1.0-alpha.10"
 dependencies = [
- "agent-client-protocol",
- "agent-client-protocol-schema",
  "async-trait",
  "chrono",
- "custos-core",
  "custos-domain",
- "dirs 5.0.1",
- "schemars 1.2.2",
+ "custos-protocol",
  "serde",
  "serde_json",
  "tempfile",
@@ -1634,6 +1640,7 @@ dependencies = [
  "custos-domain",
  "custos-persistence",
  "custos-provider",
+ "custos-runtime",
  "serde",
  "serde_json",
  "tokio",
@@ -1657,21 +1664,97 @@ dependencies = [
  "async-trait",
  "chrono",
  "custos-adapters",
- "custos-bridge",
  "custos-core",
  "custos-daemon",
  "custos-domain",
  "custos-packs",
  "custos-persistence",
+ "custos-protocol",
  "custos-provider",
  "custos-runtime",
+ "custos-sdk",
  "custos-testkit",
+ "custos-workbench-assistant",
+ "custos-workbench-coding",
+ "custos-workbench-quant",
+ "custos-workbench-research",
  "rusqlite",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "custos-workbench-assistant"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "custos-core",
+ "custos-domain",
+ "custos-runtime",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "custos-workbench-coding"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "custos-adapters",
+ "custos-core",
+ "custos-domain",
+ "custos-runtime",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "custos-workbench-quant"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "custos-core",
+ "custos-domain",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "custos-workbench-research"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "custos-core",
+ "custos-domain",
+ "custos-protocol",
+ "regex",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -8754,6 +8837,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde_json",
  "xshell",
 ]
 

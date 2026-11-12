@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { OperationalMode, TerminalLine, Task } from '../../types';
-import { SAMPLE_DIFF } from '../../data/constants';
 import { CustosApi, isTauriEnvironment } from '../../services/custosApi';
 import { getModeSlug, VibeSessionState } from './types';
 
@@ -57,47 +56,51 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
 
   const runVibeExecution = async (goal: string, mode: OperationalMode) => {
     setIsProcessing(true);
-    addLine('info', `[${mode.toUpperCase()}] Đang khởi tạo Worktree Sandbox và phân tích: "${goal}"...`);
-    addLine('spinner', '⠋ Phân tích AST, topology kho mã nguồn và kiểm chứng invariants...');
-    await new Promise((r) => setTimeout(r, 600));
+    addLine('info', `[${mode.toUpperCase()}] Đăng ký nhiệm vụ tới custos-daemon: "${goal}"...`);
 
-    addLine('spinner', '⠙ Tổng hợp bản vá mã nguồn và đối chiếu chính sách an toàn...');
-    await new Promise((r) => setTimeout(r, 700));
+    try {
+      const task = await CustosApi.createTask(goal, mode);
+      addLine('success', `✔ Nhiệm vụ đã được ghi nhận: ${task.id} [${task.status}]`);
 
-    const task = await CustosApi.createTask(goal, mode);
-    addLine('success', `✔ Nhiệm vụ đã được ghi nhận: ${task.id} [${task.status}]`);
+      const oldState = `status: ${task.status}\nepoch: ${task.epoch}`;
+      const newState = `status: Queued -> Running -> Succeeded\nmode: ${mode.toLowerCase()}\ngoal: ${goal}`;
 
-    addLine('info', '\nĐề xuất thay đổi mã nguồn trong Sandbox (Unified Diff):');
-    addLine('diff', '', {
-      filePath: SAMPLE_DIFF.filePath,
-      additions: 5,
-      deletions: 2,
-    });
+      addLine('diff', '', {
+        filePath: `task/${task.id}`,
+        oldCode: oldState,
+        newCode: newState,
+        additions: 3,
+        deletions: 2,
+      });
 
-    const permit = CustosApi.createPermit(
-      task.id,
-      'ExecutionPermit: Apply Code Diff',
-      'crates/runtime/src/handler.rs',
-      'Medium',
-      SAMPLE_DIFF.filePath,
-      SAMPLE_DIFF.oldCode,
-      SAMPLE_DIFF.newCode
-    );
+      const permit = CustosApi.createPermit(
+        task.id,
+        'ExecutionPermit: Queue & Execute Task',
+        task.id,
+        'Medium',
+        `task/${task.id}`,
+        oldState,
+        newState
+      );
 
-    setIsProcessing(false);
-    setVibeSession({
-      step: 'permit',
-      mode,
-      goal,
-      task,
-      permit,
-    });
+      setIsProcessing(false);
+      setVibeSession({
+        step: 'permit',
+        mode,
+        goal,
+        task,
+        permit,
+      });
 
-    addLine('warning', '\n[MEDIUM RISK] ExecutionPermit: Cần phê duyệt trước khi ghi đè tệp.');
-    addLine('prompt', 'Phê duyệt giấy phép thực thi này? [Y/n] (hoặc bấm nút bên dưới):', {
-      permitId: permit.id,
-      showControls: true,
-    });
+      addLine('warning', '\n[MEDIUM RISK] ExecutionPermit: Cần xác nhận trước khi thực thi nhiệm vụ.');
+      addLine('prompt', 'Phê duyệt thực thi nhiệm vụ này? [Y/n] (hoặc bấm nút bên dưới):', {
+        permitId: permit.id,
+        showControls: true,
+      });
+    } catch (err) {
+      setIsProcessing(false);
+      addLine('error', `✖ Không thể tạo nhiệm vụ: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handlePermitDecision = async (approved: boolean) => {
@@ -109,29 +112,32 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
     CustosApi.resolvePermit(permit.id, approved);
     setVibeSession({ step: 'none' });
 
-    if (approved) {
-      addLine('success', '✔ Giấy phép đã được cấp bởi toán tử. Bắt đầu áp dụng vào worktree.');
-      setIsProcessing(true);
+    try {
+      if (approved) {
+        addLine('success', '✔ Đã phê duyệt. Đang chuyển trạng thái nhiệm vụ trên custos-daemon.');
+        setIsProcessing(true);
 
-      const queued = await CustosApi.advanceTask(task.id, 'Queued', 'Permit granted');
-      addLine('info', `Nhiệm vụ ${queued.id} chuyển sang: [${queued.status}]`);
-      await new Promise((r) => setTimeout(r, 400));
+        const queued = await CustosApi.advanceTask(task.id, 'Queued', 'Permit granted');
+        addLine('info', `Nhiệm vụ ${queued.id} chuyển sang: [${queued.status}]`);
 
-      const running = await CustosApi.advanceTask(task.id, 'Running', 'Active coding in sandbox');
-      addLine('info', `Nhiệm vụ ${running.id} đang thực thi: [${running.status}]`);
-      await new Promise((r) => setTimeout(r, 700));
+        const running = await CustosApi.advanceTask(task.id, 'Running', 'Operator approved execution');
+        addLine('info', `Nhiệm vụ ${running.id} đang thực thi: [${running.status}]`);
 
-      const comp = await CustosApi.completeTask(
-        task.id,
-        `Nhiệm vụ '${vibeSession.goal}' đã thực thi thành công dưới cơ chế Epoch Lock`
-      );
-      addLine('success', `Nhiệm vụ ${comp.id}: [${comp.status}]`);
-      addLine('success', '✔ Hoàn thành nhiệm vụ an toàn. Đã ghi audit span vào SQLite.');
+        const comp = await CustosApi.completeTask(
+          task.id,
+          `Nhiệm vụ '${vibeSession.goal}' đã hoàn tất dưới cơ chế Epoch Lock`
+        );
+        addLine('success', `Nhiệm vụ ${comp.id}: [${comp.status}]`);
+        addLine('success', '✔ Hoàn thành nhiệm vụ. Đã ghi audit span vào SQLite.');
+        setIsProcessing(false);
+      } else {
+        const canc = await CustosApi.cancelTask(task.id, 'Execution rejected by operator.');
+        addLine('warning', `Nhiệm vụ ${canc.id} đã hủy: [${canc.status}]`);
+        addLine('error', '✖ Đã từ chối thực thi.');
+      }
+    } catch (err) {
       setIsProcessing(false);
-    } else {
-      const canc = await CustosApi.cancelTask(task.id, 'Execution rejected by operator.');
-      addLine('warning', `Nhiệm vụ ${canc.id} đã hủy: [${canc.status}]`);
-      addLine('error', '✖ Đã từ chối cấp phép. Sandbox được rollback an toàn.');
+      addLine('error', `✖ Lỗi cập nhật nhiệm vụ: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -235,69 +241,101 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
         break;
 
       case 'status': {
-        const tasks = await CustosApi.listTasks();
-        const pending = CustosApi.getPendingPermits();
-        const runtimeLabel = isTauriEnvironment() ? 'Desktop runtime' : 'Chế độ demo';
-        addLine(
-          'info',
-          `${runtimeLabel} | Nhiệm vụ: ${tasks.length} | Chờ phê duyệt: ${pending.length} | Chế độ: [${activeSlug}]`
-        );
+        try {
+          const tasks = await CustosApi.listTasks();
+          const pending = CustosApi.getPendingPermits();
+          const runtimeLabel = isTauriEnvironment() ? 'Desktop Tauri IPC' : 'Daemon HTTP RPC';
+          addLine(
+            'info',
+            `${runtimeLabel} | Nhiệm vụ: ${tasks.length} | Chờ phê duyệt: ${pending.length} | Chế độ: [${activeSlug}]`
+          );
+        } catch (err) {
+          addLine('error', `✖ Daemon không khả dụng: ${err instanceof Error ? err.message : String(err)}`);
+        }
         break;
       }
 
       case 'list':
       case 'tasks':
       case 'ls': {
-        const tasks = await CustosApi.listTasks();
-        if (tasks.length === 0) {
-          addLine('info', 'Chưa có nhiệm vụ nào trong hàng đợi.');
-        } else {
-          addLine('info', `ID        | STATUS    | MODE      | TIÊU ĐỀ`);
-          addLine('info', '──────────┼───────────┼───────────┼─────────────────────────────────');
-          tasks.forEach((t: Task) => {
-            const taskMode = (t.metadata?.mode as string) || 'code';
-            addLine(
-              'info',
-              `${t.id.padEnd(9)} | ${t.status.padEnd(9)} | ${taskMode.padEnd(9)} | ${t.title}`
-            );
-          });
+        try {
+          const tasks = await CustosApi.listTasks();
+          if (tasks.length === 0) {
+            addLine('info', 'Chưa có nhiệm vụ nào trong hàng đợi.');
+          } else {
+            addLine('info', `ID        | STATUS    | MODE      | TIÊU ĐỀ`);
+            addLine('info', '──────────┼───────────┼───────────┼─────────────────────────────────');
+            tasks.forEach((t: Task) => {
+              const taskMode = (t.metadata?.mode as string) || 'code';
+              addLine(
+                'info',
+                `${t.id.padEnd(9)} | ${t.status.padEnd(9)} | ${taskMode.padEnd(9)} | ${t.title}`
+              );
+            });
+          }
+        } catch (err) {
+          addLine('error', `✖ Lỗi đọc danh sách tasks: ${err instanceof Error ? err.message : String(err)}`);
         }
         break;
       }
 
       case 'create':
       case 'new': {
-        const title = args.join(' ') || 'Nhiệm vụ tự động mới';
+        const title = args.join(' ') || 'Nhiệm vụ mới từ CLI';
         const mode = (typeof currentMode === 'string' && ['Code', 'Research', 'Assistant'].includes(currentMode)
           ? currentMode
           : 'Code') as OperationalMode;
-        const task = await CustosApi.createTask(title, mode);
-        const taskMode = (task.metadata?.mode as string) || mode;
-        addLine('success', `✔ Đã tạo task mới [${task.id}] (${taskMode}): "${task.title}"`);
+        try {
+          const task = await CustosApi.createTask(title, mode);
+          const taskMode = (task.metadata?.mode as string) || mode;
+          addLine('success', `✔ Đã tạo task mới [${task.id}] (${taskMode}): "${task.title}"`);
+        } catch (err) {
+          addLine('error', `✖ Không thể tạo task: ${err instanceof Error ? err.message : String(err)}`);
+        }
         break;
       }
 
       case 'advance': {
-        const tasks = await CustosApi.listTasks();
-        const targetId = args[0] || tasks[0]?.id;
-        if (!targetId) {
-          addLine('warning', 'Không tìm thấy task để advance.');
-          break;
+        try {
+          const tasks = await CustosApi.listTasks();
+          const targetId = args[0] || tasks[0]?.id;
+          if (!targetId) {
+            addLine('warning', 'Không tìm thấy task để advance.');
+            break;
+          }
+          const updated = await CustosApi.advanceTask(targetId, 'Running', 'Manual CLI advance');
+          addLine('success', `✔ Task [${updated.id}] đã chuyển trạng thái sang: [${updated.status}]`);
+        } catch (err) {
+          addLine('error', `✖ Không thể advance task: ${err instanceof Error ? err.message : String(err)}`);
         }
-        const updated = await CustosApi.advanceTask(targetId, 'Running', 'Manual CLI advance');
-        addLine('success', `✔ Task [${updated.id}] đã chuyển trạng thái sang: [${updated.status}]`);
         break;
       }
 
       case 'diff':
-      case 'd':
-        addLine('info', 'Bản vá đang kiểm tra: crates/runtime/src/handler.rs');
-        addLine('diff', '', {
-          filePath: SAMPLE_DIFF.filePath,
-          additions: 5,
-          deletions: 2,
-        });
+      case 'd': {
+        try {
+          const tasks = await CustosApi.listTasks();
+          const targetId = args[0] || tasks[0]?.id;
+          if (!targetId) {
+            addLine('info', 'Không có nhiệm vụ nào để kiểm tra spans/diff.');
+            break;
+          }
+          const spans = await CustosApi.listSpans(targetId);
+          addLine('info', `Spans thực tế của task ${targetId}: ${spans.length} span(s).`);
+          if (spans.length > 0) {
+            addLine('diff', '', {
+              filePath: `task/${targetId}/spans`,
+              oldCode: `task: ${targetId}`,
+              newCode: spans.map((s) => `${s.stage}: ${s.name}${s.details ? ` — ${s.details}` : ''}`).join('\n'),
+              additions: spans.length,
+              deletions: 0,
+            });
+          }
+        } catch (err) {
+          addLine('error', `✖ Lỗi đọc diff/spans: ${err instanceof Error ? err.message : String(err)}`);
+        }
         break;
+      }
 
       case 'vibe':
       case 'v': {
