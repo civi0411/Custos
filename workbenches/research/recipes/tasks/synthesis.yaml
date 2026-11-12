@@ -1,0 +1,16 @@
+id: "task.research.synthesis"
+name: "Literature Synthesis with Citations"
+description: "Synthesize empirical findings across papers with strict citation coverage validation."
+default_workflow: "synthesis.v1"
+required_capabilities:
+  - "research.literature"
+  - "research.extract"
+  - "research.verify"
+budget:
+  max_spans: 30
+  max_tokens: 100000
+  max_cost_cents: 250
+risk_level: "low"
+evidence_requirements:
+  - kind: "citation_coverage_verified"
+    required: true

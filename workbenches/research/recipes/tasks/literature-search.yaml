@@ -1,0 +1,14 @@
+id: "task.research.literature-search"
+name: "Literature Search & Discovery"
+description: "Search open scientific repositories, retrieve papers, and compile source metadata."
+default_workflow: "literature-search.v1"
+required_capabilities:
+  - "research.literature"
+budget:
+  max_spans: 20
+  max_tokens: 60000
+  max_cost_cents: 100
+risk_level: "low"
+evidence_requirements:
+  - kind: "sources_retrieved"
+    required: true

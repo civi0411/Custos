@@ -1,0 +1,27 @@
+name: quant
+version: "0.1.0"
+display_name: "Quant Finance Domain Pack"
+description: "Workflows, prompts, recipes, and verifiers for algorithmic alpha discovery, backtesting, and financial risk audits."
+author: "Custos Team"
+capabilities:
+  - id: "quant.alpha"
+    description: "Generate and formulate predictive alpha factors"
+  - id: "quant.backtest"
+    description: "Simulate portfolio returns and performance tearsheets"
+  - id: "quant.risk"
+    description: "Perform Deflated Sharpe and PBO/CSCV risk audits"
+workflows:
+  - id: "alpha-discovery.v1"
+    path: "workflows/alpha-discovery.v1.yaml"
+  - id: "backtest-simulation.v1"
+    path: "workflows/backtest-simulation.v1.yaml"
+  - id: "risk-audit.v1"
+    path: "workflows/risk-audit.v1.yaml"
+policies:
+  - id: "zero-lookahead.v1"
+    path: "policies/zero-lookahead.v1.yaml"
+verifiers:
+  - id: "deflated-sharpe.v1"
+    path: "verifiers/deflated-sharpe.v1.yaml"
+  - id: "pbo-cscv.v1"
+    path: "verifiers/pbo-cscv.v1.yaml"

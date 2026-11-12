@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CodingWorktree",
+  "type": "object",
+  "required": ["id", "repo_path", "branch", "worktree_path"],
+  "properties": {
+    "id": { "type": "string" },
+    "repo_path": { "type": "string" },
+    "branch": { "type": "string" },
+    "worktree_path": { "type": "string" },
+    "is_dirty": { "type": "boolean" }
+  }
+}
