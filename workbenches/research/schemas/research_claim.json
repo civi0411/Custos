@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResearchClaim",
+  "type": "object",
+  "required": ["id", "source_id", "statement", "grounding_level"],
+  "properties": {
+    "id": { "type": "string" },
+    "source_id": { "type": "string" },
+    "statement": { "type": "string" },
+    "grounding_level": { "type": "string", "enum": ["direct", "inferred", "extrapolated", "unsupported"] },
+    "verified": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

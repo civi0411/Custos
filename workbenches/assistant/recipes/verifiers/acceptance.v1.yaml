@@ -1,0 +1,9 @@
+id: "acceptance.v1"
+name: "User Acceptance Oracle"
+checks:
+  - id: "draft_integrity"
+    type: "schema_validation"
+    target: "draft.json"
+  - id: "human_review"
+    type: "approval_check"
+    required: true

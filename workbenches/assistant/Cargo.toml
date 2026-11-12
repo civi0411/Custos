@@ -1,0 +1,27 @@
+[package]
+name = "custos-workbench-assistant"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Custos Sovereign Assistant Workbench (Personal productivity, agenda, drafts, user confirmation oracle)"
+
+[dependencies]
+custos-domain = { path = "../../platform/domain" }
+custos-core = { path = "../../platform/core" }
+custos-runtime = { path = "../../platform/runtime" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1.0", features = ["sync", "time"] }
+thiserror = { workspace = true }
+tracing = "0.1"
+regex = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+

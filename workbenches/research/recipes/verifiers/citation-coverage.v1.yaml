@@ -1,0 +1,12 @@
+id: "citation-coverage.v1"
+name: "Citation Coverage Oracle"
+checks:
+  - id: "source_schema_valid"
+    type: "schema_validation"
+    target: "research_source.json"
+  - id: "claim_schema_valid"
+    type: "schema_validation"
+    target: "research_claim.json"
+  - id: "coverage_ratio"
+    type: "threshold_check"
+    min_ratio: 0.95

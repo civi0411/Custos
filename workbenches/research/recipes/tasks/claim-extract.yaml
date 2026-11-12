@@ -1,0 +1,14 @@
+id: "task.research.claim-extract"
+name: "Verifiable Claim Extraction"
+description: "Extract concrete empirical claims, equations, and experimental setups from literature."
+default_workflow: "claim-extract.v1"
+required_capabilities:
+  - "research.extract"
+budget:
+  max_spans: 25
+  max_tokens: 80000
+  max_cost_cents: 150
+risk_level: "low"
+evidence_requirements:
+  - kind: "claims_extracted"
+    required: true

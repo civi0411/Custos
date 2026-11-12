@@ -1,0 +1,12 @@
+id: "alpha-discovery.v1"
+name: "Alpha Discovery Workflow"
+version: "1.0.0"
+steps:
+  - id: "formulate"
+    action: "provider.prompt"
+    prompt: "prompts/alpha.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/deflated-sharpe.v1.yaml"
+policy: "policies/zero-lookahead.v1.yaml"
+verifier: "verifiers/deflated-sharpe.v1.yaml"

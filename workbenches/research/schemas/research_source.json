@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResearchSource",
+  "type": "object",
+  "required": ["id", "title", "content_hash"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "abstract_text": { "type": ["string", "null"] },
+    "content_hash": { "type": "string" },
+    "verified": { "type": "boolean" }
+  }
+}

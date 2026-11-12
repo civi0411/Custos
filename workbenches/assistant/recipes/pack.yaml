@@ -1,0 +1,21 @@
+name: assistant
+version: "0.1.0"
+display_name: "Assistant & Copilot Domain Pack"
+description: "Workflows, prompts, recipes, and verifiers for personal productivity, agenda triage, drafts, and calendar scheduling."
+author: "Custos Team"
+capabilities:
+  - id: "assistant.draft"
+    description: "Manage message and email drafts"
+  - id: "assistant.triage"
+    description: "Triage inbox and prioritize agenda items"
+workflows:
+  - id: "triage.v1"
+    path: "workflows/triage.v1.yaml"
+  - id: "draft-message.v1"
+    path: "workflows/draft-message.v1.yaml"
+policies:
+  - id: "user-confirmation.v1"
+    path: "policies/user-confirmation.v1.yaml"
+verifiers:
+  - id: "acceptance.v1"
+    path: "verifiers/acceptance.v1.yaml"
