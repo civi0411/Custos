@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Terminal,
   FileCode,
   CheckCircle2,
   AlertTriangle,
@@ -9,16 +8,20 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Globe,
   Sparkles,
-  Bot,
   ArrowRight,
   ShieldCheck,
   ShieldQuestion,
   HelpCircle,
+  Bot,
   Send,
 } from 'lucide-react';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import {
+  ActionGenericToolCard,
+  ActionLiteratureCard,
+  ActionTerminalCard,
+} from './ActionCardFallbackSections';
 
 export interface AgentActivity {
   kind: string;
@@ -457,53 +460,16 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
     Boolean(params.command || params.cmd);
 
   if (isCommand) {
-    const cmd = String(params.command || params.cmd || params.name || '');
-    const output = String(params.output || params.stdout || params.aggregated_output || '');
-    const exitCode = params.exit_code ?? params.exitCode ?? 0;
-    const isSuccess = exitCode === 0;
-
     return (
-      <div className="my-2 rounded-lg border border-border-default bg-canvas overflow-hidden text-xs shadow-xs font-mono">
-        <div className="flex items-center justify-between px-3 py-1.5 bg-surface-1 border-b border-border-muted">
-          <div className="flex items-center gap-2 min-w-0">
-            <Terminal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="text-[11px] text-fg-editor truncate font-semibold" title={cmd}>
-              $ {cmd || 'terminal command'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded font-sans font-medium ${
-                isSuccess ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-              }`}
-            >
-              {isSuccess ? <CheckCircle2 className="w-2.5 h-2.5" /> : <AlertTriangle className="w-2.5 h-2.5" />}
-              <span>{isSuccess ? 'Exit 0' : `Exit ${exitCode}`}</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 rounded text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-            >
-              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-
-        {isExpanded && output && (
-          <div className="relative p-2.5 text-[11px] text-fg-muted overflow-x-auto max-h-52 whitespace-pre-wrap leading-relaxed border-t border-border-muted/50 bg-surface-0/60">
-            <button
-              type="button"
-              onClick={() => copyToClipboard(output)}
-              className="absolute top-2 right-2 p-1 rounded bg-surface-2 hover:bg-surface-3 text-fg-muted hover:text-fg-editor border border-border-default transition"
-              title="Copy output"
-            >
-              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            </button>
-            {output}
-          </div>
-        )}
-      </div>
+      <ActionTerminalCard
+        cmd={String(params.command || params.cmd || params.name || '')}
+        output={String(params.output || params.stdout || params.aggregated_output || '')}
+        exitCode={params.exit_code ?? params.exitCode ?? 0}
+        isExpanded={isExpanded}
+        onToggleExpand={() => setIsExpanded(!isExpanded)}
+        copied={copied}
+        onCopy={copyToClipboard}
+      />
     );
   }
 
@@ -516,58 +482,23 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
     Boolean(params.query || params.search_term);
 
   if (isSearch) {
-    const query = String(params.query || params.keyword || params.name || params.search_term || '');
-    const resultsCount = params.results_count ?? params.count ?? params.output?.length;
-
     return (
-      <div className="my-2 rounded-lg border border-border-default bg-surface-1 p-2.5 flex items-center justify-between text-xs shadow-xs">
-        <div className="flex items-center gap-2 min-w-0">
-          <Globe className="w-4 h-4 text-sky-400 shrink-0" />
-          <div className="min-w-0">
-            <div className="text-[11px] font-medium text-fg-editor truncate">
-              Literature Query: <span className="font-mono text-sky-300">"{query}"</span>
-            </div>
-            {resultsCount !== undefined && (
-              <div className="text-[10px] text-fg-muted">Indexed {resultsCount} evidence citations</div>
-            )}
-          </div>
-        </div>
-        {onOpenTab && (
-          <button
-            type="button"
-            onClick={() => onOpenTab('literature')}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 text-fg-editor text-[11px] border border-border-default transition shrink-0 ml-2 cursor-pointer"
-          >
-            <span>Inspect Sources</span>
-            <ArrowRight className="w-3 h-3 text-purple-400" />
-          </button>
-        )}
-      </div>
+      <ActionLiteratureCard
+        query={String(params.query || params.keyword || params.name || params.search_term || '')}
+        resultsCount={params.results_count ?? params.count ?? params.output?.length}
+        onOpenTab={onOpenTab}
+      />
     );
   }
 
   // 9. GENERIC STRUCTURED TOOL CARD
   return (
-    <div className="my-1.5 rounded-lg border border-border-muted bg-surface-1/50 overflow-hidden text-xs">
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-1.5 text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition cursor-pointer"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <Bot className="w-3.5 h-3.5 text-fg-subtle shrink-0" />
-          <span className="font-mono text-[11px] text-fg-editor truncate">{payload.name || kind}</span>
-          <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-surface-2 text-fg-muted uppercase">
-            {isInput ? 'call' : isOutput ? 'result' : kind}
-          </span>
-        </div>
-        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-fg-muted" /> : <ChevronRight className="w-3.5 h-3.5 text-fg-muted" />}
-      </button>
-      {isExpanded && (
-        <div className="p-2 border-t border-border-muted bg-surface-0 font-mono text-[11px] max-h-48 overflow-auto text-fg-muted leading-relaxed">
-          <pre className="whitespace-pre-wrap break-words">{JSON.stringify(payload, null, 2)}</pre>
-        </div>
-      )}
-    </div>
+    <ActionGenericToolCard
+      label={payload.name || kind}
+      badgeLabel={isInput ? 'call' : isOutput ? 'result' : kind}
+      payload={payload}
+      isExpanded={isExpanded}
+      onToggleExpand={() => setIsExpanded(!isExpanded)}
+    />
   );
 };

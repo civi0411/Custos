@@ -10,16 +10,14 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Code2,
-  FlaskConical,
-  Bot,
-  TrendingUp,
+  Plus,
 } from 'lucide-react';
 import { isMacOS, formatKeyCombo } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { useScreenContext } from '@/context/ScreenContext';
 import { ActionIcon } from '@/components/common/ActionIcon';
 import { ScreenSwitcherBar } from '@/components/workbenches/ScreenSwitcherBar';
+import { getActiveContributions, BUILTIN_CONTRIBUTIONS } from '@/components/workbenches/registry';
 import { daemonClient } from '@/api/daemon_client';
 import { screensForWorkbench } from '@/types/screen';
 
@@ -45,6 +43,8 @@ export const AppTopBar: React.FC = () => {
     activeSessionId,
     activeWorkbench,
     setActiveWorkbench,
+    installedWorkbenches,
+    setIsWorkbenchLibraryOpen,
     currentProject: _currentProject,
     setIsOpenProjectOpen: _setIsOpenProjectOpen,
   } = useAppContext();
@@ -112,17 +112,8 @@ export const AppTopBar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleGoBack, handleGoForward]);
 
-  const workbenchModes: {
-    id: 'engineering' | 'research' | 'copilot' | 'quant';
-    label: string;
-    icon: React.ElementType;
-    shortcut: string;
-  }[] = [
-      { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌥1' },
-      { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌥2' },
-      { id: 'copilot', label: 'Copilot', icon: Bot, shortcut: '⌥3' },
-      { id: 'quant', label: 'Quant', icon: TrendingUp, shortcut: '⌥4' },
-    ];
+  const workbenchModes = getActiveContributions(installedWorkbenches);
+  const hasMoreWorkbenchesToInstall = workbenchModes.length < BUILTIN_CONTRIBUTIONS.length;
 
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
 
@@ -293,15 +284,15 @@ export const AppTopBar: React.FC = () => {
         >
           {workbenchModes.map((m) => {
             const Icon = m.icon;
-            const isActive = activeWorkbench === m.id;
+            const isActive = activeWorkbench === m.id || activeWorkbench === m.canonicalId;
             return (
               <button
                 key={m.id}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setActiveWorkbench(m.id);
-                  const targetScreen = screensForWorkbench(screens, m.id)
+                  setActiveWorkbench(m.id as any);
+                  const targetScreen = screensForWorkbench(screens, m.id as any)
                     .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
                   if (targetScreen) {
                     selectScreen(targetScreen.id);
@@ -318,6 +309,20 @@ export const AppTopBar: React.FC = () => {
               </button>
             );
           })}
+          {hasMoreWorkbenchesToInstall && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsWorkbenchLibraryOpen(true);
+              }}
+              className="flex items-center justify-center size-6 rounded-md text-white/35 hover:text-white/85 hover:bg-white/8 transition cursor-pointer select-none"
+              title="Workbench Library (Manage / Install Workbenches)"
+              aria-label="Workbench Library"
+            >
+              <Plus className="size-3.5 shrink-0" />
+            </button>
+          )}
         </div>
 
         {/* Empty draggable titlebar space filling up to the 304px workpane boundary */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Activity,
   FlaskConical,
   Search,
   Check,
@@ -22,6 +23,7 @@ import { ResearchExperimentRun } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
 import { JobActionButton } from '@/components/common';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { RunWaterfallInspector } from '../shared/run-inspector/RunWaterfallInspector';
 
 interface RunsLedgerPaneProps {
   sessionId?: string;
@@ -40,6 +42,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'failed'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [inspectingRunId, setInspectingRunId] = useState<string | null>(null);
 
   useEffect(() => {
     daemonClient
@@ -377,6 +380,25 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Execution Waterfall Inspection Button */}
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setInspectingRunId(inspectingRunId === run.runId ? null : run.runId)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition"
+                    >
+                      <Activity size={13} className="text-sky-400" />
+                      <span>{inspectingRunId === run.runId ? 'Hide Waterfall & Watchdogs' : 'Inspect Execution Waterfall & Watchdogs'}</span>
+                    </button>
+                  </div>
+
+                  {/* Embedded Execution Waterfall */}
+                  {inspectingRunId === run.runId && (
+                    <div className="h-96 rounded-xl border border-white/10 overflow-hidden">
+                      <RunWaterfallInspector runId={run.runId} sessionId={sessionId} />
+                    </div>
+                  )}
 
                   {/* Stdout / Stderr Log */}
                   {run.logText && (

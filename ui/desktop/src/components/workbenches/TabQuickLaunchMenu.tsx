@@ -16,7 +16,7 @@ export interface TabQuickLaunchMenuProps {
   onOpenResource: (resourceId: OrcaTabId) => void;
   onLaunchAgent: (harness: HarnessDescriptor) => void;
   activeWorkspaceTitle?: string;
-  mode?: import('@/components/shell/AppHeader').ActiveWorkbench;
+  mode?: import('@/types/workbench').ActiveWorkbench;
   anchor?: { top: number; left: number } | null;
 }
 

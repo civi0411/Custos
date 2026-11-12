@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { HarnessDescriptor } from '@/types/domain';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
+import type { ActiveWorkbench } from '@/types/workbench';
 
 export interface AgentHarnessSelectorProps {
   mode?: ActiveWorkbench;

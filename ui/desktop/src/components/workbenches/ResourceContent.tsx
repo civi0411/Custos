@@ -3,35 +3,52 @@ import { Wrench, Plus } from 'lucide-react';
 import { WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { ConversationPane } from '@/components/chat/ConversationPane';
-import { ActivityPane } from './engineering/ActivityPane';
-import { RemoteFleetWorkbenchPane } from './shared/RemoteFleetWorkbenchPane';
 import type { Session } from '@/types';
-import type { ActiveWorkbench } from '@/components/shell/AppHeader';
-import { findScopedResourceTab, getTabType, synthesisClaimFromUrl, urlFor, useResourceCatalog, workbenchResourceIds, type OrcaTab, type OrcaTabId, type ResourceDefinition, type ResourceTabsState } from './workbenchResources';
+import type { ActiveWorkbench } from '@/types/workbench';
+import { useAppContext } from '@/context/AppContext';
+import {
+  getWorkbenchForTabType,
+  canonicalWorkbenchId,
+  CanonicalWorkbenchId,
+  WorkbenchNotInstalledPlaceholder,
+} from './registry';
+import { findScopedResourceTab, getTabType, urlFor, useResourceCatalog, workbenchResourceIds, type OrcaTab, type OrcaTabId, type ResourceDefinition, type ResourceTabsState } from './workbenchResources';
+import type { DomainPaneContext } from './shared/DomainPaneContext';
+
+const LazyCodingRouter = React.lazy(() =>
+  import('./coding/router').then((m) => ({
+    default: ({ ctx }: { ctx: DomainPaneContext }) => <>{m.renderCodingPane(ctx)}</>,
+  }))
+);
+const LazyResearchRouter = React.lazy(() =>
+  import('./research/router').then((m) => ({
+    default: ({ ctx }: { ctx: DomainPaneContext }) => <>{m.renderResearchPane(ctx)}</>,
+  }))
+);
+const LazyAssistantRouter = React.lazy(() =>
+  import('./assistant/router').then((m) => ({
+    default: ({ ctx }: { ctx: DomainPaneContext }) => <>{m.renderAssistantPane(ctx)}</>,
+  }))
+);
+const LazyQuantRouter = React.lazy(() =>
+  import('./quant/router').then((m) => ({
+    default: ({ ctx }: { ctx: DomainPaneContext }) => <>{m.renderQuantPane(ctx)}</>,
+  }))
+);
+
+const LAZY_WORKBENCH_ROUTERS: Partial<
+  Record<CanonicalWorkbenchId, React.LazyExoticComponent<React.ComponentType<{ ctx: DomainPaneContext }>>>
+> = {
+  coding: LazyCodingRouter,
+  research: LazyResearchRouter,
+  assistant: LazyAssistantRouter,
+  quant: LazyQuantRouter,
+};
 
 const TasksPane = React.lazy(() => import('@/components/tasks/TasksPane').then(module => ({ default: module.TasksPane })));
-const FilesChangesPane = React.lazy(() => import('./engineering/FilesChangesPane').then(module => ({ default: module.FilesChangesPane })));
-const WorktreeManagerPane = React.lazy(() => import('./engineering/WorktreeManagerPane').then(module => ({ default: module.WorktreeManagerPane })));
-const TerminalWorkbenchPane = React.lazy(() => import('./engineering/TerminalWorkbenchPane').then(module => ({ default: module.TerminalWorkbenchPane })));
-const AgentsWorkbenchPane = React.lazy(() => import('./engineering/AgentsWorkbenchPane').then(module => ({ default: module.AgentsWorkbenchPane })));
-const WorkflowDagWorkbenchPane = React.lazy(() => import('./engineering/WorkflowDagWorkbenchPane').then(module => ({ default: module.WorkflowDagWorkbenchPane })));
-const EvidenceWorkbenchPane = React.lazy(() => import('./engineering/EvidenceWorkbenchPane').then(module => ({ default: module.EvidenceWorkbenchPane })));
-const LiteraturePane = React.lazy(() => import('./research/LiteraturePane').then(module => ({ default: module.LiteraturePane })));
-const ResearchMethodsPane = React.lazy(() => import('./research/ResearchMethodsPane').then(module => ({ default: module.ResearchMethodsPane })));
-const ArtifactsWorkbenchPane = React.lazy(() => import('./research/ArtifactsWorkbenchPane').then(module => ({ default: module.ArtifactsWorkbenchPane })));
-const ResearchSynthesisPane = React.lazy(() => import('./research/ResearchSynthesisPane').then(module => ({ default: module.ResearchSynthesisPane })));
-const FindingsPane = React.lazy(() => import('./research/FindingsPane').then(module => ({ default: module.FindingsPane })));
-const LabPane = React.lazy(() => import('./research/LabPane').then(module => ({ default: module.LabPane })));
-const DraftsPane = React.lazy(() => import('./copilot/DraftsPane').then(module => ({ default: module.DraftsPane })));
-const OutboxPane = React.lazy(() => import('./copilot/OutboxPane').then(module => ({ default: module.OutboxPane })));
-const ContactsCalendarPane = React.lazy(() => import('./copilot/ContactsCalendarPane').then(module => ({ default: module.ContactsCalendarPane })));
 const BrowserWorkbenchPane = React.lazy(() => import('./shared/BrowserWorkbenchPane').then(module => ({ default: module.BrowserWorkbenchPane })));
 const MobileSimulatorWorkbenchPane = React.lazy(() => import('./shared/MobileSimulatorWorkbenchPane').then(module => ({ default: module.MobileSimulatorWorkbenchPane })));
-const NotesWorkbenchPane = React.lazy(() => import('./shared/NotesWorkbenchPane').then(module => ({ default: module.NotesWorkbenchPane })));
-const AlphaStudioPane = React.lazy(() => import('./quant/AlphaStudioPane').then(module => ({ default: module.AlphaStudioPane })));
-const TearsheetPane = React.lazy(() => import('./quant/TearsheetPane').then(module => ({ default: module.TearsheetPane })));
-const RiskAuditPane = React.lazy(() => import('./quant/RiskAuditPane').then(module => ({ default: module.RiskAuditPane })));
-const ExecutionPane = React.lazy(() => import('./quant/ExecutionPane').then(module => ({ default: module.ExecutionPane })));
+
 
 export interface OrcaTabbedContainerProps {
   resourceTabs: ResourceTabsState;
@@ -106,6 +123,7 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   onCancelTask,
   onRefreshTasks,
 }) => {
+  const { installedWorkbenches, setIsWorkbenchLibraryOpen } = useAppContext();
   const { resources, retry } = useResourceCatalog(catalog);
   const [renderAttempt, setRenderAttempt] = React.useState(0);
   const [initialAgentWorkspaceId, setInitialAgentWorkspaceId] = React.useState<string | undefined>();
@@ -205,11 +223,71 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
       </div>
     );
 
+    // Workbench installation check: render placeholder if domain pack is not installed
+    const responsibleWorkbench = getWorkbenchForTabType(tabType);
+    if (responsibleWorkbench) {
+      const isInstalled = (installedWorkbenches || []).some(
+        (id) => canonicalWorkbenchId(id) === responsibleWorkbench
+      );
+      if (!isInstalled) {
+        return (
+          <WorkbenchNotInstalledPlaceholder
+            workbenchId={responsibleWorkbench}
+            onOpenLibrary={() => setIsWorkbenchLibraryOpen(true)}
+          />
+        );
+      }
+    }
+
     // Core Conversation Peer Mapping
     if (tabType === 'conversation' || tabType === 'chat') {
-      const tabSession = (tab.sessionId && allSessions?.find((s) => s.id === tab.sessionId)) ||
-        (tab.sessionId && session?.id === tab.sessionId ? session : null) ||
-        session;
+      const explicitSessionId = tab.sessionId;
+      const resolvedExplicit = explicitSessionId
+        ? (allSessions?.find((s) => s.id === explicitSessionId) || (session?.id === explicitSessionId ? session : null))
+        : null;
+
+      if (explicitSessionId && !resolvedExplicit) {
+        return frameTabResource(
+          <WorkbenchEmptyState
+            title="Conversation Unavailable"
+            description={`The conversation session "${explicitSessionId}" could not be found or has been closed.`}
+            action={
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                  onClick={() => {
+                    resourceTabs.setTabs((prev) => {
+                      const filtered = prev.filter((t) => t.id !== tab.id);
+                      if (resourceTabs.activeTabId === tab.id && filtered.length > 0) {
+                        resourceTabs.setActiveTabId(filtered[0].id);
+                      }
+                      return filtered;
+                    });
+                  }}
+                >
+                  Close Tab
+                </button>
+                {session?.id && (
+                  <button
+                    type="button"
+                    className="px-3 py-1 text-xs rounded bg-workbench-accent/20 hover:bg-workbench-accent/30 text-workbench-accent border border-workbench-accent/30 transition cursor-pointer"
+                    onClick={() => {
+                      resourceTabs.setTabs((prev) =>
+                        prev.map((t) => (t.id === tab.id ? { ...t, sessionId: session.id } : t))
+                      );
+                    }}
+                  >
+                    Rebind to Current Conversation
+                  </button>
+                )}
+              </div>
+            }
+          />
+        );
+      }
+
+      const tabSession = resolvedExplicit || session;
       const tabBoundTask = tabSession?.taskId ? (tasks?.find((t) => t.id === tabSession.taskId) ?? null) : boundTask;
       return frameTabResource(
         <ConversationPane
@@ -248,258 +326,54 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
       );
     }
 
-    // Coding Mappings
-    if (tabType === 'files' || tabType === 'changes') {
-      const isDiffExplicit = Boolean(tab.url && tab.url.startsWith('custos://diff?path='));
-      const isFileExplicit = Boolean(tab.url && tab.url.startsWith('custos://file?path='));
-      const filePathFromUrl = tab.url && (tab.url.startsWith('custos://file?path=') || tab.url.startsWith('custos://diff?path='))
-        ? decodeURIComponent(tab.url.replace(/^custos:\/\/(file|diff)\?path=/, ''))
-        : undefined;
-      const effectiveWorkspaceId = tab.workspaceId || activeWorkspaceId || initialFilesWorkspaceId;
-      return frameTabResource(
-        <FilesChangesPane
-          key={`${tab.id}-${effectiveWorkspaceId}`}
-          sessionId={session?.id}
-          initialWorkspaceId={effectiveWorkspaceId}
-          initialFilePath={filePathFromUrl}
-          initialViewMode={isDiffExplicit ? 'diff' : isFileExplicit ? 'content' : undefined}
-          activeWorkspaceId={effectiveWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
+    // Domain-Specific Workbench Mappings
+    const domainContext: DomainPaneContext = {
+      tab,
+      tabType,
+      tabResource,
+      session,
+      tasks,
+      allSessions,
+      workspaces: _workspaces,
+      activeWorkspaceId,
+      initialAgentWorkspaceId,
+      initialFilesWorkspaceId,
+      initialTerminalWorkspaceId,
+      setInitialAgentWorkspaceId,
+      setInitialFilesWorkspaceId,
+      setInitialTerminalWorkspaceId,
+      isResourceActive,
+      resourceTabs,
+      frameTabResource,
+      onShowToast,
+      onAskAgent,
+      onOpenTab,
+      onSelectWorkspace,
+      onHandoffToCoding,
+    };
+
+    if (responsibleWorkbench) {
+      const LazyRouter = LAZY_WORKBENCH_ROUTERS[responsibleWorkbench];
+      if (LazyRouter) {
+        return (
+          <React.Suspense
+            fallback={
+              <div
+                role="status"
+                aria-label={`Loading ${responsibleWorkbench} workbench`}
+                className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse"
+              >
+                <div className="h-7 w-2/3 bg-surface-2 rounded" />
+                <div className="h-32 bg-surface-1 rounded" />
+              </div>
+            }
+          >
+            <LazyRouter ctx={domainContext} />
+          </React.Suspense>
+        );
+      }
     }
 
-    if (tabType === 'activity' || tabType === 'kanban') {
-      return frameTabResource(
-        <ActivityPane
-          sessionId={session?.id}
-          initialRunId={tab.runId}
-          canCancel={tabResource?.supportedOperations?.includes('runs.cancel') ?? false}
-          onShowToast={onShowToast}
-          onAskAgent={onAskAgent}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'dag') {
-      return frameTabResource(
-        <WorkflowDagWorkbenchPane
-          sessionId={session?.id}
-          initialRunId={tab.runId}
-          canCancel={tabResource?.supportedOperations?.includes('runs.cancel') ?? false}
-          onShowToast={onShowToast}
-          onAskAgent={onAskAgent}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'evidence') {
-      return frameTabResource(
-        <EvidenceWorkbenchPane onShowToast={onShowToast} />
-      );
-    }
-
-    if (tabType === 'worktrees') {
-      return frameTabResource(
-        <WorktreeManagerPane
-          activeWorkspaceId={activeWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          onShowToast={onShowToast}
-          onOpenWorkspaceResource={(resource, workspaceId) => {
-            onSelectWorkspace?.(workspaceId);
-            if (resource === 'agents') setInitialAgentWorkspaceId(workspaceId);
-            if (resource === 'files') setInitialFilesWorkspaceId(workspaceId);
-            if (resource === 'terminal') setInitialTerminalWorkspaceId(workspaceId);
-            const ws = _workspaces?.find((w: import('@/types/domain').ExecutionWorkspace) => w.id === workspaceId);
-            const wsLabel = ws?.kind?.type === 'git' ? ws.kind.branch : ws?.name;
-            const resTitle = resource === 'terminal' ? 'Terminal' : resource === 'files' ? 'Files' : 'Agents';
-            const customTitle = wsLabel ? `${resTitle} (${wsLabel})` : undefined;
-            onOpenTab?.(resource, undefined, customTitle, 'primary', workspaceId);
-          }}
-        />
-      );
-    }
-
-    if (tabType === 'agents') {
-      const effectiveWorkspaceId = tab.workspaceId || initialAgentWorkspaceId || activeWorkspaceId;
-      return frameTabResource(
-        <AgentsWorkbenchPane
-          key={tab.id}
-          tabId={tab.id}
-          initialHarnessId={tab.agentId}
-          sessionId={session?.id}
-          runId={tab.runId}
-          isActive={isResourceActive}
-          onRunStarted={(sessionId, run) => resourceTabs.setTabs(previous => previous.map(item => item.id === tab.id
-            ? { ...item, sessionId, taskId: run.task_id, runId: run.run_id } : item))}
-          initialWorkspaceId={effectiveWorkspaceId}
-          activeWorkspaceId={effectiveWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'terminal') {
-      const effectiveWorkspaceId = tab.workspaceId || activeWorkspaceId || initialTerminalWorkspaceId;
-      return frameTabResource(
-        <TerminalWorkbenchPane
-          key={tab.id}
-          tabId={tab.id}
-          isActive={isResourceActive}
-          initialWorkspaceId={effectiveWorkspaceId}
-          activeWorkspaceId={effectiveWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'fleet') {
-      return frameTabResource(
-        <RemoteFleetWorkbenchPane
-          onShowToast={onShowToast}
-          supportedOperations={tabResource?.supportedOperations ?? []}
-          capabilityReason={tabResource?.reason}
-        />
-      );
-    }
-
-    // Research Mappings
-    if (tabType === 'literature') {
-      return frameTabResource(
-        <LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'findings' || tabType === 'claims') {
-      return frameTabResource(
-        <FindingsPane
-          sessionId={session?.id}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'lab') {
-      return frameTabResource(
-        <LabPane
-          workspace={_workspaces?.find(workspace => workspace.id === tab.workspaceId) || null}
-          sessionId={session?.id}
-          initialView="notebook"
-          onAskAgent={onAskAgent}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'runs') {
-      return frameTabResource(
-        <LabPane
-          workspace={_workspaces?.find(workspace => workspace.id === tab.workspaceId) || null}
-          sessionId={session?.id}
-          initialView="runs"
-          onAskAgent={onAskAgent}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'experiments' || tabType === 'training') {
-      return frameTabResource(
-        <LabPane
-          workspace={_workspaces?.find(workspace => workspace.id === tab.workspaceId) || null}
-          sessionId={session?.id}
-          initialView="training"
-          onAskAgent={onAskAgent}
-          onShowToast={onShowToast}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'knowledge') {
-      return frameTabResource(<ResearchMethodsPane />);
-    }
-
-    if (tabType === 'synthesis') {
-      return frameTabResource(<ResearchSynthesisPane
-        initialWorkspaceId={tab.workspaceId}
-        initialClaimId={synthesisClaimFromUrl(tab.url)}
-        onShowToast={onShowToast}
-        onNavigateToTask={onHandoffToCoding ? (taskId, receipt) => onHandoffToCoding([], { ...receipt, task_ids: [taskId] }) : undefined}
-      />);
-    }
-
-    if (tabType === 'artifacts') {
-      return frameTabResource(
-        <ArtifactsWorkbenchPane workspaceId={tab.workspaceId} selectedArtifactPath={tab.artifactId} onShowToast={onShowToast} onAskAgent={onAskAgent} />
-      );
-    }
-
-    // Copilot Mappings
-    if (tabType === 'drafts') {
-      return frameTabResource(
-        <DraftsPane taskId={tab.taskId || session?.taskId} sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'outbox') {
-      return frameTabResource(
-        <OutboxPane taskId={tab.taskId} supportedOperations={tabResource?.supportedOperations || []} onShowToast={onShowToast} />
-      );
-    }
-
-    if (tabType === 'contacts') {
-      return frameTabResource(
-        <ContactsCalendarPane type="contacts" onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'calendar') {
-      return frameTabResource(
-        <ContactsCalendarPane type="calendar" onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'notes') {
-      return frameTabResource(
-        <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onAskAgent={onAskAgent} />
-      );
-    }
-
-    // Quant Mappings
-    if (tabType === 'alpha') {
-      return frameTabResource(
-        <AlphaStudioPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'tearsheet') {
-      return frameTabResource(
-        <TearsheetPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'risk_audit') {
-      return frameTabResource(
-        <RiskAuditPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
-
-    if (tabType === 'execution') {
-      return frameTabResource(
-        <ExecutionPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-      );
-    }
 
     // Shared Browser & Emulator
     if (tabType === 'browser') {

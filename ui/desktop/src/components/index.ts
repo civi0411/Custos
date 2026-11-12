@@ -3,6 +3,6 @@ export * from './common';
 export * from './modals';
 export * from './shell';
 export * from './diff';
-export * from './providers';
+export * from '@/features/providers';
 export * from './chat';
 export * from './workbenches';
