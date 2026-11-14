@@ -4,6 +4,7 @@
 //! Metal unified memory allocation ceiling.
 
 use custos_domain::LocalHardwareProfile;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 #[cfg(target_os = "macos")]

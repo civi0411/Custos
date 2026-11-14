@@ -7,7 +7,7 @@
 //! 4. Capabilities: required capabilities must not be violated.
 //! 5. Egress & Isolation: egress rules and local constraints.
 
-use custos_domain::oi::{DecisionSnapshot, RejectionReason, StrategyProposal};
+use custos_domain::oi::{DecisionSnapshot, ExecutionTopology, RejectionReason, StrategyProposal};
 
 pub struct HardFilters;
 
@@ -73,6 +73,25 @@ impl HardFilters {
             {
                 reasons.push(RejectionReason::EgressViolation(rule.clone()));
             }
+        }
+
+        // 5. Tool Capabilities check: DirectModel / T0Direct has zero tool capabilities
+        let non_local_caps: Vec<_> = snapshot
+            .required_capabilities
+            .iter()
+            .filter(|c| {
+                !c.eq_ignore_ascii_case("LocalOnly") && !c.eq_ignore_ascii_case("local-only")
+            })
+            .collect();
+
+        if (proposal.chosen_topology == ExecutionTopology::DirectModel
+            || proposal.chosen_topology == ExecutionTopology::T0Direct)
+            && !non_local_caps.is_empty()
+        {
+            reasons.push(RejectionReason::CapabilityMissing(format!(
+                "DirectModel topology cannot provide required capabilities: {:?}",
+                non_local_caps
+            )));
         }
 
         if reasons.is_empty() {
@@ -180,5 +199,25 @@ mod tests {
                 local
             );
         }
+    }
+
+    #[test]
+    fn test_hard_filter_direct_model_rejects_required_capabilities() {
+        let mut snapshot = DecisionSnapshot::new("task_caps");
+        snapshot.required_capabilities = vec!["fs_read".into()];
+
+        let mut direct_proposal = StrategyProposal::native_baseline("task_caps", "custos-local");
+        direct_proposal.chosen_topology = ExecutionTopology::DirectModel;
+
+        let res = HardFilters::evaluate(&direct_proposal, &snapshot);
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .iter()
+            .any(|r| matches!(r, RejectionReason::CapabilityMissing(_))));
+
+        let native_proposal = StrategyProposal::native_baseline("task_caps", "custos-local");
+        let res_native = HardFilters::evaluate(&native_proposal, &snapshot);
+        assert!(res_native.is_ok());
     }
 }

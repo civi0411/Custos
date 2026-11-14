@@ -20,6 +20,8 @@ pub mod connectors;
 // ============================================================================
 
 pub use harnesses as harness;
+pub use harnesses as cli_agents;
+pub use harnesses::adapter::CliAgentAdapter;
 pub use host::binaries;
 pub use host::caffeinate;
 pub use host::caffeinate::{CaffeinateManager, CAFFEINATE_MANAGER};

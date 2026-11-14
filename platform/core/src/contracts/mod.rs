@@ -16,6 +16,7 @@
 //! NOTE: module is `contracts`, not `ports`, because `kernel::ports` is glob re-exported
 //! at the crate root and a top-level `ports` module would shadow `crate::ports::TaskStore`.
 
+pub mod agent;
 pub mod checkpoint_store;
 pub mod compute;
 pub mod credentials;
@@ -40,8 +41,8 @@ pub mod workspace_files;
 
 // --- 1. Execution, Kernel & Specialization ---
 pub use harness::{
-    AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
-    WorktreeOwnership,
+    AgentDriver, AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile,
+    ToolMediationLevel, WorktreeOwnership,
 };
 pub use kernel::{KernelPort, TrustedKernel};
 pub use pack::{

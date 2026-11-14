@@ -4,9 +4,7 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
-> **Current sequencing:** The PR-00–PR-11 table below is an earlier dependency sketch, not the active queue for checkout `4b73cce`. Use [backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) for current priorities and acceptance gates. Its first gates are Local API/physical execution admission and one real source-backed chat result; the older table does not account for already added daemon, UI and Research modules.
-
-Custos execution follows a strict **Vertical Slices** methodology: each milestone produces an end-to-end, runnable, verifiable system rather than disconnected horizontal abstraction layers.
+Custos engineering strictly enforces the **Vertical Slices** methodology: each development milestone produces an end-to-end, runnable, verifiable system rather than disconnected horizontal abstraction layers. Every slice spans the entire stack—from domain state machines and SQLite persistence up through the local daemon API and desktop UI controls.
 
 ---
 
@@ -23,49 +21,72 @@ flowchart LR
     Verify --> Continue["6. Continue (Checkpoint / Next Step)"]
 ```
 
-- **Observe:** Fetch source files, git diffs, and project metadata strictly within authorized scope.
-- **Choose:** Select optimal execution topology (Direct, Single-Worker, Multi-Worker) within budget constraints.
-- **Work:** Generate candidate code patches or research findings without executing physical mutations.
-- **Authorize:** Intercept side-effect intents at the Authority Engine; verify single-use cryptographic permits.
-- **Verify:** Bind test receipts, lint results, and citation checks to task criteria at the Completion Gate.
-- **Continue:** Commit durable checkpoints; preserve state for subsequent interaction sessions.
+1. **Observe:** Fetch source files, git diffs, and project metadata strictly within authorized scope.
+2. **Choose:** Select optimal execution topology (T0 Direct to T6 Dynamic Replan) within budget constraints using Pareto optimization.
+3. **Work:** Generate candidate code patches, research claims, or strategy models without executing unvetted physical mutations.
+4. **Authorize:** Intercept side-effect intents at the Authority Engine; verify single-use cryptographic permits.
+5. **Verify:** Bind test receipts, compiler outputs, and citation checks to task criteria at the Completion Gate.
+6. **Continue:** Commit durable checkpoints; preserve state for subsequent interaction sessions.
 
 ---
 
-## 2. Release Gates Matrix
+## 2. Continuous Quality Pipeline (`cargo xtask gate`)
 
-| Release Gate | Focus Area | Mandatory Exit Criteria |
-|---|---|---|
-| **Gate 0** | **Baseline Architecture** | Clean compilation of all 11 product crates; baseline contract tests pass under `cargo test`. |
-| **Gate 1** | **Read-Only Inspection** | Real ContextPack delivered to provider port; exact citation spans verified; session reload verified. |
-| **Gate 2** | **Durable Effect Spine** | Durable action attempt recorded prior to execution; permit verified; sandboxed execution; crash reconciliation proven. |
-| **Gate 3** | **Coding Bug Fix** | Atomic patch bundles and test receipts attached to task criteria; verified objective completion gate pass. |
-| **Gate 4** | **Research-to-Code** | Versioned research claims, contradiction checks, and typed handoff into engineering patches. |
-| **Gate 5** | **Self-Setup & Optional Profiles**| Doctor diagnostic commands, automated environment detection, and optional provider profile configurations. |
+Before any pull request or commit is merged, it must satisfy all 5 automated gates:
 
----
-
-## 3. Pull Request Delivery Sequence
-
-To maintain an audited, green CI pipeline, development follows an ordered sequence of focused pull requests:
-
-| PR Number | PR Scope & Responsibilities | Upstream Dependency | Exit Verification |
+| Gate | Focus Area | Mandatory Exit Criteria | Automated Verification |
 |---|---|---|---|
-| **PR-00** | Architectural Baseline & Workspace Manifests | None | Clean 11-crate Cargo check, strict Clippy, cargo-deny pass. |
-| **PR-01** | Local API DTOs & Transport | PR-00 | Shared client DTOs, versioned command routing over domain sockets. |
-| **PR-02** | Session Persistence Store | PR-01 | SQLite WAL session persistence, journal replay, restart recovery. |
-| **PR-03** | ContextPack & Provider Traits | PR-00 | Deterministic context assembly, token ranking, streaming provider ports. |
-| **PR-04** | Bounded Runtime & Task FSM | PR-00 | Task state machine transitions, step execution loops, lease renewal. |
-| **PR-05** | Daemon Composition Root | PR-01–04 | End-to-end read-only query execution through daemon process. |
-| **PR-06** | Action Ledger & Execution Permits | PR-00 | Durable attempt schema, cryptographic single-use permits, argument hashing. |
-| **PR-07** | Effect Dispatcher & Sandboxing | PR-04, 06 | Sandboxed command execution, crash window reconciliation. |
-| **PR-08** | Engineering Pack Workflows | PR-03, 04, 07 | Atomic patch bundles, three-path execution workspaces (isolated worktrees). |
-| **PR-09** | Evidence Closure & Completion Gate | PR-06–08 | Verifier isolation, objective evidence binding, completion gate enforcement. |
-| **PR-10** | Research Pack Workflows | PR-03, 09 | Claim extraction, reproducibility bundles, citation audit pipeline. |
-| **PR-11** | Assistant Pack Workflows | PR-03, 09 | Autonomy levels, payload stability, safe automation scheduling. |
+| **Gate 1** | **Manifests & Descriptors** | 4/4 workbenches valid, 8 capabilities valid, zero kernel-workbench leaks. | `cargo xtask check-boundaries` |
+| **Gate 2** | **Desktop UI Build** | Strict TypeScript typecheck and Vite asset bundling with zero compilation errors. | `npm --prefix ui/desktop run build` |
+| **Gate 3** | **Canvas Smoke Invariants** | 51/51 headless DOM invariants pass (zero mock leaks, truthful controls). | `node ui/desktop/scripts/canvas-smoke.mjs` |
+| **Gate 4** | **Architecture Invariants** | Layering rules, naming conventions, and file line ceiling ($\le 600$ lines) pass. | `cargo test -p custos-testkit -p custos-tests-contract --lib --tests` |
+| **Gate 5** | **Workspace Cargo Check** | Clean compilation of all 20 packages in the workspace across all targets. | `cargo check --workspace --all-targets --offline` |
 
 ---
 
-## 4. Empirical Verification Standard
+## 3. Product Acceptance Gates (Gates A–OPT)
+
+Product release milestones require satisfying the 8 Product Acceptance Gates:
+
+| Acceptance Gate | Focus Area | Mandatory Exit Criteria | Target Suite |
+|---|---|---|---|
+| **GATE A** | **Local Process E2E** | Run from CLI through Daemon, invoking a local model under `LocalOnly` flag. | `tests/e2e` |
+| **GATE B** | **Worktree Isolation** | Prove all filesystem mutations take place exclusively inside `isolated_worktree`. | `platform/adapters`, `platform/runtime` |
+| **GATE C** | **Crash Resilience** | Simulate SIGKILL between outbox staging and physical execution; verify restart into `Uncertain`. | `tests/contract` |
+| **GATE D** | **Security Taint Test** | Inject prompt injection payloads into untrusted inputs; verify complete quarantine. | `platform/core`, `tests/contract` |
+| **GATE E** | **SWE-Bench Baseline** | Resolve sample SWE-bench Lite issues autonomously without human code intervention. | `evals/` |
+| **GATE F** | **Research Reproducibility** | Reproduce benchmark algorithm from citations, producing a verifiable `ReproducibilityBundle`. | `workbenches/research` |
+| **GATE G** | **LongMemEval Temporal** | Distinguish between outdated and active facts across multi-turn sessions without hallucination. | `evals/memory` |
+| **GATE OPT** | **Economic Non-Inferiority** | System 1 fast routing reduces execution cost by $\ge 20\%$ compared to direct frontier models. | `evals/calibration`, `evals/oi` |
+
+---
+
+## 4. Architectural Package Delivery Sequence
+
+The Custos monorepo organizes its 20 packages into an audited, unidirectional dependency graph:
+
+```text
+Ring 0 (Platform):
+  platform/domain -> platform/core -> platform/storage -> platform/ai -> platform/runtime -> platform/adapters -> platform/components
+
+Ring 1 (Workbenches):
+  workbenches/assistant (Personal copilot & outbox approvals)
+  workbenches/coding    (Code generation, worktree branching, patch verification)
+  workbenches/research  (Academic literature, claims, citation verification)
+  workbenches/quant     (Backtesting, risk gates, order ticket governance)
+
+Ring 2 (Applications & Protocols):
+  sdk/protocol -> sdk/client-rust -> apps/daemon -> apps/cli -> apps/desktop/native
+```
+
+### Pull Request Standards
+- **Atomic Commits:** Each PR addresses a single vertical feature or refactor slice.
+- **Contract Test Coverage:** Changes to traits or database schemas must include migration and contract tests.
+- **Line Count Invariant:** No modified or newly added source file may exceed 600 physical lines.
+- **Zero Mock Policy:** Release binaries must not contain mock implementations; test scaffolding is gated behind `#[cfg(any(test, feature = "test-support"))]`.
+
+---
+
+## 5. Empirical Verification Standard
 
 All performance targets, latency numbers, and efficiency benchmarks stated in PR descriptions or plans remain `[Pending Empirical Verification]` until automated end-to-end test fixtures demonstrate repeatability under real workload conditions.

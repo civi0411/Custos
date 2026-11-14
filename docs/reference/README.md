@@ -12,7 +12,7 @@ The `docs/reference/` directory serves as the definitive technical dictionary an
 
 | Reference Document | Scope & Focus | Primary Audience |
 |---|---|---|
-| **[System Invariants](system-invariants.md)** | The 10 canonical system invariants (INV-01 to INV-10), 5 Golden Rules, and the automated compile/runtime enforcement matrix. | All contributors, security auditors, core engine developers |
+| **[System Invariants](system-invariants.md)** | The 14 canonical system invariants (INV-01 to INV-14), 5 Golden Rules, and the automated compile/runtime enforcement matrix. | All contributors, security auditors, core engine developers |
 | **[Naming Conventions](naming-conventions.md)** | Standardized casing, prefixes, and identifier rules across crates, modules, entities, CQRS commands/events, REST/IPC endpoints, database tables, and metrics. | Rust developers, API designers, pack authors |
 | **[Schema & Type Mapping](schema-and-type-mapping.md)** | Wire contracts, JSON Schema to Rust struct mappings, protocol error taxonomy, and SQLite relational persistence table schemas. | Protocol implementers, bridge developers, frontend/IDE integrators |
 | **[Canonical Glossary](glossary.md)** | Standardized definitions of core architectural domain concepts (ActionIntent, IBCT, Completion Gate, Taint Tracking, ContinuationPacket, etc.). | System architects, documentation writers, new team members |

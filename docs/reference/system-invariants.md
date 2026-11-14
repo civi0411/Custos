@@ -4,11 +4,11 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
 > **Directory Index:** See [Custos Developer Reference](README.md).
 
-Every component, interface, and execution path across the Custos workspace must strictly adhere to the 10 System Invariants and the 5 Golden Rules. These rules are non-negotiable and enforced through compile-time type bounds, static assertions, and automated runtime verifiers.
+Every component, interface, and execution path across the Custos workspace must strictly adhere to the 14 System Invariants and the 5 Golden Rules. These rules are non-negotiable and enforced through compile-time type bounds, static assertions, and automated runtime verifiers.
 
 ---
 
-## 1. The 10 System Invariants
+## 1. The 14 System Invariants
 
 | Code | Invariant Name | Scope | Enforced By / Rule |
 |---|---|---|---|
@@ -21,7 +21,11 @@ Every component, interface, and execution path across the Custos workspace must 
 | **INV-07** | **No Phantom Distributed Atomicity** | Persistence & I/O | External side effects outside the SQLite transaction boundary cannot claim atomic guarantees. All I/O mutations must follow the Outbox / Receipt / Reconciliation protocol. |
 | **INV-08** | **No Implicit Delegation** | A2A & Sub-tasks | Sub-task decomposition or agent-to-agent delegation never inherits the full capability set of the parent task. Authority delegation must always diminish in scope (`Delegation Diminishment`). |
 | **INV-09** | **Audited Transports** | Model Hub | Every model inference attempt (`ModelAttempt`) must record its exact transport mechanism (`LocalInference`, `DirectVendorSdk`, `McpSamplingCallback`, `ProxyGateway`) with cost tracking or an explicit `CostUnknown` flag. |
-| **INV-10** | **Single Model First-Class** | Orchestration | The system must function completely with a single baseline model. Multi-worker topologies (T2–T8) are only invoked when measurable value over baseline is established. |
+| **INV-10** | **Single Model First-Class** | Orchestration | The system must function completely with a single baseline model. Multi-worker topologies (T2–T6) are only invoked when measurable value over baseline is established. |
+| **INV-11** | **Zero-Mock in Production** | Quality & Assurance | Mock implementations, stub state, and test doubles are strictly forbidden in production release binaries. All mock state must be shielded behind `#[cfg(any(test, feature = "test-support"))]`. |
+| **INV-12** | **Process Group & Zombie Elimination** | Subprocess Lifecycle | External agent subprocesses must be assigned a unique process group (`setpgid(0)`) and killed with `SIGKILL` to `-pid` on drop, eliminating zombie/orphaned processes. |
+| **INV-13** | **Task Batch Rollback on Failure** | Workflow & Handoff | Multi-task generation and review handoffs must execute atomically or via compensating transactions; any failure in the batch must roll back previously created tasks. |
+| **INV-14** | **Partition Boundary Isolation** | Storage & Scalability | Attached SQLite partition databases must be guarded against SQL injection and detached cleanly on transaction closure or worker shutdown. |
 
 ---
 
@@ -58,3 +62,7 @@ graph TD
 | **INV-08** | Diminishment invariant check in `IBCT::create_child()` | `A2AHub::validate_delegation()` | `tests/contract/tests/delegation_diminishment.rs` |
 | **INV-09** | Exhaustive enum `InferenceTransport` on `ModelAttempt` | `custos-provider::ModelHub::dispatch()` | `tests/contract/tests/model_transport_audit.rs` |
 | **INV-10** | T1 single-worker topology test suite | OI Engine routing fallback check | `tests/eval/tests/single_model_baseline.rs` |
+| **INV-11** | Conditional compilation `#[cfg(any(test, feature = "test-support"))]` | `cargo xtask check-boundaries` AST linter | `platform/adapters/src/harnesses/adapter.rs` & `check-boundaries` |
+| **INV-12** | `process_group(0)` & `ProcessDropGuard` with `libc::kill` | Process drop destructor hook | `platform/adapters/src/harnesses/stream/process.rs` unit tests |
+| **INV-13** | Compensating transaction loop in `create_task_batch` | Handoff coordinator error handler | `apps/daemon/src/application/research/reviews/handoff.rs` tests |
+| **INV-14** | `attach_partition` & `detach_partition` identifier validation | SQLite ATTACH/DETACH execution guard | `platform/storage/src/connection.rs` unit tests |

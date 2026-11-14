@@ -66,32 +66,12 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
 
-                let mut created_task_ids = Vec::with_capacity(plan.task_commands.len());
-                for cmd in plan.task_commands {
-                    match self.kernel.task_service.execute_create(cmd).await {
-                        Ok((task, _)) => created_task_ids.push(task.id),
-                        Err(e) => {
-                            // Rollback created tasks in this batch to prevent partial child tasks on failure (B5 Invariant)
-                            for created_id in &created_task_ids {
-                                let _ = self
-                                    .kernel.task_service
-                                    .execute_advance(AdvanceTask {
-                                        task_id: created_id.clone(),
-                                        next_status: custos_domain::task::TaskStatus::Failed,
-                                        expected_epoch: 1,
-                                        rationale: Some(format!(
-                                            "Handoff aborted due to child task creation failure: {e}"
-                                        )),
-                                    })
-                                    .await;
-                            }
-                            return ApiResponse::error(
-                                req.id,
-                                format!("Failed to create task: {e}"),
-                            );
-                        }
-                    }
-                }
+                // Create all task commands; rollback any that succeeded if one fails (B5 Invariant)
+                let created_task_ids =
+                    match create_task_batch(&self.kernel.task_service, plan.task_commands).await {
+                        Ok(ids) => ids,
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    };
 
                 if let Some(ref prop_id) = params.proposal_id {
                     SynthesisService::mark_proposal_completed(&research, prop_id);
@@ -117,4 +97,33 @@ impl LocalApiDispatcher {
             unknown => ApiResponse::error(req.id, format!("Unknown handoff method: {unknown}")),
         }
     }
+}
+
+/// Creates tasks from `cmds` in order; on any failure, marks all previously created tasks as
+/// Failed (compensating transaction / B5 Invariant) and returns the error.
+/// shortcut: rollback is best-effort (task_service errors during rollback are ignored), upgrade to 2PC if strict atomicity is needed
+async fn create_task_batch(
+    task_service: &TaskService,
+    cmds: Vec<CreateTask>,
+) -> Result<Vec<String>, String> {
+    let mut created_ids: Vec<String> = Vec::with_capacity(cmds.len());
+    for cmd in cmds {
+        match task_service.execute_create(cmd).await {
+            Ok((task, _)) => created_ids.push(task.id),
+            Err(e) => {
+                for id in &created_ids {
+                    let _ = task_service
+                        .execute_advance(AdvanceTask {
+                            task_id: id.clone(),
+                            next_status: custos_domain::task::TaskStatus::Failed,
+                            expected_epoch: 1,
+                            rationale: Some(format!("Handoff batch aborted: {e}")),
+                        })
+                        .await;
+                }
+                return Err(format!("Failed to create task: {e}"));
+            }
+        }
+    }
+    Ok(created_ids)
 }

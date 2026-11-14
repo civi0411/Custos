@@ -2,7 +2,9 @@
 
 **Trạng thái** là kế hoạch refactor theo packet. Cleanup root hỗ trợ ở cuối §16 đã được thực hiện theo yêu cầu người dùng, các packet khác giữ trạng thái trong ledger. Người dùng đã cho phép bỏ ràng buộc số lượng 11 crates khi thiết kế đích.
 
-**Baseline** là `new_rft`, HEAD `9cd903b` cộng working tree hiện hữu tại snapshot 09-11-2026 trong [baseline JSON](platform-refactor-baseline.json). Hash từng file được kiểm trước mỗi packet và giữ các thay đổi đang có.
+**Snapshot hiện hành** ngày 13-11-2026 nằm ở [§17](#three-root-target-review), đối chiếu branch `vi` tại `f3cfaa3d`. Các nhận định cũ phải được kiểm lại theo source hiện tại trước khi thi công.
+
+**Baseline lịch sử** là `new_rft`, HEAD `9cd903b` cộng working tree hiện hữu tại snapshot 09-11-2026 trong [baseline JSON](platform-refactor-baseline.json). Hash từng file được kiểm trước mỗi packet và giữ các thay đổi đang có.
 
 **Điểm vào theo từng file** nằm ở [§16](#platform-file-plan), [CSV](platform-refactor-file-map.csv) và [baseline](platform-refactor-baseline.json). Snapshot của kế hoạch bao phủ 1.381 file với 638 file platform. Các row retired/relocated phản ánh cleanup sau snapshot. Đọc source/callers của packet trước khi chuyển.
 
@@ -693,6 +695,8 @@ Các hàng CSV là candidate placement. Các source seams nêu trong §16.3 có 
 
 ### Dọn các root hỗ trợ theo consumers hiện hữu
 
+Ghi nhận cleanup ở snapshot 10-11-2026. `sdk/protocol` đã được triển khai lại thành compiled workspace package ở snapshot 13-11-2026, giữ package hiện hành và consumers của nó.
+
 SDK Rust và xtask là các Cargo workspace packages đang được ứng dụng và CI sử dụng. Giữ `sdk/client-rust` cho Local API/profile/ACP types, giữ `xtask` cho build/architecture/package commands và giữ `packages/custos-npm-package` cho workflow phát hành NPM.
 
 Chuyển các schema tham chiếu từ root `schemas` về `tests/contract/fixtures/schemas` và sửa contract tests theo location đó. Các fixtures này chỉ được kiểm tồn tại/parse trong test hiện tại, mức runtime validation phải được mô tả theo implementation thật.
@@ -700,3 +704,251 @@ Chuyển các schema tham chiếu từ root `schemas` về `tests/contract/fixtu
 Xóa `examples` ở root, `packages/custos-vscode` chưa có implementation, `sdk/protocol` chưa compile và các Python/Kotlin/UniFFI scripts/examples của SDK Goose không được Custos build. Worker wire hiện dùng `platform/core/src/contracts/worker_wire.rs`. Khi tách public protocol thành package ở P01, chuyển definition đang dùng cùng consumers và fixtures trong một packet có build gate.
 
 Giữ historical inventory ở snapshot đã ghi. Row bị xóa/chuyển trong file ledger được đánh dấu retired/relocated, dùng current source để chọn packet tiếp theo.
+
+
+<a id="three-root-target-review"></a>
+## 17. Kiến trúc đích ba root và hiệu chỉnh đề xuất ngày 13-11-2026
+
+### 17.1 Phạm vi, bằng chứng và mức kết luận
+
+Đối chiếu bản đính kèm “Kiến trúc repo đích chuẩn nhất & kế hoạch thực thi chi tiết” với branch `vi`, HEAD `f3cfaa3d`. Working tree sạch khi bắt đầu lượt review. Cargo metadata có 20 packages gồm 7 platform, 4 workbench, 3 app, 2 SDK, 3 test packages và xtask. Đây là số lượng hiện hữu, việc thêm package cần dependency/build/distribution boundary cụ thể.
+
+Inventory đã đọc nội dung để phân loại, đếm dòng, hash và trích declarations của 1.175 text files trong ba root. Platform có 860 file/146.917 dòng, workbenches có 170/16.113, apps có 145/25.032. Loại trừ generated/build/dependency directories và binary assets. Review ngữ nghĩa tập trung vào dependency graph cùng các đường admission, native harness, supervision, OI, environment, workbench activation, storage, API và packaging. Mức review này xác nhận cấu trúc và các đường đã truy vết, mức bảo đảm toàn hệ thống còn phụ thuộc integration/fault tests.
+
+Các thay đổi đã hiện diện so với snapshot §16 gồm bốn workbench crates thật, public protocol được compile ở `sdk/protocol`, SDK Rust hết dependency backend workbench và graph platform hiện hết dependency sang specialist crates. Những đề nghị di chuyển tương ứng trong §16 được đối chiếu lại trước khi áp dụng.
+
+### 17.2 Quyết định đối với đề xuất được gửi
+
+| Nội dung đề xuất | Quyết định kiến trúc đích và căn cứ |
+|---|---|
+| Cố định 7 platform, 4 workbench, 3 apps | Dùng ba root làm ranh giới trách nhiệm. Package count đi theo build/lifetime/distribution và dependency graph |
+| Sáu topics giống nhau ở mọi crate | Tổ chức theo nhiệm vụ từng lớp. Domain có value types, core có policy/ports, runtime có orchestration, adapters có I/O, workbench có semantics |
+| Desktop Next.js | Source hiện là React/Vite với Tauri host. Build plan dùng đúng toolchain và entrypoints đang có |
+| Một decorator giám sát mọi harness | Một admitted invocation path, root run/span một owner. Decorator có thể bổ sung lifecycle/metrics khi giữ đủ capability delegation của harness |
+| Đọc stream bảo đảm chặn toàn bộ effect | Assurance phụ thuộc hook trước effect, sandbox đã kiểm và coverage adapter. Stream chỉ cung cấp observations mà harness phát ra |
+| Phát hiện lặp thì cancel ngay | Watchdog phát finding có evidence. Chính sách dừng xét hard limits, tiến độ, expected polling, confidence và quyền điều khiển thực của adapter |
+| Điểm năng lực .95/.92, unknowns > 2 và tiết kiệm 75% | Thay bằng fixtures/calibration có version. Threshold chỉ là tham số thí nghiệm. Report quality/cost/latency của Custos |
+| Local có chi phí bằng 0 | Tách billed API, local compute, thời gian, tài nguyên và unknown. Route budget cần xét cả GPU/RAM contention |
+| Cùng session luôn được cache giảm 90% | Cache dựa provider/model/prefix/TTL/features và usage thực tế. Cost estimator cần cold/warm scenarios |
+| Gộp toàn bộ PTY/notebook/GPU vào Environment aggregate | Environment điều phối resource bindings qua ports, mỗi tài nguyên giữ lease/lifetime của owner. Phân biệt tài nguyên sở hữu và dùng chung |
+| Application chỉ là thin JSON router | API sở hữu wire/auth/error mapping. Application sở hữu typed use cases và cross-domain coordination. Bootstrap sở hữu composition |
+| Gộp mọi registry thành một map | Một contribution catalog, các typed projections cho jobs/tools/verifiers. Active set theo profile/version, kiểm alias collision khi đăng ký |
+| File nhỏ là dư, pub use giữ mãi để đạt compatibility | Gộp theo cohesion/callers. Compatibility export có consumers và retirement gate. Giữ source/wire compatibility theo phạm vi sản phẩm hỗ trợ |
+| Quality gate chứng minh mọi thứ hoàn tất | Gate hiện chạy selected contract/testkit tests và workspace cargo check. Product acceptance cần normal entrypoints, native/remote conformance và failure tests riêng |
+
+Các ý tưởng simple/composable workflows được dùng để chọn mức orchestration phù hợp với công việc và phép đo. Stable interfaces của session, harness và environment là cơ sở thiết kế để thay implementation độc lập. Đây là lựa chọn riêng của Custos áp dụng vào local runtime. [Building effective agents](https://www.anthropic.com/research/building-effective-agents), [Scaling Managed Agents](https://www.anthropic.com/research/managed-agents).
+
+### 17.3 Cấu trúc đích và ownership
+
+```text
+platform/
+  domain/src/        IDs, immutable specifications, state, source/evidence/resource refs
+  core/src/          authority, kernel, evidence gates, behavior contracts
+  runtime/src/       agent, context, environment, oi, session, workflow orchestration
+  ai/src/            contracts, catalog/pricing, cloud, local, inference routing
+  adapters/src/      host drivers, native harnesses, external connectors
+  storage/src/       canonical SQLite, CAS, migrations, repositories, recovery
+  components/src/    contributions, resolution, activation, compatibility/version checks
+workbenches/
+  assistant/         personal workflow, identity, drafts, outbound domain criteria
+  coding/            patch/debug/review/worktree policies and engineering verification
+  research/          sources, claims, papers, notebooks/experiments and research criteria
+  quant/             datasets, strategies, backtest/live distinctions and quant criteria
+apps/
+  daemon/src/
+    api/             wire decoding, authenticated caller, command admission and responses
+    application/     typed use cases, shared transaction/workflow coordination
+    bootstrap/       one composition root, profiles, services and adapter wiring
+  desktop/native/    OS windows, Tauri lifecycle and SDK transport
+  desktop/ui/        target shared shell, navigation, Screen/pane state and settings
+  cli/               headless terminal entrypoint using the same Local API
+sdk/
+  protocol/          versioned public wire, envelopes, errors, events and compatibility
+  client-rust/       connection, command IDs, resume cursor, typed client
+  client-ts/         equivalent browser/native client where implemented
+  ui/                shared contribution contracts/primitives when consumers require them
+```
+
+Đây là placement đích. Desktop frontend hiện còn ở `ui/desktop`, việc chuyển vật lý thực hiện cùng Tauri/Vite/CI/test references trong P05/P10. Workbench views có đích `workbenches/<id>/ui`, chỉ tách khi dependency closure và Host API đã sẵn sàng.
+
+**Domain** giữ invariant thuần và serialized identity. **Core** giữ quyền, transitions và completion. **Runtime** quyết định orchestration trong contract, gọi ports và quản lý vòng đời. **AI** xử lý inference và provider fidelity. **Adapters** thi hành I/O. **Storage** sở hữu transaction/physical persistence. **Components** tổ chức contribution và activation. **Workbenches** định nghĩa thành công chuyên miền. **Apps** nối sản phẩm tới các owners này.
+
+Common platform modules phụ thuộc domain/core contracts. Concrete drivers implement ports, daemon inject implementations. Workbench có thể phụ thuộc common ports/services. Common platform dependency sang một specialist workbench bị chặn bởi architecture test. SDK client chỉ kéo public protocol/domain và transport cần thiết. Workbench worker đi qua Host API có scope khi chạy khác process.
+
+Dùng Rust traits ở các seams cần thay implementation, injected services cho use cases và value types cho identity/specification. Mỗi stateful service phải có lifetime owner. Một struct services ở bootstrap có thể gom constructor parameters theo chủ đề, thêm forwarding façade chỉ khi nó giữ behavior/transaction/lifecycle riêng.
+
+### 17.4 Luồng thực thi thống nhất và luồng dữ liệu
+
+```mermaid
+flowchart TD
+    UI[Desktop or CLI command] --> API[API decode and caller identity]
+    API --> APP[Typed application use case]
+    APP --> ADMIT[Kernel admission and durable run allocation]
+    ADMIT --> RT[Runtime workflow and context]
+    RT --> OI[Route within hard constraints]
+    OI --> EXEC[Selected model loop or native harness]
+    EXEC --> INTENT[Action intent when interceptable]
+    INTENT --> AUTH[Authority and exact effect permit]
+    AUTH --> IO[Adapter dispatch and reconciliation]
+    IO --> EV[Receipts and criterion verification]
+    EXEC --> OBS[Observed native effects and coverage labels]
+    OBS --> EV
+    EV --> OUT[Outcome and continuation]
+    OUT --> UI
+    RT --> TRACE[Bounded telemetry with gap counters]
+    EXEC --> TRACE
+    ADMIT --> DB[Canonical state and transactional event log]
+    AUTH --> DB
+    EV --> DB
+    DB --> PROJ[Versioned UI projections and event cursor]
+    PROJ --> UI
+```
+
+Command IDs, task/revision/run/attempt IDs và resource bindings giữ nguyên xuyên các cạnh. Một command retry nhận kết quả cũ hoặc tiếp tục reconciliation theo trạng thái đã lưu. UI reconnect dùng event cursor. Scope/provider pin/egress/budget được kiểm trước attempt và mỗi mediated effect.
+
+Source snapshot/CAS giữ bytes, locator, version và sensitivity. ContextPack chỉ chiếu phần được phép với omissions/budget. Worker sinh artifact/intent. Receipt ghi điều quan sát được, verifier nối bằng chứng vào criterion. Outcome giữ pass/fail/unknown/stale/waived đúng từng tiêu chí. Workbench switch thay view/context contribution, session/task/artifact identity tiếp tục theo binding được người dùng chọn.
+
+### 17.5 Native harness, supervision và tương tác hai chiều
+
+Current `AgentRuntimePort` ở `platform/core/src/contracts/harness.rs` có `run_native_observed`, `cancel_run`, `steer_run` và profile. `RunObserver` được khai báo cho presentation observations. `workflow/task_runtime/execution/runner.rs` đã tạo root span. `execution/native.rs` kiểm assurance của observed effects sau khi harness trả kết quả. `apps/daemon/src/application/execution.rs` còn raw path gọi `HarnessRegistry::run_native`.
+
+Thiết kế đích đưa các entrypoints về cùng admission/run allocation, observer, stop handle và terminal settlement. Giữ native loop của harness và capability negotiation theo adapter/version. Phân loại rõ hỗ trợ stream, interrupt, steer, resume, pre-effect hook, usage và effect coverage. Catalog 45 harness entries hiện hữu cần availability probe và conformance riêng cho mỗi integration.
+
+Lifecycle facts bắt buộc như allocated, dispatch claim, terminal outcome và effect receipt đi qua durable command/event path. Waterfall spans/logs có thể dùng bounded queue, nhưng UI phải thấy dropped count/gaps khi mất coverage. Supervision queue hiện `try_send` và ghi nhận dropped events, nên dashboard cần thể hiện phạm vi dữ liệu này.
+
+Thay boolean `active` trong settlement bằng typed terminal outcome. `workflow/supervision/processor.rs` hiện ánh xạ inactive thành `Success`, gây mất phân biệt failed/cancelled/uncertain qua đường này. Watchdog chỉ phát finding, policy chọn warn/pause/request cancel dựa scope và hard limits. Cancel flow giữ requested/acknowledged/confirmed cùng reconciliation cho external effects. Child processes, remote training và CLI disconnect cần test riêng.
+
+Thread steering có sequence, actor, expected run generation và acknowledgement. Một steer chỉ được nhận khi adapter hỗ trợ và run còn hợp lệ. Input của user đến giữa tool dispatch được xử lý ở safe point đã khai báo. SSE/WebSocket choice là transport, semantics cancel/steer/approval nằm ở application/runtime contracts.
+
+### 17.6 Environment và tài nguyên
+
+Current `EnvironmentCoordinator` tạo workspace qua `WorkspaceCoordinator`, nhưng `EnvironmentHandle` thiếu `workspace_id`. Create sinh `WorkspaceId::generate()`, teardown lại dựng ID từ tên `env-ws-*` rồi bỏ qua lỗi archive. Handle còn bị xóa khỏi RAM trước khi cleanup được xác nhận. Đây là lỗi lifetime cần sửa trước khi mở rộng coordinator.
+
+Coordinator hiện tự gán `CustosMediated`, `process_isolated=true`, filesystem/network flags và driver labels từ profile. Các giá trị này cần được thay bằng kết quả provision/probe của concrete drivers cùng policy coverage. Worktree allocation, filesystem confinement, process isolation và egress restriction có phép thử riêng.
+
+Handle đích giữ environment ID, workspace/resource IDs, ownership, lease epoch, spec digest, effective policy/version, driver capabilities, measured assurance và cleanup progress. Tài nguyên được yêu cầu qua requirements có kiểu như workspace, PTY, kernel, compute target, artifact mount, network policy. Workbench tạo yêu cầu theo nghiệp vụ. Assistant connector-only có thể chỉ cần logical environment, Research có thể dùng folder hoặc Git, notebook kernel được bind theo quyền và epoch.
+
+Lifecycle gồm provision intent persisted, allocate resources, validate effective capabilities, ready/degraded, drain, release owned resources, reconcile và terminal cleanup. Partial failure lưu từng resource đã tạo để retry/compensate. Teardown idempotent, giữ pending cleanup khi driver lỗi. Shared GPU/kernel/remote target có independent lease và reference ownership, việc đóng pane giải phóng view subscription theo policy.
+
+Path resolver dùng profile/OS directories và canonicalization. Bỏ hardcoded `/tmp/custos_assistant_*`, relative quant path và global home assumptions khỏi quyết định orchestration. Migration cho handle cũ phải resolve ID qua persisted metadata có kiểm uniqueness, ambiguity trả unresolved.
+
+### 17.7 OI và kinh tế vận hành
+
+OI hiện có candidate builder, hard filters, estimator, selector và topology compiler. `selector.rs` lấy candidate admissible đầu tiên. `estimator.rs` dùng tên harness và ranges cố định, local có cost 0. `candidate_builder.rs` còn baseline IDs cố định và đưa model pin vào trường harness. Giữ các path này làm điểm refactor, mỗi cải tiến có baseline và fixture.
+
+Execution candidate đích phân biệt model ID, provider/account, harness/version/transport, environment requirements, context strategy, topology, evidence plan và capability readiness. Model API dùng Custos-owned loop khi tác vụ cần tool iteration. Native agent dùng loop của harness cùng declared controls. Model pin áp đúng inference identity và consent của người dùng.
+
+Hard filters chạy trước ranking. Estimator tính whole route gồm input/output, cache read/write, fan-out, retries, handoff context, verifier, tools và compute. Mỗi trường có known/estimated/unknown, provenance và pricing timestamp. Cold/warm ranges thể hiện uncertainty. Billed money, local compute và human minutes báo riêng.
+
+Pareto filtering tạo các lựa chọn quality/cost/latency, preference đã cấu hình chọn route với tie-break ổn định. Quality estimate phải gắn task kind, model/harness/prompt versions và calibration slice. Unknown quality giữ explicit uncertainty và baseline route. Health tracker có scope endpoint/account/version/task, TTL và recovery probe.
+
+S1 có thể hỗ trợ retrieval/reranking/scouting/dedup và hẹp hóa context trong cùng worktree khi có evidence cải thiện downstream outcome. Output của S1 giữ source refs, omissions và abstain, S2 được quyền đọc thêm nguồn trong scope. Lead-worker topology thử sau khi single/staged/fan-out đã có paired evaluation. Threshold theo unknown count chỉ được bật qua policy version có benchmark.
+
+Cache estimator dùng exact provider semantics và actual usage để settle. Claude caching phụ thuộc prompt prefixes, cache controls, TTL và sản phẩm API đang dùng, nên thread ID chỉ là context liên kết của Custos. [Claude prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+### 17.8 Workbench, tools, protocol và data ownership
+
+Mỗi workbench giữ domain-specific models, typed services/jobs, recipes, skills và verifier rubrics. Common notebook document/kernel/resource contracts ở platform, paper/source/claim semantics ở Research, strategy/backtest ở Quant, patch/review ở Coding, recipient/draft/send semantics ở Assistant. Shared capabilities được reuse qua ports và scoped executor.
+
+Contribution catalog đăng ký immutable definitions và aliases có uniqueness validation. Profile activation tạo enabled/version-pinned projections cho jobs/tools/verifiers/UI. Current `ModuleRegistry` có global registry và maps riêng, cần tránh active state của hai profiles lẫn nhau. `DomainPackRegistry` hoặc tool registry được giữ khi nó là typed projection có trách nhiệm rõ.
+
+MCP/A2A/ACP là integration boundaries. MCP connector chuyển tool schema/requests/results, A2A chuyển remote task/events/identity, ACP nối editor-agent khi có integration. Native harness có adapter riêng theo protocol thực. Mọi mediated tool call đi cùng admitted identity/permit/attempt/receipt, connector giữ transport credentials và bounded I/O. Việc là sub-agent được xác định bằng execution/lifecycle contract, local worker có thể dùng internal port.
+
+Storage transaction owner là host writer của profile. Workbench repository hiện có thể nhận shared connection như Research `from_raw`, vì vậy cần phân biệt ownership thực với vị trí file. Khi chạy worker khác process, cấp scoped storage/artifact API, host kiểm namespace/schema version/quota/transaction. Repositories tránh tự mở thêm canonical writer khi được host composition.
+
+Base distribution phải có Assistant usable cùng shared shell. Coding/Research/Quant có thể prebundle theo edition hoặc tải bằng package có dependency closure. `apps/daemon` hiện default full, lite đi qua `custos-packs/lite`, cần test Assistant activation trong Base artifact. Current `xtask package` tạo archive source workbench, runnable backend executable và UI bundle cần delivery/build/load tests trước khi công bố cài thêm được.
+
+### 17.9 Desktop matching và vòng đời view
+
+Host shell sở hữu navigation, Screen/pane layout, chat rendering, settings, approvals và resource inspector. Workbench contribution cung cấp commands, view factories, artifact renderers, scoped data queries và capability requirements. Quyền và job state đến từ backend.
+
+Screen giữ layout và home workbench để organize, mỗi pane bind explicit task/session/resource. Cho phép nhiều Coding screens, Research screens và mixed panes khi contribution support. Workbench switch có thể reuse session/task binding sau consent/context selection. Job/subprocess/kernel lifecycle độc lập với mounted React components, UI restore chỉ khôi phục view.
+
+Trung tâm chứa tài liệu có thể mở nhiều instance như conversation, editor/diff, terminal, paper, notebook, dataset/experiment. Thanh phải chứa inspector hỗ trợ theo selection như files tree, sources, run/resources/approvals. Một content model và command store dùng chung giữa center/inspector renderers. Settings dùng profile-scoped backend values, validation và write acknowledgement, pane đóng/mở giữ state có owner.
+
+Mỗi UI operation giữ loading/empty/error/unsupported states. Optional workbench UI chỉ load sau activation, thiếu backend readiness thì hiển thị khả năng chưa sẵn sàng cùng reason. Shared style tokens, accessibility và keyboard bindings ở shell, workbench identity dùng icon/label ngữ cảnh phù hợp thay vì nhân bản theme/store.
+
+### 17.10 Packet thi công theo source hiện tại
+
+| Packet | Write set chính | Consumers và nghiệm thu |
+|---|---|---|
+| T01 environment truth và cleanup | `runtime/src/environment/coordinator.rs`, `core/src/contracts/environment.rs`, workspace coordinator/repositories, environment authority gates | Persist actual IDs/leases, partial failure/restart/repeated teardown, driver assurance probes, owned/shared resources |
+| T02 truthful run settlement | `core/src/contracts/workflow.rs`, `runtime/src/workflow/supervision/{coordinator,processor}.rs`, domain run status, storage telemetry | Failed/cancelled/uncertain giữ đúng status, queue overflow visible, durable lifecycle recovery |
+| T03 one admitted native path | daemon `application/execution.rs`, bootstrap harness registration, adapters harness registry, runtime `task_runtime/execution/{runner,native}.rs` | Mọi public launch có run ID/generation/root span, cancel/steer conformance, raw fallback capability labels |
+| T04 tool policy integration | current daemon tool executor, runtime agent/tool dispatch, core capability/authority ports, MCP/A2A adapters | Before-effect authorization, exact target/payload, crash windows, native observation coverage |
+| T05 typed app boundaries | daemon API dispatcher/application/bootstrap, SDK protocol commands | API maps wire, typed use cases giữ behavior, same command idempotency và error compatibility |
+| T06 scoped contributions | components `module.rs`/registry, daemon bootstrap/workbenches, workbench registrations | Alias collision rejected, profile isolation, version pin, disabled module không tạo services/resources |
+| T07 OI typed candidates | runtime `oi/{candidate_builder,estimator,selector}.rs`, provider catalog/pricing, route records | Model/harness IDs đúng type, hard pin/local-only/budget, first-admissible baseline preserved, unknown usage |
+| T08 measured S1/topologies | runtime OI topologies/context, evaluation fixtures, route diagnostics UI | Paired outcome/cost/latency, S1 omissions/support, reproducible quality margin, bounded concurrency |
+| T09 host storage and worker contract | workbench repositories, storage migrations/repositories, SDK worker protocol | Shared writer, atomic command/event, namespace/schema migration, restart and incompatible worker |
+| T10 desktop and delivery | desktop contribution loader, workbench UI, SDK UI, xtask packaging, app features/entrypoints | Clean Base + install Coding/Research/Quant, UI/backend artifact match, native launch, independent removal/drain |
+| T11 cohesion and retirement | exports/manifests/docs/build references affected by T01–T10 | Retire obsolete aliases/copies after callers move, full supported profile regression and measurements |
+
+T01/T02 sửa correctness nền. T03/T04 nối execution cùng policy coverage. T05/T06 củng cố app/contribution boundaries. T07/T08 tối ưu sau khi usage/outcome instrumentation đáng tin. T09 có thể đi cùng T05 khi contract đã chốt. T10 phụ thuộc host contracts/lifetimes và typed UI contributions. Những packet này cụ thể hóa P00–P11 trong snapshot mới, cùng một backlog và cùng acceptance ledger.
+
+Mỗi packet ghi command entrypoint, old/new owner, state/transaction owner, migration path, public compatibility, bounded resources và regression tests. Mọi giả định từ snapshot cũ phải kiểm lại trước edit. Split/merge file theo dependency/callers, tránh đổi path chỉ để đạt số lượng topics.
+
+### 17.11 Verification ngày 13-11-2026
+
+Đã chạy thành công Cargo metadata offline, dependency check strict, source layering check, `node --test xtask/scripts/checks-smoke.mjs` với 2/2 tests và `cargo --offline xtask check-boundaries`. Inventory ba root hiện có 0 source files vượt 600 dòng trong nhóm rs/ts/tsx/css đã đọc. Boundary checker pass phản ánh các checks đang được code, cần bổ sung negative fixtures cho forbidden edges và real behavior gates theo các packet trên.
+
+Lượt này là source review và cập nhật kiến trúc. Chưa chạy full workspace tests, full xtask gate, desktop build/native launch, external harness/GPU/cloud jobs hay paired cost benchmarks. Các lỗi semantic nêu trên được xác định bằng source tracing, phép sửa cần regression tests tương ứng trước khi đánh dấu implemented.
+
+
+<a id="sade-synthesis-review"></a>
+## 18. Đối chiếu báo cáo tổng hợp SADE với tài liệu và source
+
+### 18.1 Kết luận và độ sâu review
+
+Đọc bản đính kèm “Báo cáo nghiên cứu sâu và thiết kế hệ thống Custos SADE”, đối chiếu foundations, agent-system-design, bản diễn giải VI, master và canonical plan. Truy vết thêm pipeline consumers, harness mock helpers, S1Scout, compute training/evaluation/relay, Quant metrics và Research synthesis API. Source vẫn ở `vi/f3cfaa3d`, giữ các sửa tài liệu của lượt review trước. Đây là bổ sung chi tiết cho T01–T11 ở §17.
+
+Phần chính xác của bản gửi gồm Task continuity, criterion-specific evidence, distinction model/worker/harness/role/remote agent, typed handoffs và domain isolation. Các cơ chế supervision/OI còn cần các hiệu chỉnh ở §17. Những đề xuất xóa/move mới phải kiểm theo source hiện hữu trong bảng dưới.
+
+### 18.2 Findings theo file và quyết định đích
+
+| Chủ đề | Source/tài liệu hiện tại | Quyết định và packet |
+|---|---|---|
+| Product identity | Master dùng Supervised Agent Development Environment, foundation cũ dùng Specialized và phương trình Orca + Constitutional AI | Dùng nghĩa SADE của master. Upstream lineage, model training research và runtime enforcement được ghi rõ phương pháp/bằng chứng riêng. Đồng bộ foundations/translation |
+| Physical topology | Foundation cũ ghi 8 crates, `platform/provider` và `bridge`; code có `ai`, harnesses trong adapters, session bridge trong runtime | Dùng topology §17.3, current catalog và Cargo metadata. Giữ explicit snapshot cho các bảng cũ |
+| Compiler/test evidence | Foundation cũ lấy exit 0 như proof mọi Coding job | Record command/snapshot/environment/exit là operational fact, acceptance nối trusted behavior criterion và coverage. T02/T04 |
+| Research oracle | Foundation cũ yêu cầu ALCE/MiniCheck >= 90% và container reproduction cho mọi Research task | Tách locator/extraction/semantic support. Rubric/threshold/calibration theo task kind. Literature QA và experiment replication có obligations riêng. T09/T10 |
+| Quant thresholds | `workbenches/quant/src/jobs.rs` ghi DSR > 0, `verifiers/deflated_sharpe.rs` pass > 0.5, `skills/mod.rs` dùng >= 0.95 | Một versioned evaluation specification cho jobs/skills/verifiers/UI, giữ inputs/trials/frequency/threshold provenance và unknown. T04/T09 |
+| Quant verifier inputs | Verifier chấp nhận `metadata.dsr_value`, thiếu inputs thì mặc định sample length/trials/moments | Resolve nguồn dữ liệu và trusted computation record. Imported metadata giữ nhãn riêng, thiếu inputs trả unknown theo contract được chọn. Kiểm finite/range và sampling conventions. T04/T09 |
+| Orphan pipeline | `platform/domain/src/pipeline/{mod,structure}.rs` có callers ở daemon và cả bốn workbenches | Giữ compiled contracts cùng compatibility. Đánh giá generic pipeline/source projection và specialized modality theo consumers, migration có thứ tự. T09/T11 |
+| Pipeline verification | `PipelineRecord<T>::new_bronze` hash `serde_json::to_vec(...).unwrap_or_default()`, promotion nhận một `DataInvariant` bất kỳ | Serialization phải fail rõ. Bind invariant assessment vào đúng payload digest/source/version/criterion, tránh một flag verified thành semantic oracle. T04/T09 |
+| Mock production surface | `platform/adapters/src/harnesses/adapter.rs` có `mock_state`, `with_mock_mode`, mock success output, integration tests gọi public helpers | Chuyển fake implementations về testkit hoặc explicit test-support feature. Dependency được build bởi integration test không mặc định nhận `cfg(test)`, phải chuyển consumers cùng bước. T03/T11 |
+| Compute mocks | Default resolver dùng live constructors, mock resolver tạo mock adapters trong cùng module | Preserve production default và conformance. Gate test support, inventory fixture/demo rõ ràng, kiểm production bootstrap selection. T03/T10 |
+| S1Scout | `runtime/src/agent/s1/scout.rs` dùng `std::fs`, xét 100 entries đầu, workspace flag chọn T4, callers tìm thấy chủ yếu tests | Tách bounded physical inventory về driver, S1 nhận observations. Không gọi số file này là total repo count. Project ecosystem là route signal, lựa chọn topology cần task/write conflicts/cost/quality. T07/T08 |
+| Training thực tế | `runtime/src/environment/compute/training.rs` tự tạo loss, dummy digests, checkpoint URIs và CommittedProtected metadata | Giữ deterministic simulator trong test support. Production runner gọi execution target/process ports và CAS/checkpoint store thật, commit protected sau bytes/hash/upload verification. T01/T09 |
+| Evaluation thực tế | `compute/evaluation.rs` đặt passed_count từ 0.88 và loss 0.42 | Đọc metric outputs từ evaluator có dataset/checkpoint/version/attempt lineage. Missing backend trả unavailable. T01/T09 |
+| Chuyển compute về Quant | Training/evaluation/relay và admission/checkpoint contracts dùng hạ tầng experiment chung | Runtime giữ admission/lifetime/relay, adapters giữ execution/transfer, Research/Quant giữ objective/recipe/rubric. T01/T09 |
+| Move lại backtest | Services đã có tại `workbenches/quant/src/services/{backtest,market,orders}.rs` | Daemon handlers tiếp tục wire mapping, tách typed application sau source audit. Tránh tạo bản sao service. T05 |
+| Move lại synthesis | Research reviews handlers import và gọi `custos_workbench_research::SynthesisService` | Giữ wire handlers ở API/application mapping, specialist transformations trong service workbench. T05 |
+| Luật consumer count | Bản gửi đưa mọi khả năng dùng >=2 miền vào `storage/shared_capabilities` | Phân loại pure values/policy/orchestration/driver/storage trước. Reuse count là signal, host requirements có thể đủ để đặt capability dùng chung ngay khi mới có một consumer. T06/T09 |
+| Plugin tự thừa hưởng safety | Một manifest được cho là đủ để tải và tự nhận sandbox/permit | Trust/compatibility, declared capabilities, activation/readiness, isolation profile và runtime admission có gates riêng. T06/T10 |
+
+### 18.3 Tiêu chuẩn evidence theo loại công việc
+
+Coding explanation cần source anchors và snapshot. Patch/refactor cần behavior criteria và oracle đáng tin. Research QA cần passages/support assessment, experiment cần execution inputs/environment/artifact lineage. Assistant draft có thể kết thúc ở local artifact, send cần exact account/recipient/payload cùng receipt/reconciliation. Quant statistical evaluation dùng versioned profile, live order cần authority và trạng thái broker theo connector contract.
+
+DSR của paper là một assessment xác suất với selection-bias adjustment và return-distribution assumptions. Verifier cần frequency convention nhất quán giữa Sharpe, sample size và moments. Ngưỡng > 0 chỉ xác nhận dấu của một giá trị xác suất, không đủ để kết luận statistical significance. Quyết định pass/fail dùng profile đã chọn và adequate inputs, thiếu lineage thì unknown. [DSR primary paper](https://davidhbailey.com/dhbpapers/deflated-sharpe.pdf).
+
+ALCE đánh giá citation correctness/completeness trong benchmark của tác giả, MiniCheck hỗ trợ fact checking grounded documents. Custos cần đánh giá trên corpus và task mix của mình, giữ reviewer/method/version và error cases. [ALCE](https://aclanthology.org/2023.emnlp-main.398/), [MiniCheck](https://aclanthology.org/2024.emnlp-main.499/).
+
+### 18.4 Hiệu chỉnh kế hoạch thi công
+
+1. T01/T02 xử lý environment IDs/assurance/cleanup và truthful run terminal state như §17.
+2. T03 bảo toàn integration tests khi tách mock helpers. Một fake `AgentRuntimePort` trong testkit đáp ứng contract là lựa chọn ưu tiên khi đủ chức năng. Production graph không có fixture activation.
+3. T04/T09 bind pipeline/verification records đúng payload và provenance. Statistical/extraction assessors nhận canonical inputs thay vì raw pass flags từ client.
+4. T01/T09 tách compute simulation khỏi execution thật, giữ shared admission/relay ownership. Kiểm actual checkpoint bytes trước khi cho state resume. Existing simulated tests được giữ để kiểm lifecycle, thêm backend conformance cho execution thực.
+5. T05 đối chiếu specialist services đã chuyển trước khi move tiếp. T07/T08 dùng S1Scout như bounded signal, không ép topology hoặc làm hẹp nguồn của S2 thiếu evidence.
+6. T06/T10 kiểm package payload, dependencies, worker/UI version, profile activation và effective capabilities trên Base sạch.
+7. T11 retire exports/paths/simulation seams sau consumers và regression gates được chuyển đầy đủ.
+
+Gate cần bao gồm scalar units/range/NaN, arbitrary invariant với sai payload, serialization failure, unsupported backend, fake checkpoint bytes, process/remote cancellation, restore và missing assessor data. Một test chứng minh forced T5 activation chỉ xác nhận routing rule của fixture, quality/cost benefit cần paired benchmark.
+
+### 18.5 Đồng bộ tài liệu và kiểm chứng
+
+`sade-foundations.md` được viết lại theo product contracts và source owners hiện hành. `sade-agent-system-design.md` chỉ rõ snapshot precedence và historical assembly defects. Bản VI cập nhật roots, protocol integration và bỏ fixed crate ceiling. Master sửa source baseline, Quant threshold policy và bỏ phần trăm hiệu năng thiếu nguồn. Catalog bổ sung các source seams của lượt này.
+
+Lượt này cập nhật tài liệu, source production giữ nguyên. Kiểm links tương đối của các phần mới, diff whitespace và file scope. Các checks đã chạy trong §17 giữ nguyên evidence của lượt trước. Full workspace tests, frontend/native runtime, quant statistical fixtures, actual GPU training/transfer và harness conformance cần được chạy trong implementation packets tương ứng.

@@ -111,6 +111,10 @@ function resolveSrcPath(path) {
     const candidate = path.replace('components/workbenches/engineering/', 'components/workbenches/coding/');
     if (fs.existsSync(new URL(`../../ui/desktop/src/${candidate}`, import.meta.url))) return candidate;
   }
+  if (path.includes('features/')) {
+    const candidate = path.replace('features/', 'components/modals/');
+    if (fs.existsSync(new URL(`../../ui/desktop/src/${candidate}`, import.meta.url))) return candidate;
+  }
   return path;
 }
 

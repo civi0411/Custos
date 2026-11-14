@@ -11,7 +11,9 @@
 - **Nghiên cứu:** paper/upstream cung cấp giả thuyết, thuật toán hoặc source để đối chiếu. Quyết định của Custos phải có lý do và gate riêng; số liệu của tác giả không trở thành hiệu năng hay bảo đảm an toàn của sản phẩm.
 - **Thi công:** §15 xác lập địa chỉ code và cách lắp; §18 xác lập thứ tự/gate refactor. [Topic specifications](docs/architecture/sade-agent-system-design.md) triển khai chi tiết cùng hợp đồng; [physical catalog](docs/development/codebase-architecture.md) định vị code; [P00–P11](docs/development/modular-workbench-refactor-plan.md#28-work-breakdown-chi-tiết-p00p11) phân rã công việc. Không cần đọc mọi plan lịch sử để hiểu kiến trúc đích trong master.
 
-**Mốc kiểm tra cấu trúc của lượt hợp nhất này:** branch `rft`, HEAD `c4c0c35`; `cargo metadata --no-deps --offline` ghi nhận 12 product Cargo packages gồm hai app hosts trong `crates/custos-app/`. Đây là kiểm tra manifests và các đường trọng yếu, không chứng nhận toàn bộ source đã refactor hay mọi tính năng đã nghiệm thu. Các báo cáo gắn SHA khác giữ giá trị tại snapshot của chúng.
+**Mốc kiểm tra cấu trúc lịch sử của lượt hợp nhất này:** branch `rft`, HEAD `c4c0c35`; `cargo metadata --no-deps --offline` ghi nhận 12 product Cargo packages gồm hai app hosts trong `crates/custos-app/`. Đây là kiểm tra manifests và các đường trọng yếu, không chứng nhận toàn bộ source đã refactor hay mọi tính năng đã nghiệm thu. Các báo cáo gắn SHA khác giữ giá trị tại snapshot của chúng.
+
+**Đối chiếu hiện hành** dùng branch `vi`, HEAD `f3cfaa3d`, với 20 Cargo workspace packages. [Canonical plan §§17–18](docs/development/modular-workbench-refactor-plan.md#sade-synthesis-review) ghi các khác biệt về source, foundations, evidence, compute và test support.
 
 ### Bản đồ đọc theo câu hỏi
 
@@ -2478,7 +2480,7 @@ Giao dịch lượng hóa và tài chính thuật toán đòi hỏi sự khắt 
 ## 12B.3 Bốn Loại Tác Vụ Lượng Hóa (WorkbenchJobs)
 
 1. `quant__alpha_discover` (T1SingleWorker, vai trò `alpha_scout`): Khám phá tín hiệu alpha; yêu cầu $IC_{mean} \ge 0.02$, $IR \ge 0.5$ và `lookahead_clean = true`.
-2. `quant__backtest_full` (T2StagedPipeline, vai trò `backtest_runner`): Chạy toàn diện backtest; tạo ra `tearsheet_json` và `equity_curve_csv`, yêu cầu $Sharpe > 0.8$, $MaxDrawdown < 0.20$ và $DSR > 0$.
+2. `quant__backtest_full` (T2StagedPipeline, vai trò `backtest_runner`): Chạy toàn diện backtest; tạo ra `tearsheet_json` và `equity_curve_csv`, đánh giá theo statistical/risk profile có version, ngưỡng được đặt trước và source inputs đủ để tái kiểm tra.
 3. `quant__risk_audit` (T0Direct, vai trò `risk_supervisor`): Thẩm định kiểm toán rủi ro độc lập với hai oracle `deflated_sharpe_verifier` và `lookahead_bias_checker`.
 4. `quant__execution_plan` (T1SingleWorker, vai trò `exec_broker`): Lập kế hoạch thực thi giao dịch và thiết lập circuit breakers, đưa lệnh vào Outbox chờ con người cấp phép.
 
@@ -2490,6 +2492,8 @@ Giao dịch lượng hóa và tài chính thuật toán đòi hỏi sự khắt 
 4. `OrderTicket`: Phiếu lệnh giao dịch với mã tài sản (`symbol`), hướng giao dịch (`direction`: Buy/Sell/SellShort/BuyToCover), loại lệnh (`order_type`: Market/Limit/TWAP/VWAP), số lượng, tỷ trọng mục tiêu, trượt giá dự tính (`estimated_slippage_bps`) và trạng thái phê duyệt của con người (`approved_by_human`).
 
 ## 12B.5 Bộ Đôi Kiểm Chứng Oracle (DSR & Lookahead Bias)
+
+DSR dùng thống kê xác suất trên inputs và giả định đã ghi. Ngưỡng thuộc versioned evaluation profile và criterion cụ thể. Source hiện có job ghi `> 0`, verifier dùng `> 0.5`, skill dùng `>= 0.95`, cần thống nhất trước khi dùng làm nghiệm thu. Verifier phải resolve return/trial lineage, frequency và inputs đầy đủ, giữ imported/unknown khi chưa đủ bằng chứng.
 
 “Oracle” là tên gọi cũ trong đề xuất, không mô tả một bộ chứng minh chiến lược an toàn. Hai checker chỉ tạo evidence theo method/input coverage đã ghi:
 
@@ -2536,7 +2540,7 @@ Mỗi `PackManifest` chỉ có một registry trong `custos-packs`: task kinds, 
 - **Engineering:** Giao tiếp qua source anchors hoặc `PatchProposal`. Thiếu reproducer, flaky test -> `unknown/stale`.
 - **Research:** Giao tiếp qua `SourceRecord`. Trích dẫn không khớp passage, data leakage -> `unknown`.
 - **Assistant:** Giao tiếp qua `ActionIntent` và Outbox. Chờ approval, timeout sau send -> `uncertain`.
-- **Quant:** Giao tiếp qua `AlphaFactor`, `BacktestTearsheet`, `RiskPermitConfig` và `OrderTicket`. Thiếu kiểm định lookahead bias hoặc DSR không dương -> `reject/fail`. Lệnh thực thi chuyển giao sang Outbox (`OutboxActionItem`) với SHA256 digest locking và chữ ký `ExecutionPermit`.
+- **Quant:** Giao tiếp qua `AlphaFactor`, `BacktestTearsheet`, `RiskPermitConfig` và `OrderTicket`. Thiếu dữ liệu/phương pháp cho kiểm định lookahead hoặc DSR thì assessment là unknown theo criterion, verdict pass/fail dựa profile đã chốt trước. Lệnh thực thi chuyển giao sang Outbox (`OutboxActionItem`) với SHA256 digest locking và chữ ký `ExecutionPermit`.
 
 ## 13.4 Một Vòng Lặp Đủ Lớn Để Kiểm Chứng (E2E)
 Ví dụ: “Đánh giá hai cách giảm latency retrieval, thử cách phù hợp trên dataset nội bộ, sửa code và gửi báo cáo”.
@@ -2961,7 +2965,7 @@ Khi Người dùng và Agent thống nhất bất kỳ thay đổi nào về ki�
 ## 15.8 Research Foundation
 
 - **Clean Architecture & Hexagonal Architecture (Robert C. Martin / Alistair Cockburn):** Nguyên lý cốt lõi về việc đảo ngược phụ thuộc (Dependency Inversion), giữ cho nghiệp vụ độc lập hoàn toàn với framework và hạ tầng.
-- **Microservices & Modular Monolith Boundary Design (arXiv 2024):** Chứng minh mô hình Modular Monolith bằng Rust Crates mang lại hiệu năng cao gấp 8 lần và chi phí vận hành rẻ hơn 90% so với việc chia nhỏ thành các microservice mạng phân tán trên cùng một máy cục bộ.
+- **Modular monolith:** lựa chọn cho local product để dùng chung services và giảm số process/boundary phải vận hành. Hiệu năng, kích thước artifact, RAM/CPU và chi phí của Custos phải đo trên release profiles cùng workload và hardware đã ghi.
 
 ## 15.9 Ranh giới
 
@@ -2971,6 +2975,8 @@ Khi Người dùng và Agent thống nhất bất kỳ thay đổi nào về ki�
 ---
 
 ## 15.10 Hợp đồng lắp ghép code theo chủ đề
+
+Đối chiếu ba root ngày 13-11-2026 dùng branch `vi` tại `f3cfaa3d`. Kiến trúc đích giữ platform cho policy/common capabilities, workbenches cho specialist semantics, apps cho composition và typed product use cases. Native supervision, environment assurance và OI estimates cần phản ánh khả năng/usage đo được của đường thực thi. Scope, source findings, desktop matching, resource/data lifetime và packet T01–T11 được quy định trong [§17 của canonical plan](docs/development/modular-workbench-refactor-plan.md#three-root-target-review). Đây là kế hoạch thiết kế dựa source, trạng thái implemented được kiểm qua acceptance của từng packet.
 
 ### Dọn các root hỗ trợ theo consumers hiện hữu
 

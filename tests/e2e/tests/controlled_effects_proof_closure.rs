@@ -17,20 +17,39 @@ use std::path::{Path, PathBuf};
 
 fn resolve_daemon_binary() -> PathBuf {
     if let Ok(p) = std::env::var("CARGO_BIN_EXE_custos-daemon") {
-        return PathBuf::from(p);
-    }
-    if let Ok(mut current) = std::env::current_exe() {
-        current.pop();
-        if current.file_name().and_then(|n| n.to_str()) == Some("deps") {
-            current.pop();
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            return p;
         }
-        let candidate = current.join(if cfg!(windows) {
-            "custos-daemon.exe"
-        } else {
-            "custos-daemon"
-        });
-        if candidate.exists() {
-            return candidate;
+    }
+    if let Ok(current) = std::env::current_exe() {
+        let mut dir = current.parent();
+        while let Some(d) = dir {
+            for bin_name in &["custos-daemon", "custos-daemon.exe"] {
+                let candidate = d.join(bin_name);
+                if candidate.is_file() {
+                    return candidate;
+                }
+                let in_debug = d.join("debug").join(bin_name);
+                if in_debug.is_file() {
+                    return in_debug;
+                }
+                let in_target_debug = d.join("target").join("debug").join(bin_name);
+                if in_target_debug.is_file() {
+                    return in_target_debug;
+                }
+            }
+            dir = d.parent();
+        }
+    }
+    for candidate_str in &[
+        "target/debug/custos-daemon",
+        "../../target/debug/custos-daemon",
+        "../../../target/debug/custos-daemon",
+    ] {
+        let p = PathBuf::from(candidate_str);
+        if p.is_file() {
+            return p;
         }
     }
     PathBuf::from("target/debug/custos-daemon")
@@ -251,7 +270,10 @@ mod security_containment_and_rejection {
 mod daemon_proof_closure_completion {
     use super::*;
 
-    async fn create_verified_claims(repo_dir: &Path) -> (VerificationClaim, VerificationClaim) {
+    async fn create_verified_claims(
+        repo_dir: &Path,
+        task_id: &str,
+    ) -> (VerificationClaim, VerificationClaim) {
         let gate = physical_gate(repo_dir);
         let pipeline = EvidencePipeline::with_standard_verifiers();
 
@@ -263,13 +285,13 @@ mod daemon_proof_closure_completion {
             RiskLevel::Low,
         );
         let read_res = gate
-            .dispatch_for_task("t_claims", &read_act, "agent")
+            .dispatch_for_task(task_id, &read_act, "agent")
             .await
             .unwrap();
         let read_digest = read_res.evidence.unwrap();
         let read_claim = pipeline
             .verify_bundle(&EvidenceBundle::new(
-                "t_claims",
+                task_id,
                 "hash",
                 "audit hash",
                 serde_json::json!({
@@ -289,10 +311,10 @@ mod daemon_proof_closure_completion {
             RiskLevel::Low,
         );
         let patch_res = gate
-            .dispatch_for_task("t_claims", &patch_act, "agent")
+            .dispatch_for_task(task_id, &patch_act, "agent")
             .await
             .unwrap();
-        let patch_claim = pipeline.verify_bundle(&EvidenceBundle::new("t_claims", "patch_preview", "audit patch", serde_json::json!({
+        let patch_claim = pipeline.verify_bundle(&EvidenceBundle::new(task_id, "patch_preview", "audit patch", serde_json::json!({
             "simulated": true, "diff_digest": patch_res.evidence.unwrap(), "target": "src/lib.rs",
         }))).await.unwrap();
 
@@ -352,7 +374,7 @@ mod daemon_proof_closure_completion {
             .await
             .expect("Running");
 
-        let (read_claim, patch_claim) = create_verified_claims(&repo_dir).await;
+        let (read_claim, patch_claim) = create_verified_claims(&repo_dir, &task.id).await;
 
         // Attempt 1: Complete without evidence -> MUST FAIL
         let err_empty = client

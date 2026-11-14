@@ -190,3 +190,48 @@ mod t6_repair_loop_topology {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme 5: T5 Lead Worker DAG Topology
+// ─────────────────────────────────────────────────────────────────────────────
+mod t5_lead_worker_topology {
+    use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
+    use custos_runtime::oi::compiler::PlanCompiler;
+    use custos_runtime::oi::topologies::T5LeadWorkerCoordinator;
+
+    #[test]
+    fn test_t5_lead_worker_dag_decomposition_and_synthesis() {
+        let mut proposal = StrategyProposal::native_baseline("task_t5_e2e", "claude_code");
+        proposal.chosen_topology = ExecutionTopology::T5LeadWorker;
+        proposal.estimated_tokens = 16_000;
+
+        // 1. Compile into Lead DAG Revision
+        let revision = PlanCompiler::compile(&proposal, 1);
+        assert_eq!(revision.nodes.len(), 4);
+        assert_eq!(revision.dependencies.len(), 4);
+        assert!(revision.obligations.contains(&"lead_synthesis_gate".into()));
+
+        // 2. Lead Decomposes & Enforces Kahn's Topological Order
+        let decomp = T5LeadWorkerCoordinator::lead_decompose(&revision)
+            .expect("lead decomposition must succeed on clean DAG");
+        assert_eq!(decomp.ordered.len(), 4);
+        assert_eq!(decomp.ordered[0].node.role, "lead");
+        assert_eq!(decomp.ordered[3].node.role, "lead");
+
+        // 3. Worker Execution Verification
+        let w_results = vec![
+            WorkerResult::success(&decomp.ordered[0].node.node_id, "Plan decomposed into sub-tasks"),
+            WorkerResult::success(&decomp.ordered[1].node.node_id, "Sub-worker 1 implemented component A"),
+            WorkerResult::success(&decomp.ordered[2].node.node_id, "Sub-worker 2 implemented component B"),
+            WorkerResult::success(&decomp.ordered[3].node.node_id, "Integrated and verified components"),
+        ];
+        T5LeadWorkerCoordinator::verify_dag_execution(&decomp.ordered, &w_results)
+            .expect("all dependencies satisfied");
+
+        // 4. Synthesis via Coverage Gate
+        let synthesis = T5LeadWorkerCoordinator::synthesise(w_results, "task_t5_e2e")
+            .expect("synthesis approved");
+        assert!(synthesis.payload.contains("T5 Lead-Worker"));
+        assert_eq!(synthesis.worker_results.len(), 4);
+    }
+}

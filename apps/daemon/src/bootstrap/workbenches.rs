@@ -84,8 +84,8 @@ pub fn init_workbenches_and_harness(
     let mut exec_builder = DaemonGovernedToolExecutor::new(sandbox, kernel, store.outbox().clone())
         .with_mcp_hub(mcp_hub.clone())
         .with_pack_registry(pack_registry.clone());
-    if let Some(sink) = supervision {
-        exec_builder = exec_builder.with_supervision(sink);
+    if let Some(ref sink) = supervision {
+        exec_builder = exec_builder.with_supervision(sink.clone());
     }
     let tool_executor = Arc::new(exec_builder);
     mcp_hub.set_gate_sync(tool_executor.clone());
@@ -104,10 +104,34 @@ pub fn init_workbenches_and_harness(
         "Custos kernel-mediated autonomous agent runtime with ExecutionPermits.",
         "internal",
     );
+
+    // Gate 4 & Zero-Scatter Supervision: Wrap all registered CLI agents & internal runtimes
+    // with SupervisedAgentRunner to guarantee telemetry spans, logging, and watchdog coverage.
+    if let Some(ref sink) = supervision {
+        for (id, runtime) in harness_reg.runtimes() {
+            let supervised = Arc::new(custos_runtime::agent::SupervisedAgentRunner::new(
+                runtime,
+                sink.clone(),
+            ));
+            harness_reg.replace_runtime(&id, supervised);
+        }
+    }
+
     let harnesses = Arc::new(harness_reg);
     let harness = harnesses
         .get("claude-code")
-        .unwrap_or_else(|| Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root.to_path_buf())));
+        .unwrap_or_else(|| {
+            let fallback: Arc<dyn AgentRuntimePort> =
+                Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root.to_path_buf()));
+            if let Some(ref sink) = supervision {
+                Arc::new(custos_runtime::agent::SupervisedAgentRunner::new(
+                    fallback,
+                    sink.clone(),
+                ))
+            } else {
+                fallback
+            }
+        });
 
     WorkbenchHarnessSetup {
         pack_registry,
