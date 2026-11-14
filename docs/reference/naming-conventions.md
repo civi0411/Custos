@@ -14,7 +14,7 @@ To enforce absolute semantic consistency across Rust source code, IPC contracts,
 |---|---|---|---|
 | **Product Brand** | PascalCase | `Custos` | Official runtime brand name |
 | **Repository Name** | kebab-case | `custos` | Git repository root identifier |
-| **Rust Crates** | kebab-case | `custos-domain`, `custos-core`, `custos-persistence`, `custos-runtime` | Canonical Cargo workspace crate names (11 target crates) |
+| **Rust Packages** | kebab-case | `custos-domain`, `custos-core`, `custos-persistence`, `custos-runtime`, etc. | Canonical Cargo workspace packages (20 packages across `platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`) |
 | **Binary Executables** | lowercase | `custosd`, `custos` | `custosd` (daemon service), `custos` (CLI utility) |
 | **Source Modules** | snake_case | `task_state`, `event_store`, `context_scoring` | Source files (`.rs`) and Rust module namespaces |
 | **Domain Entities** | PascalCase, singular | `Task`, `Contract`, `Artifact`, `Run` | Identifiable business entities with persistent lifecycle |
