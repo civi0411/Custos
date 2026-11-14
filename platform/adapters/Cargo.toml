@@ -13,6 +13,7 @@ rustls-tls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 live-websocket = []
 roaming = ["dep:iroh", "dep:iroh-relay"]
+test-support = []
 
 [dependencies]
 custos-domain = { workspace = true }

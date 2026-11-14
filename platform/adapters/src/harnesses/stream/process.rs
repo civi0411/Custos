@@ -39,6 +39,8 @@ pub async fn run_observed_process_with_protocol(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
         .spawn()
         .map_err(|e| DomainError::Validation(format!("Failed to spawn native harness: {e}")))?;
@@ -107,6 +109,13 @@ pub async fn run_observed_process_with_protocol(
                 .status()
                 .await;
         }
+        #[cfg(unix)]
+        if let Some(pid) = child.id() {
+            // Kill entire process group to prevent orphan zombie CLI processes
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
         let _ = child.kill().await;
     }
     let status = loop {
@@ -123,6 +132,12 @@ pub async fn run_observed_process_with_protocol(
                             .stderr(Stdio::null())
                             .status()
                             .await;
+                    }
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        unsafe {
+                            libc::kill(-(pid as i32), libc::SIGKILL);
+                        }
                     }
                     let _ = child.kill().await;
                 }

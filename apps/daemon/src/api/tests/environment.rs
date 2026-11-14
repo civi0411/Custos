@@ -23,8 +23,10 @@ async fn test_environment_api_dispatch_lifecycle() {
     let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
     let workspace_coordinator =
         Arc::new(WorkspaceCoordinator::new(store.clone(), workspace_provider));
-    let env_coordinator =
-        Arc::new(EnvironmentCoordinator::new(workspace_coordinator.clone(), None));
+    let env_coordinator = Arc::new(EnvironmentCoordinator::new(
+        workspace_coordinator.clone(),
+        None,
+    ));
 
     let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
         .with_workspace(workspace_coordinator)
@@ -41,19 +43,24 @@ async fn test_environment_api_dispatch_lifecycle() {
     assert_eq!(list_res.result.unwrap().as_array().unwrap().len(), 0);
 
     // 2. Provision Assistant environment
-    let spec = EnvironmentSpec::new(
+    let mut spec = EnvironmentSpec::new(
         "env_api_01",
         EnvironmentProfile::Assistant {
             project_id: Some("proj_test".into()),
         },
     );
+    spec.target_assurance = custos_domain::Assurance::ObserveOnly;
     let prov_req = ApiRequest {
         id: "req_prov".into(),
         method: "v1.environment.provision".into(),
         params: serde_json::to_value(&spec).unwrap(),
     };
     let prov_res = dispatcher.handle_request(prov_req).await;
-    assert!(prov_res.error.is_none(), "Provision error: {:?}", prov_res.error);
+    assert!(
+        prov_res.error.is_none(),
+        "Provision error: {:?}",
+        prov_res.error
+    );
     let handle_val = prov_res.result.unwrap();
     assert_eq!(handle_val["env_id"], "env_api_01");
     assert_eq!(handle_val["state"]["status"], "ready");
@@ -100,4 +107,3 @@ async fn test_environment_api_dispatch_lifecycle() {
     let list_res_2 = dispatcher.handle_request(list_req_2).await;
     assert_eq!(list_res_2.result.unwrap().as_array().unwrap().len(), 0);
 }
-

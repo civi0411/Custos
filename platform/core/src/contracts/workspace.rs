@@ -72,6 +72,14 @@ pub trait WorkspaceProvider: Send + Sync {
         Ok(true)
     }
 
+    /// Reports isolation actually established by this provider for this workspace.
+    async fn inspect_environment_assurance(
+        &self,
+        _workspace: &ExecutionWorkspace,
+    ) -> Result<custos_domain::environment::EnvironmentAssurance, DomainError> {
+        Ok(custos_domain::environment::EnvironmentAssurance::unconstrained())
+    }
+
     /// Cleans up or detaches the physical workspace directory or worktree.
     async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError>;
 }

@@ -180,6 +180,43 @@ impl DbConnection {
         let reader = self.reader()?;
         f(&reader)
     }
+
+    /// Attaches an auxiliary SQLite database file under a schema alias (e.g. "quant", "research").
+    ///
+    /// This allows domain-partitioned databases (`custos_quant.db`, `custos_research.db`)
+    /// to be queried or updated without polluting or locking the primary `custos_kernel.db` WAL.
+    pub fn attach_partition(&self, schema_alias: &str, file_path: &str) -> Result<(), DomainError> {
+        let conn = self.lock()?;
+        if !schema_alias.chars().all(|c| c.is_alphanumeric() || c == '_') || schema_alias.is_empty() {
+            return Err(DomainError::Validation(format!(
+                "Invalid SQLite schema alias: '{schema_alias}'. Must be non-empty alphanumeric.",
+            )));
+        }
+        let sql = format!("ATTACH DATABASE ?1 AS {schema_alias};");
+        conn.execute(&sql, [file_path]).map_err(|e| {
+            DomainError::Validation(format!(
+                "Failed to ATTACH database '{file_path}' as '{schema_alias}': {e}"
+            ))
+        })?;
+        Ok(())
+    }
+
+    /// Detaches an auxiliary SQLite database schema alias.
+    pub fn detach_partition(&self, schema_alias: &str) -> Result<(), DomainError> {
+        let conn = self.lock()?;
+        if !schema_alias.chars().all(|c| c.is_alphanumeric() || c == '_') || schema_alias.is_empty() {
+            return Err(DomainError::Validation(format!(
+                "Invalid SQLite schema alias: '{schema_alias}'.",
+            )));
+        }
+        let sql = format!("DETACH DATABASE {schema_alias};");
+        conn.execute(&sql, []).map_err(|e| {
+            DomainError::Validation(format!(
+                "Failed to DETACH database schema '{schema_alias}': {e}"
+            ))
+        })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -271,5 +308,39 @@ mod tests {
         }
 
         assert_eq!(success_count.load(Ordering::SeqCst), 8);
+    }
+
+    #[test]
+    fn test_attach_and_detach_partition() {
+        let db = DbConnection::open_in_memory().expect("open in memory");
+        let aux_file = tempfile::NamedTempFile::new().expect("aux temp file");
+        let aux_path = aux_file.path().to_str().expect("valid aux path");
+
+        // Initialize aux db table
+        {
+            let aux_conn = Connection::open(aux_path).expect("open aux");
+            aux_conn
+                .execute("CREATE TABLE aux_records (id TEXT PRIMARY KEY);", [])
+                .expect("create table in aux");
+            aux_conn
+                .execute("INSERT INTO aux_records VALUES ('rec_1');", [])
+                .expect("insert in aux");
+        }
+
+        // Attach to main connection
+        db.attach_partition("aux", aux_path).expect("attach aux");
+
+        // Query through main writer
+        {
+            let conn = db.lock().expect("lock writer");
+            let mut stmt = conn
+                .prepare("SELECT id FROM aux.aux_records WHERE id = 'rec_1'")
+                .expect("prepare attached query");
+            let id: String = stmt.query_row([], |row| row.get(0)).expect("query attached row");
+            assert_eq!(id, "rec_1");
+        }
+
+        // Detach
+        db.detach_partition("aux").expect("detach aux");
     }
 }

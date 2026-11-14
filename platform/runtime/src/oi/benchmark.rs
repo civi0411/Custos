@@ -64,6 +64,10 @@ impl OiBenchmarkRunner {
                 1,
                 "Bounded repair loop with oracle verification limit".into(),
             ),
+            ExecutionTopology::T5LeadWorker => (
+                3,
+                "Lead Agent DAG decomposition with parallel sub-workers & synthesis".into(),
+            ),
             _ => (1, "Single-worker standard execution".into()),
         };
 
