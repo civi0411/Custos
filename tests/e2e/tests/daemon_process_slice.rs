@@ -12,7 +12,7 @@ use std::path::PathBuf;
 fn resolve_daemon_binary() -> PathBuf {
     if let Ok(p) = std::env::var("CARGO_BIN_EXE_custos-daemon") {
         let p = PathBuf::from(p);
-        if p.exists() {
+        if p.is_file() {
             return p;
         }
     }
@@ -21,15 +21,15 @@ fn resolve_daemon_binary() -> PathBuf {
         while let Some(d) = dir {
             for bin_name in &["custos-daemon", "custos-daemon.exe"] {
                 let candidate = d.join(bin_name);
-                if candidate.exists() {
+                if candidate.is_file() {
                     return candidate;
                 }
                 let in_debug = d.join("debug").join(bin_name);
-                if in_debug.exists() {
+                if in_debug.is_file() {
                     return in_debug;
                 }
                 let in_target_debug = d.join("target").join("debug").join(bin_name);
-                if in_target_debug.exists() {
+                if in_target_debug.is_file() {
                     return in_target_debug;
                 }
             }
@@ -42,7 +42,7 @@ fn resolve_daemon_binary() -> PathBuf {
         "../../../target/debug/custos-daemon",
     ] {
         let p = PathBuf::from(candidate_str);
-        if p.exists() {
+        if p.is_file() {
             return p;
         }
     }
