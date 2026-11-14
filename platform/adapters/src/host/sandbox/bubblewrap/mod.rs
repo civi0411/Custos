@@ -27,7 +27,7 @@ impl BubblewrapSandbox {
         {
             if which::which("bwrap").is_ok() {
                 let mut cmd = tokio::process::Command::new("bwrap");
-                cmd.args(&[
+                cmd.args([
                     "--ro-bind",
                     "/",
                     "/",
@@ -39,7 +39,7 @@ impl BubblewrapSandbox {
                     "/tmp",
                 ]);
                 let ws = self.workspace_root.to_string_lossy();
-                cmd.args(&["--bind", &ws, &ws]);
+                cmd.args(["--bind", &ws, &ws]);
                 if !self.allow_network {
                     cmd.arg("--unshare-net");
                 }
