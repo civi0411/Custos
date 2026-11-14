@@ -119,6 +119,12 @@ export function defaultTabsForScreen(screen: Partial<Screen>): OrcaTab[] {
       { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
     ];
   }
+  if (wb === 'quant') {
+    return [
+      { id: 'alpha', type: 'alpha', title: 'Alpha Studio', url: 'custos://resource/alpha' },
+      { id: 'tearsheet', type: 'tearsheet', title: 'Tearsheet', url: 'custos://resource/tearsheet' },
+    ];
+  }
   return [
     { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
     { id: 'terminal', type: 'terminal', title: 'Terminal', url: 'custos://resource/terminal' },
