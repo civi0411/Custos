@@ -118,7 +118,7 @@ Expose capabilities theo resource: probe, allocate/adopt, execute/attach, checkp
 
 Projection hiển thị resource/account/ownership/actual GPU, cost estimate timestamp, active jobs/last observation, last remotely protected checkpoint, release status và retained storage. Không dashboard mới hay permanent global cost gauge nếu không có resource liên quan; dùng existing inspector/attention. Status text cần nói rõ còn bị tính phí hay unknown, không chỉ xanh/đỏ.
 
-No worktree giả cho remote research resource; Project/Task/notebook anchors và execution host refs theo [core plan](../development/sade-core-refactor-plan.md), hiệu đính worktree-only rule trong implementation packet.
+No worktree giả cho remote research resource; Project/Task/notebook anchors và execution host refs theo [runtime composition](../development/runtime-composition-baseline.md), hiệu đính worktree-only rule trong implementation packet.
 
 ## 10. Implementation packets
 

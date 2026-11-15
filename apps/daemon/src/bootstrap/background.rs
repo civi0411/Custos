@@ -58,7 +58,7 @@ pub fn spawn_background_sweepers(
     });
 
     // Background Uncertain Runs Reconciler (Phase 1 / F04): polls uncertain runs every 60s
-    let uncertain_store = store;
+    let uncertain_store = store.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
@@ -74,6 +74,26 @@ pub fn spawn_background_sweepers(
                         run.ended_at = Some(now);
                         let _ = uncertain_store.runs().save_run(&mut run);
                     }
+                }
+            }
+        }
+    });
+
+    // Background Telemetry Retention Pruner: runs every hour and prunes historical spans/logs older than 30 days
+    let pruning_store = store;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            let cutoff_30d_ms = now_ms - (30 * 24 * 3600 * 1000);
+            match pruning_store.runs().prune_telemetry_before(cutoff_30d_ms, cutoff_30d_ms) {
+                Ok(pruned) if pruned > 0 => {
+                    tracing::info!(pruned, "Pruned historical telemetry records older than 30 days");
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, "Historical telemetry pruning failed");
                 }
             }
         }

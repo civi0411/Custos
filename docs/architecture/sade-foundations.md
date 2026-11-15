@@ -2,7 +2,7 @@
 
 **Status** — Target product architecture. Source observations use branch `vi`, HEAD `f3cfaa3d`. The master specification defines the product, the canonical plan records implementation gaps, and source/tests determine exercised behavior. SADE means **Supervised Agent Development Environment**.
 
-[Master specification](../../Custos.md), [interaction contract](sade-agent-system-design.md), [physical catalog](../development/codebase-architecture.md), [current three-root review](../development/modular-workbench-refactor-plan.md#three-root-target-review), [document synthesis review](../development/modular-workbench-refactor-plan.md#sade-synthesis-review).
+[codebase architecture](../development/codebase-architecture.md), [codebase architecture](../development/codebase-architecture.md).
 
 ## 1. Product contract
 
@@ -10,7 +10,7 @@ Custos provides a local-first workspace for human-directed and delegated agent w
 
 The four product objectives are continuity across sessions/executors, scoped authority over effects, inspectable criterion-specific evidence, and cost/latency/quality accounting per accepted outcome. Direct use of a strong pinned model or native harness remains an admissible baseline. More workers and S1 stages require a measured benefit within user constraints.
 
-Orca and Open Science provide upstream patterns for supervised execution and scientific workspace interaction. Reuse claims require pinned source paths, attribution and conformance. Custos's authority/evidence/storage contracts are product decisions with their own tests. The [Orca study](../development/orca-source-study.md) and [Open Science study](../development/open-science-source-study.md) record the scoped source investigations.
+Orca and Open Science provide upstream patterns for supervised execution and scientific workspace interaction. Reuse claims require pinned source paths, attribution and conformance. Custos's authority/evidence/storage contracts are product decisions with their own tests. The [upstream source map](../development/upstream-source-map.md) record the scoped source investigations.
 
 Constitutional AI studies model training through principles, critique/revision and AI feedback. Custos enforces runtime permissions using policy code, permits and execution boundaries. Those mechanisms require separate evidence. [Constitutional AI paper](https://arxiv.org/abs/2212.08073).
 
@@ -94,6 +94,6 @@ Topic-specific detail lives inside these owners. Shared capability placement fol
 
 `cargo --offline xtask check-boundaries` passed in the preceding three-root review. Its dependency/source/line-limit checks cover the rules implemented by the checker. `cargo xtask gate` currently validates packs, builds desktop, runs selected Node checks, architecture checks and testkit/contract tests, then performs workspace cargo check. Full workspace tests, native launch, provider/GPU conformance and product journeys have separate gates.
 
-The current source review identified name-derived environment cleanup IDs, profile-derived isolation assertions, inactive-to-success supervision mapping and a raw native execution path. OI estimates and selection remain heuristic. Training/evaluation runners contain simulation logic, and production harness types expose mock helpers used by integration tests. Source-backed remediation and test boundaries are defined in the [canonical plan](../development/modular-workbench-refactor-plan.md#sade-synthesis-review).
+The current source review identified name-derived environment cleanup IDs, profile-derived isolation assertions, inactive-to-success supervision mapping and a raw native execution path. OI estimates and selection remain heuristic. Training/evaluation runners contain simulation logic, and production harness types expose mock helpers used by integration tests. Source-backed remediation and test boundaries are defined in the [codebase architecture](../development/codebase-architecture.md).
 
 Implementation readiness is assessed per path with source revision, fixture, observed result and limits. Build success, file naming, upstream architecture and passing simulated jobs establish only their respective tested properties.

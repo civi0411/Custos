@@ -75,7 +75,7 @@ The pasted text correctly identifies mixed navigation axes. Its proposed strict 
 | Worktrees guarantee isolation | Git working directories do not isolate services, shared directories, credentials, or external effects | Show actual runtime authority and scope |
 | Clicking worktree changes every open pane | Switching a workspace layout is valid; silently rebinding existing resources is not | Retain resource IDs and scope in pinned panes |
 
-Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../crates/custos-domain/src/workspace/workspace.rs). In particular, the specification's SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
+Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../platform/domain/src/workspace/workspace.rs). In particular, the specification's SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
 
 ```mermaid
 flowchart TD
@@ -128,7 +128,7 @@ Orca's documented per-worktree layouts support switching the complete tab/split 
 
 ## Open Science: the actual interaction architecture
 
-Source basis: local Open Science commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`, package 0.6.0. [Upstream repository](https://github.com/ai4s-research/open-science). Source paths below refer to that checkout, not a promise about future upstream behavior. The existing [source study](open-science-source-study.md) and [control audit](workbench-core-and-controls-audit.md) contain the wider inventory.
+Source basis: local Open Science commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`, package 0.6.0. [workbench controls inventory](../development/workbench-control-inventory-panels.md) contain the wider inventory.
 
 ### Layout is presentation, not scientific ontology
 

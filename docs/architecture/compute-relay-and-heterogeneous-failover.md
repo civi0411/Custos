@@ -6,7 +6,7 @@
 
 Verification của packet admission/persistence: `cargo test -p custos-domain -p custos-core -p custos-persistence --lib --offline -q` pass (domain 63, core 61, persistence 34 sau packet inspector); local verifier tests pass 2; daemon Research lifecycle pass, gồm assessment/missing ID. Persistence tests bao gồm file-backed restart, migration reopen, event-failure rollback, corrupt/legacy snapshots và invalid parent/namespace. Packet inspector tiếp theo đã đổi frontend: desktop build và 29 smoke tests pass; browser kiểm Lab/Training empty state và keyboard navigation. Không chạy GPU/live cloud hoặc populated-training UI end-to-end; không cài dependencies.
 
-Đọc cùng [Colab/Kaggle adapters](remote-compute-colab-kaggle.md), [GPU thuê/SSH](remote-compute-external-gpu.md), [source study](../../../TRAINING_COMPUTE_SOURCE_STUDY.md) và [core refactor](../development/sade-core-refactor-plan.md). Không tạo Task engine, DB hoặc crate riêng.
+Đọc cùng [runtime composition](../development/runtime-composition-baseline.md). Không tạo Task engine, DB hoặc crate riêng.
 
 ## 1. Trả lời trực tiếp
 

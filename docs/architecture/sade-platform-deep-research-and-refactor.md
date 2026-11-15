@@ -45,9 +45,9 @@ Trong triết lý của Anthropic về Agentic Systems, **Agent không phải l�
 
 ---
 
-## 2. Kiểm toán Chi tiết Toàn bộ 8 Crates trong `platform/` (538 Files)
+## 2. Kiểm toán Chi tiết Các Gói Nền tảng trong `platform/`
 
-Hệ thống nền tảng `platform/` của Custos được thiết kế theo mô hình **Hexagonal Architecture (Ports and Adapters)** với 8 canonical crates. Dưới đây là phân tích chi tiết từng crate:
+Hệ thống nền tảng `platform/` của Custos được thiết kế theo mô hình **Hexagonal Architecture (Ports and Adapters)** với các gói chủ đề chuyên biệt. Dưới đây là phân tích chi tiết từng gói:
 
 ### 2.1. `platform/domain` (`custos-domain`) — 81 files
 * **Vị trí & Trách nhiệm**: Tầng trung tâm (Core Domain), chứa toàn bộ entity, value object, domain event và domain error.
@@ -115,8 +115,8 @@ Hệ thống nền tảng `platform/` của Custos được thiết kế theo m�
   - Research: `claim_extract`, `doi_verify`, `web_extract`, `alce`, `citation_coverage`.
   - Assistant: `contact_resolve`, `payload_lock`, `ax_tree_audit`.
 
-### 2.8. `platform/bridge` (`custos-bridge`) — 3 files
-* **Vị trí & Trách nhiệm**: Cầu nối phiên làm việc (Session-Task Bridge):
+### 2.8. Module Session Bridge (`platform/runtime/src/session/bridge`)
+* **Vị trí & Trách nhiệm**: Cầu nối phiên làm việc (Session-Task Bridge, đã hợp nhất vào `custos-runtime`):
   - `promote`: Nâng cấp một cuộc trò chuyện thông thường thành một Task tự trị có hợp đồng ràng buộc.
   - `attach` / `detach`: Gắn hoặc tách session vào một Task đang chạy.
   - `steer`: Gửi chỉ đạo giữa chừng của con người vào Worker đang thực thi.

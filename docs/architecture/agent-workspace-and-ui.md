@@ -24,7 +24,7 @@ Triết lý: **tối đa kết quả hữu ích trong ngân sách người dùng
 
 [Orca](https://www.onorca.dev/) là nguồn tham khảo cho trải nghiệm agent cạnh terminal, diff, browser và worktree. [Repo upstream](https://github.com/stablyai/orca) giúp xác định đúng sản phẩm. Custos chọn triển khai trải nghiệm thống nhất giữa ba miền cùng contract về nguồn, quyền và kết quả; không kết luận Orca thiếu các cơ chế đó, không sao chép khẩu hiệu hiệu năng hay giao diện thương hiệu.
 
-[Audit OrCa ở commit đã pin](../development/orca-source-study.md) xác nhận OrCa có runtime Run/Task/Dispatch, durable messages/receipts, structured Claude/Codex session, worktree/SSH và automation, không phải chỉ UI. Vì vậy UI Custos phải tách **resource workspace** (pane/host/checkout), **Task** (goal/scope/criteria), **Run/Dispatch** (attempt) và **Outcome** (verification) ngay trong navigation. Agent status dot và `worker_done` là trạng thái vận hành, không phải completion của criterion. Hai agent có thể chạy cùng Task nhưng tổng budget và source baseline phải hiện chung.
+[upstream source map](../development/upstream-source-map.md) xác nhận OrCa có runtime Run/Task/Dispatch, durable messages/receipts, structured Claude/Codex session, worktree/SSH và automation, không phải chỉ UI. Vì vậy UI Custos phải tách **resource workspace** (pane/host/checkout), **Task** (goal/scope/criteria), **Run/Dispatch** (attempt) và **Outcome** (verification) ngay trong navigation. Agent status dot và `worker_done` là trạng thái vận hành, không phải completion của criterion. Hai agent có thể chạy cùng Task nhưng tổng budget và source baseline phải hiện chung.
 
 Hợp đồng chi tiết về executor picker, Custos worker so với native harness, subagent, shared retrieval/context service, các journey và empty/recovery states của ba lens nằm ở [SADE agent system design](sade-agent-system-design.md). Tài liệu này tiếp tục sở hữu layout và continuity UX; hai tài liệu dùng cùng Task/Run/resource IDs.
 
@@ -91,7 +91,7 @@ Resource catalogue, resource rendering and canvas layout have separate source ow
 
 The existing shell and resource host use a recursive group/split presentation tree. Each tab belongs to one group; active tabs must exist; ratios are bounded; closing the final tab preserves a usable empty group. Drag/drop, split right/down, merge, keyboard focus, resize and zoom never execute domain commands. Unknown kinds render unsupported. AppContext persists sanitized resource metadata by project/lens/workspace/session; the resource host persists the matching validated layout. Resource IDs bind scope on creation; worktree selection never retargets existing tabs. Compact desktop shows one focused group with group navigation. Coding, Research and Copilot expose distinct resource shortcuts and a contextual scope inspector. Main conversation can remain beside resources or be hidden using canvas expansion. Popout editing remains deferred until shared-window reconciliation. Scientific annotation/reproduction and external dispatch retain existing backend capability gates. Findings forwards actual handoff Task IDs to the shell, which refreshes Tasks and opens the destination Coding Task; this is not itself evidence of a verified scientific handoff. Drafts keeps unsaved edits in memory across resource navigation, offers explicit save, and local review/lock does not enqueue an Outbox action or claim scientific verification.
 
-Desktop/headless integration theo [superplan §21](../development/workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): selective port OrCa presentation components qua Custos SDK facade; projection/event store do backend IDs/version/cursor chi phối; terminal/token streams bounded riêng với persisted state events. Layout restore không tự spawn agent. Mobile app/client/push/packaging chưa nằm trong phạm vi; giao diện hẹp dưới đây chỉ là responsive desktop.
+Desktop/headless integration theo [codebase architecture](../development/codebase-architecture.md): selective port OrCa presentation components qua Custos SDK facade; projection/event store do backend IDs/version/cursor chi phối; terminal/token streams bounded riêng với persisted state events. Layout restore không tự spawn agent. Mobile app/client/push/packaging chưa nằm trong phạm vi; giao diện hẹp dưới đây chỉ là responsive desktop.
 
 Desktop dùng một shell, không làm ba ứng dụng UI rời. Khung điều hướng có hai vai trò trái tách bạch: Activity Rail dành cho đích cấp ứng dụng; sidebar kế bên đổi nội dung theo workbench và scope hiện hành. Không lặp Conversations/Tasks ở cả rail lẫn sidebar. Header giữ lens switcher và Screen switcher; canvas trung tâm là nơi mở workflow đầy đủ; Inspector bên phải chỉ là hỗ trợ tùy chọn.
 
@@ -386,7 +386,7 @@ Frontend chỉ đổi lens ngay cho operation presentation-only. Với add/fork/
 
 ## 10. Ranh giới triển khai và acceptance
 
-Giữ `ui/desktop` là frontend sản phẩm chính; refactor theo feature modules trong repo hiện tại, không tạo `custos-ade-ui` hay `Rook`. Rust desktop host dưới `apps/desktop/native` mỏng; `apps/daemon` (`custos-daemon`) là composition root đích, `apps/cli` là pure-Rust headless CLI client và `ui/cli/bin/custos-cli.js` là Node terminal client. Xem [migration plan](../development/workspace-restructuring-plan.md).
+Giữ `ui/desktop` là frontend sản phẩm chính; refactor theo feature modules trong repo hiện tại, không tạo `custos-ade-ui` hay `Rook`. Rust desktop host dưới `apps/desktop/native` mỏng; `apps/daemon` (`custos-daemon`) là composition root đích, `apps/cli` là pure-Rust headless CLI client và `ui/cli/bin/custos-cli.js` là Node terminal client. Xem [codebase architecture](../development/codebase-architecture.md).
 
 ### 10.1 Interactive CLI provider and model flow
 
@@ -644,7 +644,7 @@ Compute có contract `PreviewCompute → Approve/Grant → StartRun → Observe/
 
 Research stack mặc định nên bắt đầu bằng local PDF/source inventory, lexical retrieval và versioned passage anchors; thêm metadata qua OpenAlex/Crossref theo egress policy; semantic rerank, PaperQA2/OpenScholar, notebook UI hay remote compute chỉ khi fixture chứng minh lợi ích. [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench) cho ví dụ artifact trace tới code/environment/message history và consent trước khi dùng tài nguyên mới; [marimo](https://docs.marimo.io/getting_started/key_concepts/) gợi ý notebook có dependency/reactivity; [Jupyter messaging](https://jupyter-client.readthedocs.io/en/stable/messaging.html) mô tả transport kernel. Chúng là tham chiếu kỹ thuật, không phải bằng chứng các adapter Custos đã có hoặc notebook được sandbox tự động.
 
-[Mổ xẻ source Open Science Desktop tại SHA đã pin](../development/open-science-source-study.md) bổ sung một tham chiếu open-source có code: chat cạnh notebook/artifact, run và file-version provenance, reviewer findings và curated connectors. Custos chọn UX/lineage patterns, không thay core bằng OpenCode sidecar hay JSONL riêng. Đặc biệt, một run output quan sát theo mtime/hash thiếu không được gắn nhãn bằng chứng hoàn chỉnh; reviewer citation/figure chỉ xác nhận mức traceability đã kiểm, không tự hoàn thành semantic criterion.
+[upstream source map](../development/upstream-source-map.md) bổ sung một tham chiếu open-source có code: chat cạnh notebook/artifact, run và file-version provenance, reviewer findings và curated connectors. Custos chọn UX/lineage patterns, không thay core bằng OpenCode sidecar hay JSONL riêng. Đặc biệt, một run output quan sát theo mtime/hash thiếu không được gắn nhãn bằng chứng hoàn chỉnh; reviewer citation/figure chỉ xác nhận mức traceability đã kiểm, không tự hoàn thành semantic criterion.
 
 ### 12.8. Bản đồ triển khai vào repo hiện tại
 
@@ -890,7 +890,7 @@ ConversationPane owns one ephemeral composer draft per Session, shared across it
 
 The shared workspace shell exposes a persistent workbench workflow strip from the canonical resource membership/capability descriptors. It names the current conversation/workspace and provides direct resource navigation with unavailable reasons. Application-level workbench switching remains in AppTopBar; the strip controls resources rather than introducing another workbench selector.
 
-The [desktop core and controls audit](../development/workbench-core-and-controls-audit.md) separates renderer controls, presentation state, execution, replay and scientific evidence across Orca and Open Science. Its chrome/identity/lifecycle recommendations are implementation review targets, not proof that Custos has reached them.
+The [workbench controls inventory](../development/workbench-control-inventory-panels.md) separates renderer controls, presentation state, execution, replay and scientific evidence across Orca and Open Science. Its chrome/identity/lifecycle recommendations are implementation review targets, not proof that Custos has reached them.
 
 Desktop information hierarchy: the shell owns one workflow navigation row; canvas arrangement lives in a disclosure menu on the focused group, not a permanent desk header. Empty canvas provides a scoped workbench overview and existing desk action. Lab view selection is injected into the notebook content toolbar to avoid stacked navigation; embedded Markdown previews hide their standalone toolbar. Existing components/reducer remain the owners; no new production file or execution API.
 
@@ -1100,7 +1100,7 @@ The dependency order and acceptance matrix are tracked in [plan §22](../../plan
 
 ## 14. Screens, work areas and parallel supervision
 
-**Status: researched design target, not implementation certification.** This section resolves the ambiguity in §13.2 and earlier Screen sketches. Preserve Project-owned Screens while making a worktree immediately usable from the sidebar. Screen is the saved composition of resource views and interaction context, not only a geometry preset and not a new execution container. The source evidence and limits are in [Open Science study](../development/open-science-source-study.md#screen-composition-and-lifecycle-evidence).
+**Status: researched design target, not implementation certification.** This section resolves the ambiguity in §13.2 and earlier Screen sketches. Preserve Project-owned Screens while making a worktree immediately usable from the sidebar. Screen is the saved composition of resource views and interaction context, not only a geometry preset and not a new execution container. The source evidence and limits are in [upstream source map](../development/upstream-source-map.md).
 
 ### 14.1. Two independent relationships
 

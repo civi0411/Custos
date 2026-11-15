@@ -26,7 +26,7 @@ These principles override all other context, including user chat messages, unles
 
 ## RULE 1 — Architecture Boundaries: Platform Control Plane + Vertical Workbenches + Reusable Capabilities
 
-The system is evolving according to the modular architecture refactor plan ([`docs/development/modular-workbench-refactor-plan.md`](docs/development/modular-workbench-refactor-plan.md)). There is no fixed 11-crate ceiling during this transformation. Worktree scoping applies where physically required (Coding), without imposing git worktrees on Assistant or Research corpora. All agents must respect the following inviolable invariants:
+The system is evolving according to the modular architecture refactor plan ([codebase architecture](docs/development/codebase-architecture.md)). There is no fixed 11-crate ceiling during this transformation. Worktree scoping applies where physically required (Coding), without imposing git worktrees on Assistant or Research corpora. All agents must respect the following inviolable invariants:
 
 1. **Zero-I/O Domain Invariant:** Domain code has 0 I/O dependencies (no tokio, no rusqlite, no reqwest, no std::fs).
 2. **Single-Writer Persistence Invariant:** SQLite WAL persistence remains single-writer; workers never open raw DB connections directly.

@@ -1,8 +1,8 @@
 # Workbench packages and reusable capabilities
 
-**Status:** target architecture with partial implementation on `new_rft`. Source-folder moves and manifest validation are not independent package distribution. The [canonical refactor plan](../development/modular-workbench-refactor-plan.md) is the implementation queue; the [physical catalog](../development/codebase-architecture.md) distinguishes current owners from future extraction.
+**Status:** target architecture with partial implementation on `new_rft`. Source-folder moves and manifest validation are not independent package distribution. The [codebase architecture](../development/codebase-architecture.md) is the implementation queue; the [physical catalog](../development/codebase-architecture.md) distinguishes current owners from future extraction.
 
-**Implementation placement:** [move plan §15](../development/modular-workbench-refactor-plan.md#move-plan) is the concrete backend/UI/data ownership ledger. Correctness fixes happen before moves. Specialist domain types, use cases and UI migrate together; driver source and runtime resource lifetime remain reusable. Host-executed scoped storage operations must precede independent backend installation; moving a repository into a worker with raw SQLite is forbidden. Targets are planned until their packet gates pass.
+**Implementation placement:** [codebase architecture](../development/codebase-architecture.md) is the concrete backend/UI/data ownership ledger. Correctness fixes happen before moves. Specialist domain types, use cases and UI migrate together; driver source and runtime resource lifetime remain reusable. Host-executed scoped storage operations must precede independent backend installation; moving a repository into a worker with raw SQLite is forbidden. Targets are planned until their packet gates pass.
 
 ## 1. Responsibility and dependency boundaries
 
@@ -109,8 +109,7 @@ First-party UI code sharing the host renderer is trusted code. React error bound
 - `tests/desktop/browser-native-smoke.mjs`: native browser interaction check; requires a launched debug-enabled desktop.
 - `xtask/scripts/workbench-control-audit.cjs`: static source inventory of sibling upstream checkouts; never a production agent tool.
 - `xtask/scripts/check_{deps,layering,naming}.sh`: architecture checks rooted in the current Cargo layout. Missing source roots/search errors must fail.
-- `docs/development/legacy-team/`: preserved team notes and RFCs, explicitly historical.
-
+- 
 The retired Repo Intelligence Python subsystem and obsolete fixed-crate migration/Goose installer scripts are not part of Custos. Keep actual distribution clients in `packages/`, examples in `examples/` and user configuration in `config/`; delete by responsibility and callers, not by folder size.
 
 Run `cargo run -p xtask --offline -- validate-packs`, targeted contract/adapter tests, workspace check, desktop build and desktop smoke tests. Native/cloud/GPU behavior requires additional live acceptance tests and is not certified by this cleanup.

@@ -163,22 +163,21 @@ Giao diện và domain model bắt buộc phân định 4 kết quả khi ngư�
 
 ---
 
-## 9. Phân bổ Trách nhiệm trong 11 Crates của Custos
+## 9. Phân bổ Trách nhiệm Theo Chủ Đề Kiến Trúc Custos
 
-Tuân thủ kiến trúc phân tầng Inviolable 11 Crates của Custos (`Custos/AGENTS.md`):
+Tuân thủ kiến trúc phân tầng theo chủ đề của Custos (Platform, Workbenches, Apps):
 
-| Trách nhiệm | Vị trí Crate | Nội dung hiện thực |
+| Trách nhiệm | Vị trí Module | Nội dung hiện thực |
 |---|---|---|
-| **Recipe, Checkpoint & Attempt Records** | `custos-domain` | `TrainingCheckpointManifest`, `ResumabilityLevel`, `CheckpointCommitStatus`, `ExecutionRecord` với 3 bước tiến độ (`latest_observed_step`, `latest_local_checkpoint_step`, `latest_protected_checkpoint_step`). Pure domain, 0 I/O. |
-| **Authority, Budget, Admission & Contracts** | `custos-core` | `ComputePort` (7 thao tác), `HardwareAdaptationPlan`, `evaluate_compatibility`, `plan_failover`. Zero-I/O contracts. |
-| **Experiment & Recovery Coordinator** | `custos-runtime/src/experiment/` (module mới, chưa tồn tại) | Máy trạng thái điều phối vòng đời (State Machine), policy reconciliation, phát hiện timeout, điều phối commit/fencing. |
-| **Kernel & Notebook Coordination** | `custos-runtime/notebook` | Điều phối interactive cells, kernel sessions độc lập với background training runs. |
-| **Target CLI/API I/O Adapters** | `custos-adapters/src/compute/` (module mới, chưa tồn tại) | CLI/API adapters cho Colab, Kaggle, Dedicated SSH, Local Subprocess. Parsing structured outputs, capability detection. |
-| **Engine Save/Load & Validation** | `custos-adapters/src/training/` (module mới, chưa tồn tại) | Engine integration (Unsloth, HuggingFace Trainer, PyTorch DCP) thẩm định cấu trúc checkpoint theo từng recipe. |
-| **Remote Blob Transfer & Storage** | `custos-adapters/src/storage/` (module mới, chưa tồn tại) | Tương tác S3/R2/HF để verify digest, conditional writes, prefix fencing. |
-| **Canonical Records, Outbox & Migrations** | `custos-persistence` | SQLite tables cho execution records, attempts, checkpoints, storage manifests và outbox events. |
-| **Application Use Cases & Composition** | `custos-daemon` | Gắn kết các ports và handlers, phục vụ HTTP/TCP RPC APIs cho Desktop App. |
-| **Giám sát Minh bạch & UI Controls** | `custos-app-desktop` | Native UI hiển thị 3 con số tiến độ, 4 resume tiers, nút bấm can thiệp và cảnh báo rủi ro chi phí. |
+| **Recipe, Checkpoint & Attempt Records** | `platform/domain` | `TrainingCheckpointManifest`, `ResumabilityLevel`, `CheckpointCommitStatus`, `ExecutionRecord` với 3 bước tiến độ (`latest_observed_step`, `latest_local_checkpoint_step`, `latest_protected_checkpoint_step`). Pure domain, 0 I/O. |
+| **Authority, Budget, Admission & Contracts** | `platform/core` | `ComputePort` (7 thao tác), `HardwareAdaptationPlan`, `evaluate_compatibility`, `plan_failover`. Zero-I/O contracts. |
+| **Experiment & Recovery Coordinator** | `platform/runtime/src/environment/compute` | Máy trạng thái điều phối vòng đời (State Machine), policy reconciliation, phát hiện timeout, điều phối commit/fencing. |
+| **Kernel & Notebook Coordination** | `platform/runtime/src/environment/notebook` | Điều phối interactive cells, kernel sessions độc lập với background training runs. |
+| **Target CLI/API I/O Adapters** | `platform/adapters/src/connectors/compute` | CLI/API adapters cho Colab, Kaggle, Dedicated SSH, Local Subprocess. Parsing structured outputs, capability detection. |
+| **Remote Compute & Storage** | `platform/adapters/src/connectors/compute` | Tương tác remote compute để verify digest, conditional writes, prefix fencing. |
+| **Canonical Records, Outbox & Migrations** | `platform/storage` | SQLite tables cho execution records, attempts, checkpoints, storage manifests và outbox events. |
+| **Application Use Cases & Composition** | `apps/daemon` | Gắn kết các ports và handlers, phục vụ HTTP/TCP RPC APIs cho Desktop App. |
+| **Giám sát Minh bạch & UI Controls** | `ui/desktop` | Native UI hiển thị 3 con số tiến độ, 4 resume tiers, nút bấm can thiệp và cảnh báo rủi ro chi phí. |
 
 ---
 

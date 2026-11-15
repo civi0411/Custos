@@ -1,8 +1,8 @@
 # Capability catalog và tổ chức skills
 
-**Kiến trúc đích.** Áp dụng chung Coding, Research, Assistant; không tạo crate mới. Tài liệu này phân loại nơi đặt code, không tự thay đổi các trait đang tồn tại. [Master](../../Custos.md), [workspace UI](agent-workspace-and-ui.md), [catalog vật lý](../development/codebase-architecture.md) và [migration plan](../development/workspace-restructuring-plan.md) cần được đọc cùng nhau.
+**Kiến trúc đích.** Áp dụng chung Coding, Research, Assistant; không tạo crate mới. Tài liệu này phân loại nơi đặt code, không tự thay đổi các trait đang tồn tại. [codebase architecture](../development/codebase-architecture.md) cần được đọc cùng nhau.
 
-**Source ownership trên `new_rft`:** driver và source manifest nằm cạnh nhau tại `platform/adapters/src/<subject>/`; notebook/compute dùng chung không thuộc riêng Research. Bỏ scaffold capability và bản sao source không được Cargo biên dịch. `documents/source_fetch.rs` hiện chỉ đọc UTF-8 có scope/byte limit, không tự có PDF/OCR. `compute/checkpoint.rs` chỉ kiểm integrity local. Metadata không chứng minh installed/ready/authorized hoặc downloadable. Xem [plan hiện hành](../development/modular-workbench-refactor-plan.md).
+**Source ownership trên `new_rft`:** driver và source manifest nằm cạnh nhau tại `platform/adapters/src/<subject>/`; notebook/compute dùng chung không thuộc riêng Research. Bỏ scaffold capability và bản sao source không được Cargo biên dịch. `documents/source_fetch.rs` hiện chỉ đọc UTF-8 có scope/byte limit, không tự có PDF/OCR. `compute/checkpoint.rs` chỉ kiểm integrity local. Metadata không chứng minh installed/ready/authorized hoặc downloadable. Xem [codebase architecture](../development/codebase-architecture.md).
 
 ## 1. Phân biệt trước khi thêm tính năng
 

@@ -16,6 +16,8 @@ The `docs/reference/` directory serves as the definitive technical dictionary an
 | **[Naming Conventions](naming-conventions.md)** | Standardized casing, prefixes, and identifier rules across crates, modules, entities, CQRS commands/events, REST/IPC endpoints, database tables, and metrics. | Rust developers, API designers, pack authors |
 | **[Schema & Type Mapping](schema-and-type-mapping.md)** | Wire contracts, JSON Schema to Rust struct mappings, protocol error taxonomy, and SQLite relational persistence table schemas. | Protocol implementers, bridge developers, frontend/IDE integrators |
 | **[Canonical Glossary](glossary.md)** | Standardized definitions of core architectural domain concepts (ActionIntent, IBCT, Completion Gate, Taint Tracking, ContinuationPacket, etc.). | System architects, documentation writers, new team members |
+| **[Remote Compute Specification](remote-compute.md)** | Adapter contracts, mock mode vs live mode fail-closed verification, and host lifecycle for Colab, Kaggle, and SSH/GPU pods. | Systems engineers, compute infrastructure developers |
+| **[Tool Output Bounds](tool-output-cap.md)** | Bounded streaming memory limits via `LimitedWriter`, truncation semantics, and UTF-8 safety under heavy tool output. | Runtime developers, agent loop engineers |
 
 ---
 

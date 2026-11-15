@@ -1,6 +1,6 @@
 # Đánh giá OI và economics của Custos SADE
 
-**Evaluation design, chưa phải benchmark report hoặc executable suite hoàn chỉnh.** [Refactor plan §16](../../docs/development/workspace-restructuring-plan.md#16-evaluation-và-release-gate-không-tự-chứng-minh) khóa release methodology; [domain blueprints](../../docs/architecture/domain-packs-and-workflows.md) khóa semantics. Không dùng worktree làm clean-merge guarantee, coverage score làm support oracle hoặc một latency constant làm SLO.
+**Evaluation design, chưa phải benchmark report hoặc executable suite hoàn chỉnh.** [Delivery blueprint](../../docs/development/delivery-blueprint.md) khóa release methodology; [domain blueprints](../../docs/architecture/domain-packs-and-workflows.md) khóa semantics. Không dùng worktree làm clean-merge guarantee, coverage score làm support oracle hoặc một latency constant làm SLO.
 
 ## 1. Ma trận jobs và oracle
 
