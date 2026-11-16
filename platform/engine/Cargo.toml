@@ -7,10 +7,13 @@ license.workspace = true
 repository.workspace = true
 description = "Custos Execution Engine: Task, Conversation, Execution, Authority, Evidence, Orchestration, Context, Resources, Supervision, Components"
 
+[features]
+default = ["full"]
+full = []
+lite = []
+
 [dependencies]
 custos-contracts = { workspace = true }
-custos-domain = { workspace = true }
-custos-core = { workspace = true }
 
 tiktoken-rs = { workspace = true }
 blake3 = { workspace = true }
@@ -39,6 +42,4 @@ sha2 = { workspace = true }
 [dev-dependencies]
 custos-storage = { workspace = true }
 custos-integrations = { workspace = true }
-custos-adapters = { workspace = true }
-custos-provider = { workspace = true }
 tempfile = { workspace = true }

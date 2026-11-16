@@ -6,13 +6,10 @@ license.workspace = true
 publish = false
 
 [dependencies]
-custos-domain = { workspace = true }
-custos-core = { workspace = true }
-custos-persistence = { workspace = true }
-custos-runtime = { workspace = true }
-custos-provider = { workspace = true }
-custos-adapters = { workspace = true, features = ["test-support"] }
-custos-packs = { workspace = true }
+custos-contracts = { workspace = true }
+custos-storage = { workspace = true }
+custos-integrations = { workspace = true, features = ["test-support"] }
+custos-engine = { workspace = true }
 custos-workbench-quant = { workspace = true }
 custos-workbench-research = { workspace = true }
 custos-workbench-coding = { workspace = true }

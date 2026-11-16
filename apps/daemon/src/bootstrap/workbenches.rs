@@ -10,7 +10,7 @@ use custos_core::contracts::harness::AgentRuntimePort;
 use custos_core::contracts::kernel::TrustedKernel;
 use custos_packs::DomainPackRegistry;
 use custos_persistence::SqliteTaskStore;
-use custos_provider::ModelPort;
+use custos_domain::ModelPort;
 
 use crate::tool_executor::DaemonGovernedToolExecutor;
 

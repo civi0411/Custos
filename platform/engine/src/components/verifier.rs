@@ -6,22 +6,23 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-pub use custos_core::contracts::pack::{
+pub use custos_contracts::contributions::pack::{
     PackVerifier, VerificationContext, VerificationResult, VerifierResult,
 };
+use crate::evidence::{EvidenceBundle, Verifier};
 
-/// Bridges any `PackVerifier` into the unified `custos_core::evidence::Verifier` system.
+/// Bridges any `PackVerifier` into the unified `crate::evidence::Verifier` system.
 pub struct PackVerifierAdapter(pub Arc<dyn PackVerifier>);
 
 #[async_trait]
-impl custos_core::evidence::Verifier for PackVerifierAdapter {
+impl Verifier for PackVerifierAdapter {
     fn verifier_id(&self) -> &str {
         self.0.verifier_id()
     }
 
     async fn verify(
         &self,
-        bundle: &custos_core::evidence::EvidenceBundle,
+        bundle: &EvidenceBundle,
     ) -> Result<custos_domain::VerificationClaim, custos_domain::DomainError> {
         let ctx = VerificationContext {
             task_id: bundle.task_id.clone(),

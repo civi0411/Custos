@@ -5,6 +5,22 @@
 //! 2. `native_bypass_effect_tracking`: Parsing and tracking native shell/file bypasses with typed ProviderGoverned assurance.
 //! 3. `harness_lifecycle_steer_and_cancel`: Steering guidance injection and cancellation semantics.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_adapters::harness::CliHarness;
 use custos_core::contracts::harness::{AgentRuntimePort, ToolMediationLevel};
 use custos_domain::{new_id, ActionIntent, Assurance, ContextPack, RiskLevel, WorkerRun};

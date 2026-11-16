@@ -9,6 +9,22 @@
 //!    attempts fail validation fail-closed before allocating expensive compute.
 //! 4. Idempotent Invocations: Remote compute operations carry idempotency keys; duplicate executions conflict cleanly.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::contracts::checkpoint_store::PromotionOutcome;
 use custos_domain::{
     new_id, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, DomainError,

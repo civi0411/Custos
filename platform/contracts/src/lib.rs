@@ -18,6 +18,8 @@ pub use execution as fleet;
 pub use identity as shared;
 pub use inference as provider;
 pub use resources as workspace;
+pub use contributions as packages;
+pub use task::continuation::ContinuationPacket as PacketContinuation;
 pub use task::pipeline;
 pub use task::oi;
 pub use task::oi as decision;
@@ -164,7 +166,7 @@ pub use execution::{
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
     CaptureSnapshotParams, CellExecutionStatus, CommandExecutionResult, CommandRunnerPort,
     CostVisibility, CreateTabParams, EnvSnapshot, EnvironmentAssurance, EnvironmentHandle,
-    EnvironmentPort, EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecuteCellParams,
+    EnvironmentPort, EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecutionResult, ExecuteCellParams,
     ExecuteCellResult, ExecutionLane, FleetExecParams, FleetExecReceipt, FleetExecResult,
     GateReport, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity, HarnessProfile,
     KernelStatus, LanePolicy, NavigateTabParams, NotebookCell, NotebookCellType, NotebookDocument,
@@ -192,3 +194,108 @@ pub use contributions::{
     TaintLevel, VerificationContext, VerificationResult, VerifierResult, WorkbenchJob,
     WorkbenchModule, WorkerRole, WorkerRunId, WorkspaceScope, WriteTarget,
 };
+
+// --- Kernel Namespace ---
+pub mod kernel {
+    pub use crate::conversation::ports::SessionStore;
+    pub use crate::task::events::{TaskEvent, TaskSnapshotImported};
+    pub use crate::task::ports::{KernelPort, TaskStore};
+}
+
+// --- Canonical Contract Port Compatibility Layer ---
+pub mod contracts {
+    pub use crate::*;
+    pub mod agent {
+        pub use crate::execution::ports::*;
+    }
+    pub mod authority {
+        pub use crate::authority::*;
+    }
+    pub mod checkpoint_store {
+        pub use crate::resources::compute::*;
+        pub use crate::resources::ports::*;
+    }
+    pub mod compute {
+        pub use crate::resources::compute::*;
+        pub use crate::resources::ports::*;
+    }
+    pub mod credentials {
+        pub use crate::authority::ports::*;
+    }
+    pub mod environment {
+        pub use crate::execution::ports::*;
+    }
+    pub mod harness {
+        pub use crate::execution::harness::*;
+        pub use crate::execution::ports::*;
+    }
+    pub mod judgment {
+        pub use crate::evidence::ports::*;
+    }
+    pub mod kernel {
+        pub use crate::kernel::*;
+    }
+    pub mod memory {
+        pub use crate::context::ports::*;
+    }
+    pub mod notebook {
+        pub use crate::execution::notebook::*;
+    }
+    pub mod oi {
+        pub use crate::task::oi::*;
+        pub use crate::task::ports::OiPlannerPort;
+    }
+    pub mod packages {
+        pub use crate::contributions::packages::*;
+        pub use crate::contributions::ports::*;
+        pub use crate::resources::ports::*;
+    }
+    pub mod pack {
+        pub use crate::contributions::pack::*;
+    }
+    pub mod sandbox {
+        pub use crate::authority::ports::*;
+        pub use crate::execution::ports::*;
+        pub use crate::execution::terminal::*;
+    }
+    pub mod skill {
+        pub use crate::contributions::skill::*;
+    }
+    pub mod source_acquisition {
+        pub use crate::resources::ports::*;
+    }
+    pub mod storage {
+        pub use crate::authority::ports::*;
+        pub use crate::resources::ports::*;
+        pub use crate::task::ports::*;
+    }
+    pub mod supervision {
+        pub use crate::resources::ports::SupervisionStorePort;
+        pub use crate::task::run::telemetry::*;
+        pub use crate::task::run::watchdog::*;
+    }
+    pub mod terminal {
+        pub use crate::execution::ports::*;
+        pub use crate::execution::terminal::*;
+    }
+    pub mod tool_gate {
+        pub use crate::execution::ports::*;
+    }
+    pub mod workflow {
+        pub use crate::resources::ports::SupervisionStorePort;
+        pub use crate::task::ports::*;
+        pub use crate::task::run::telemetry::*;
+        pub use crate::task::run::watchdog::*;
+        pub use crate::task::workflow::*;
+    }
+    pub mod workspace {
+        pub use crate::resources::ports::*;
+        pub use crate::resources::workspace::*;
+    }
+    pub mod workspace_files {
+        pub use crate::resources::ports::*;
+        pub use crate::resources::workspace_files::*;
+    }
+}
+
+

@@ -7,6 +7,22 @@
 //! 4. Duplicate execution request ID returns cached result without re-executing.
 //! 5. Replacing cells in notebook A does not delete cells in notebook B in the same session.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_adapters::notebook::LocalPythonDriver;
 use custos_core::contracts::notebook::{CellExecutionStatus, ExecuteCellParams, NotebookCell, NotebookCellType};
 use custos_persistence::SqliteTaskStore;

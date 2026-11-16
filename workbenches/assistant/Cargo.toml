@@ -10,9 +10,7 @@ description = "Custos Sovereign Assistant Workbench (Personal productivity, agen
 
 [dependencies]
 custos-contracts = { workspace = true }
-custos-domain = { path = "../../platform/domain" }
-custos-core = { path = "../../platform/core" }
-custos-runtime = { path = "../../platform/runtime" }
+custos-engine = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-trait = "0.1"

@@ -10,8 +10,6 @@ repository.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 custos-contracts = { workspace = true }
-custos-domain = { workspace = true }
-custos-core = { workspace = true }
 rusqlite = { workspace = true, features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -21,8 +21,6 @@ test-support = []
 
 [dependencies]
 custos-contracts = { workspace = true }
-custos-domain = { workspace = true }
-custos-core = { workspace = true }
 custos-protocol = { workspace = true }
 
 anyhow = { workspace = true }

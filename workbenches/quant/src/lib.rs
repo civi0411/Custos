@@ -2,6 +2,8 @@
 //!
 //! Autonomous alpha discovery, backtesting simulations, risk auditing,
 //! and execution planning for algo finance agents.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
 
 pub mod application;
 pub mod contracts;

@@ -6,6 +6,22 @@
 //! - `local_api_rpc_transport`: Daemon local API dispatch and strongly-typed client integration.
 //! - `comparative_benchmarks`: OI vs Baseline benchmark suite across canonical pack fixtures.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_runtime::bridge::BridgeService;
 use custos_core::TaskService;
 use custos_daemon::custos_local_api::ExplainPlanRequest;

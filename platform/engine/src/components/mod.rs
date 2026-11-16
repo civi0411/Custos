@@ -7,12 +7,13 @@ pub mod module;
 pub mod registry;
 pub mod verifier;
 
-pub use custos_core::contracts::pack::{self, *};
+pub use custos_contracts::contributions::pack::*;
 pub use migrations::*;
 pub use module::*;
 pub use registry::*;
 pub use verifier::*;
 
+use crate::evidence::EvidencePipeline;
 use crate::execution::skills::SkillRegistry;
 use std::sync::Arc;
 
@@ -101,7 +102,7 @@ pub fn compile_governed_tools(
 /// Registers all verifiers from the domain packs in `pack_registry` into `EvidencePipeline`.
 pub fn register_pack_verifiers_into_pipeline(
     pack_registry: &DomainPackRegistry,
-    pipeline: &mut custos_core::evidence::EvidencePipeline,
+    pipeline: &mut EvidencePipeline,
 ) {
     for verifier in pack_registry.list_all_verifiers() {
         pipeline.register_verifier(Arc::new(verifier::PackVerifierAdapter(verifier)));
@@ -228,7 +229,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_pack_verifiers_into_pipeline() {
-        use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
+        use crate::evidence::{EvidenceBundle, EvidencePipeline};
 
         let registry = DomainPackRegistry::new();
         registry.register(Arc::new(DummyPack));

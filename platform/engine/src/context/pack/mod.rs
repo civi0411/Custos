@@ -23,7 +23,7 @@ pub use redaction::SecretRedactor;
 pub use structural::StructuralExtractor;
 
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-use custos_core::authority::PathSandbox;
+use crate::authority::PathSandbox;
 use custos_domain::{digest, new_id, ContextItem, ContextPack, DomainError, ExecutionWorkspace};
 use std::collections::HashMap;
 use std::path::PathBuf;

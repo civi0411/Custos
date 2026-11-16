@@ -26,7 +26,7 @@ impl ModelPort for MeasuredAccountModel {
 }
 #[tokio::test]
 async fn measured_usage_and_account_are_persisted_with_model_run() {
-    use custos_core::contracts::kernel::TrustedKernel;
+    use crate::TrustedKernel;
     use custos_core::TaskStore;
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let mut task = custos_domain::Task::new("usage-task".into(), "Measured usage".into());
@@ -72,7 +72,7 @@ impl ModelPort for TestFailingModel {
 
 #[tokio::test]
 async fn test_task_runtime_failed_model_turn_transitions_to_failed_and_releases_lock() {
-    use custos_core::contracts::kernel::TrustedKernel;
+    use crate::TrustedKernel;
     use custos_core::TaskStore;
     use custos_domain::Task;
     use custos_storage::SqliteTaskStore;

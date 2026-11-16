@@ -144,13 +144,20 @@ pub trait WorkflowPort: Send + Sync {
     async fn resume(&self, run_id: &str) -> Result<RunHandle, DomainError>;
     async fn checkpoint(&self, run_id: &str) -> Result<ContinuationPacket, DomainError>;
 
-    async fn run_candidate_race(
+    async fn execute_candidate_race(
         &self,
         _spec: CandidateRaceSpec,
     ) -> Result<CandidateRaceResult, DomainError> {
         Err(DomainError::Validation(
-            "Candidate race execution is not supported by this runtime".into(),
+            "Candidate race is not supported by this workflow runtime".into(),
         ))
+    }
+
+    async fn run_candidate_race(
+        &self,
+        spec: CandidateRaceSpec,
+    ) -> Result<CandidateRaceResult, DomainError> {
+        self.execute_candidate_race(spec).await
     }
 }
 
@@ -160,7 +167,7 @@ pub trait OiPlannerPort: Send + Sync {
     async fn plan(&self, snapshot: &DecisionSnapshot) -> Result<StrategyProposal, DomainError>;
 }
 
-use crate::task::run::{Run, WorkerRun};
+use crate::task::run::{DispatchClaim, LaunchAttempt, Run, WorkerRun};
 use crate::task::workflow::WorkflowRevision;
 use crate::task::oi::placement::NodePlacement;
 use crate::authority::ports::EffectLedgerPort;
@@ -174,8 +181,33 @@ pub trait RunPort: Send + Sync {
     async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError>;
     async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError>;
     async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError>;
+    async fn list_worker_runs_for_task(&self, task_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
-    async fn list_all_active_worker_runs(&self) -> Result<Vec<WorkerRun>, DomainError>;
+    async fn list_all_active_worker_runs(&self) -> Result<Vec<WorkerRun>, DomainError> {
+        Ok(Vec::new())
+    }
+    async fn claim_ready(&self, claim: &DispatchClaim) -> Result<(), DomainError>;
+    async fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError>;
+    async fn get_claim(&self, claim_id: &str) -> Result<Option<DispatchClaim>, DomainError>;
+    async fn get_active_claim(
+        &self,
+        task_id: &str,
+        node_id: Option<&str>,
+    ) -> Result<Option<DispatchClaim>, DomainError>;
+    async fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError>;
+    async fn get_launch_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> Result<Option<LaunchAttempt>, DomainError>;
+    async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        Ok(Vec::new())
+    }
+    async fn fence_claim(&self, _claim_id: &str) -> Result<(), DomainError> {
+        Ok(())
+    }
+    async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
+        Ok(0)
+    }
 }
 
 pub trait RunStore: RunPort + EffectLedgerPort {}
@@ -197,6 +229,10 @@ pub trait WorkflowRevisionPort: Send + Sync {
         &self,
         task_id: &str,
     ) -> Result<Vec<WorkflowRevision>, DomainError>;
+    async fn get_placements_for_revision(
+        &self,
+        revision_id: &str,
+    ) -> Result<Vec<NodePlacement>, DomainError>;
 }
 
 /// Composite Persistence Port for Workflow Revisions, Decisions, and Replanning.

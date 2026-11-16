@@ -5,6 +5,22 @@
 //! 2. `interactive_session_and_journal`: Session creation, dialogue journaling, task attachment, and steering injection.
 //! 3. `process_crash_recovery_resilience`: Process-level SIGKILL/restart against SQLite, state durability, and post-recovery operations.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_domain::{SessionStatus, Task, TaskStatus};
 use custos_sdk::local_api::{LocalApiClient, ProcessTransport};
 use std::path::PathBuf;

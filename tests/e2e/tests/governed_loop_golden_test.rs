@@ -8,6 +8,22 @@
 //! 5. Bounded iteration exhaustion: Endless tool-calling without clean completion returns DomainError::BudgetExceeded with 'status: limited', never returns success.
 //! 6. Cancellation responsiveness: Mid-loop cancellation halts execution promptly with DomainError::Validation, and steering/cancellation handles are pruned.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use async_trait::async_trait;
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_core::contracts::harness::AgentRuntimePort;
@@ -19,9 +35,9 @@ use custos_domain::{
     ReceiptStatus, StartRunCommand, TaskContract, WorkerRun,
 };
 use custos_persistence::SqliteTaskStore;
-use custos_provider::events::ToolCall;
-use custos_provider::request::{ModelResponse, ProviderRequest};
-use custos_provider::ModelPort;
+use custos_domain::inference::ToolCall;
+use custos_domain::inference::{ModelResponse, ProviderRequest};
+use custos_domain::ModelPort;
 use custos_runtime::agent::runtime_port::GovernedAgentRuntime;
 use custos_runtime::workflow::TaskRuntime;
 use std::sync::{Arc, Mutex};

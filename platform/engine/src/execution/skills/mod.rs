@@ -18,7 +18,7 @@
 //! ```
 
 pub use async_trait::async_trait;
-pub use custos_core::contracts::skill::*;
+pub use custos_contracts::contributions::skill::*;
 
 use std::collections::HashMap;
 use std::sync::Arc;

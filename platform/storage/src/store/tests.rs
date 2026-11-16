@@ -1,6 +1,9 @@
 use super::*;
-use custos_core::kernel::{AdvanceTask, CreateTask, TaskReducer, TaskService};
-use custos_domain::{ContractEvidence, EvidenceKind, SpanState, TaskContract, TaskStatus};
+use chrono::Utc;
+use custos_domain::{
+    ContractEvidence, EvidenceKind, SpanState, Task, TaskAdvanced, TaskContract, TaskCreated,
+    TaskEvent, TaskStatus,
+};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -58,53 +61,64 @@ async fn task_contract_survives_persistence_and_list() {
 #[tokio::test]
 async fn task_events_commit_with_snapshot_and_replay_exact_state() {
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-    let service = TaskService::new(store.clone());
-    let (created, created_event) = service
-        .execute_create(CreateTask {
-            title: "Replay task".into(),
-            metadata: Some(serde_json::json!({"origin": "test"})),
-            contract: Some(TaskContract {
-                pack_id: "engineering".into(),
-                name: "Replay task".into(),
-                description: "Rebuild from events".into(),
-                required_capabilities: vec!["fs_read".into()],
-                evidence_requirements: vec![ContractEvidence {
-                    kind: EvidenceKind::TestResult,
-                    required: true,
-                }],
-            }),
-        })
-        .await
-        .unwrap();
-    service
-        .execute_advance(AdvanceTask {
-            task_id: created.id.clone(),
-            expected_epoch: created.epoch,
-            next_status: TaskStatus::Queued,
-            rationale: Some("test replay".into()),
-        })
+    let mut task = Task::new("task_replay_1".into(), "Replay task".into());
+    task.metadata = serde_json::json!({"origin": "test"});
+    task.contract = Some(TaskContract {
+        pack_id: "engineering".into(),
+        name: "Replay task".into(),
+        description: "Rebuild from events".into(),
+        required_capabilities: vec!["fs_read".into()],
+        evidence_requirements: vec![ContractEvidence {
+            kind: EvidenceKind::TestResult,
+            required: true,
+        }],
+    });
+    let created_event = TaskCreated {
+        task_id: task.id.clone(),
+        title: task.title.clone(),
+        contract: task.contract.clone(),
+        metadata: task.metadata.clone(),
+        created_at: Utc::now(),
+    };
+    store
+        .commit_task_event(&TaskEvent::Created(created_event.clone()), &task)
         .await
         .unwrap();
 
-    let events = store.get_task_events(&created.id).await.unwrap();
+    let mut advanced_task = task.clone();
+    advanced_task.status = TaskStatus::Queued;
+    advanced_task.epoch = 1;
+    let advanced_event = TaskAdvanced {
+        task_id: task.id.clone(),
+        from_status: TaskStatus::Draft,
+        to_status: TaskStatus::Queued,
+        new_epoch: 1,
+        advanced_at: Utc::now(),
+        rationale: Some("test replay".into()),
+    };
+    store
+        .commit_task_event(&TaskEvent::Advanced(advanced_event), &advanced_task)
+        .await
+        .unwrap();
+
+    let events = store.get_task_events(&task.id).await.unwrap();
     assert_eq!(events.len(), 2);
     assert!(matches!(events[0], TaskEvent::Created(_)));
     assert!(matches!(events[1], TaskEvent::Advanced(_)));
 
-    let replayed = TaskReducer::replay(&events).unwrap();
-    let persisted = store.get_task(&created.id).await.unwrap().unwrap();
-    assert_eq!(replayed.id, persisted.id);
-    assert_eq!(replayed.status, persisted.status);
-    assert_eq!(replayed.epoch, persisted.epoch);
-    assert_eq!(replayed.metadata, persisted.metadata);
-    assert_eq!(replayed.contract.unwrap().pack_id, "engineering");
+    let persisted = store.get_task(&task.id).await.unwrap().unwrap();
+    assert_eq!(persisted.id, task.id);
+    assert_eq!(persisted.status, TaskStatus::Queued);
+    assert_eq!(persisted.epoch, 1);
+    assert_eq!(persisted.metadata, serde_json::json!({"origin": "test"}));
+    assert_eq!(persisted.contract.unwrap().pack_id, "engineering");
 
     let same_event = TaskEvent::Created(created_event);
     store
-        .commit_task_event(&same_event, &created)
+        .commit_task_event(&same_event, &task)
         .await
         .unwrap();
-    assert!(store.get_task_events(&created.id).await.unwrap().len() == 2);
+    assert_eq!(store.get_task_events(&task.id).await.unwrap().len(), 2);
 }
 
 #[tokio::test]

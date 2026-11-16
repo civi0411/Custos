@@ -5,6 +5,22 @@
 //! - `admissibility_and_compilation`: Validates admissibility gate and DAG loading.
 //! - `graph_runtime_execution`: Validates full execution through GraphRuntime & WorkerExecutor.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_runtime::oi::DecisionSnapshotExtractor;
 use custos_domain::oi::DecisionSnapshot;

@@ -149,21 +149,38 @@ pub struct CommandExecutionResult {
 
 #[async_trait]
 pub trait SandboxPort: Send + Sync {
+    fn driver_id(&self) -> &str {
+        "sandbox"
+    }
+
+    fn probe_capabilities(&self) -> Vec<String> {
+        vec![self.driver_id().to_string()]
+    }
+
     async fn execute(
         &self,
-        command: &SandboxCommand,
+        intent: &ActionIntent,
         permit: &Permit,
-    ) -> Result<CommandExecutionResult, DomainError>;
+    ) -> Result<ExecutionReceipt, DomainError>;
 }
 
 #[async_trait]
 pub trait CommandRunnerPort: Send + Sync {
+    async fn run_shell(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout_ms: u64,
+    ) -> Result<CommandExecutionResult, DomainError>;
+
     async fn run_command(
         &self,
         program: &str,
         args: &[String],
         cwd: &Path,
-    ) -> Result<CommandExecutionResult, DomainError>;
+    ) -> Result<CommandExecutionResult, DomainError> {
+        self.run_shell(&format!("{} {}", program, args.join(" ")), cwd, 60_000).await
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,25 +253,29 @@ impl GateReport {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnvironmentHandle {
     pub env_id: String,
-    pub workspace_id: WorkspaceId,
-    pub spec: EnvironmentSpec,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<WorkspaceId>,
+    pub working_dir: String,
     pub state: EnvironmentState,
     pub assurance: EnvironmentAssurance,
 }
 
 #[async_trait]
 pub trait EnvironmentPort: Send + Sync {
-    async fn provision(
-        &self,
-        workspace_id: &WorkspaceId,
-        spec: &EnvironmentSpec,
-    ) -> Result<EnvironmentHandle, DomainError>;
+    /// Allocates and provisions an environment strictly conforming to spec.
+    async fn provision(&self, spec: &EnvironmentSpec) -> Result<EnvironmentHandle, DomainError>;
 
-    async fn inspect(&self, env_id: &str) -> Result<EnvironmentHandle, DomainError>;
-    async fn verify(&self, env_id: &str) -> Result<GateReport, DomainError>;
-    async fn teardown(&self, env_id: &str) -> Result<(), DomainError>;
+    /// Verifies current environment state and measured invariants against the spec.
+    async fn verify(
+        &self,
+        handle: &EnvironmentHandle,
+        spec: &EnvironmentSpec,
+    ) -> Result<GateReport, DomainError>;
+
+    /// Idempotently releases the environment binding. Physical workspace removal is explicit.
+    async fn teardown(&self, handle: &EnvironmentHandle) -> Result<(), DomainError>;
 }
 

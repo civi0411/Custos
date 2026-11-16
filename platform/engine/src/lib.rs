@@ -10,7 +10,11 @@
 
 // In-crate backward-compatibility aliases:
 extern crate custos_contracts as custos_domain;
+extern crate custos_contracts as custos_core;
 pub use crate as custos_runtime;
+pub use crate as custos_packs;
+#[cfg(test)]
+extern crate custos_integrations as custos_adapters;
 
 pub mod custos_provider {
     pub use custos_contracts::inference::*;
@@ -53,6 +57,13 @@ pub use components as packs;
 
 // Re-exports from submodules matching core and runtime facades
 pub use authority::*;
+pub use custos_contracts::{DomainPack, DomainPackManifest, WorkerRole};
+pub use components::{
+    compile_governed_tools, create_default_pack_registry, create_default_skill_registry,
+    create_pack_registry_from_inventory, create_skill_registry_from_inventory,
+    get_manifest_for_pack, register_pack_verifiers_into_pipeline, resolve_pack_by_id,
+    DomainPackRegistry, ModuleRegistry,
+};
 pub use contracts::skill;
 pub use contracts::tool_gate::{ExecutionResult, ToolGate};
 pub use evidence::*;

@@ -10,8 +10,7 @@ description = "Custos Sovereign Quantitative Trading Workbench (Alpha discovery,
 
 [dependencies]
 custos-contracts = { workspace = true }
-custos-domain = { path = "../../platform/domain" }
-custos-core = { path = "../../platform/core" }
+custos-engine = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-trait = "0.1"

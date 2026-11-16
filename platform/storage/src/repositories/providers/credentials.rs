@@ -1,6 +1,6 @@
 //! Recoverable metadata operations; secret bytes are never written here.
 use super::ProviderRepository;
-pub use custos_core::contracts::credentials::{CredentialMetadata, CredentialOperation};
+pub use custos_contracts::{CredentialMetadata, CredentialOperation};
 use custos_domain::DomainError;
 use rusqlite::{params, OptionalExtension};
 

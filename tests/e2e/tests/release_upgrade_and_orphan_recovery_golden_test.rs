@@ -32,6 +32,22 @@
 //!      rather than dropping database records.
 //!    - Dirty workspace protection prevents destructive archive/deletion without explicit force consent.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use chrono::Utc;
 use custos_adapters::workspace::LocalWorkspaceProvider;
 use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};

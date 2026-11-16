@@ -4,6 +4,8 @@
 //! Pure Concrete I/O, AI Model Providers, System Drivers, Protocols, and External Connectors.
 
 extern crate self as custos_provider;
+extern crate custos_contracts as custos_domain;
+extern crate custos_contracts as custos_core;
 pub use crate as custos_adapters;
 
 pub mod compute;
