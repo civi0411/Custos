@@ -284,3 +284,4 @@ mod tests {
         db.detach_partition("aux").expect("detach aux");
     }
 }
+

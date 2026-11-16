@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::path::Path;
 use tokio::process::Command;
 
-use super::super::binaries::resolve_git_binary;
+use crate::host::binaries::resolve_git_binary;
 use super::git_discovery::{list_git_worktrees, parse_github_remote, resolve_deep_git_paths};
 
 #[derive(Debug, Clone)]

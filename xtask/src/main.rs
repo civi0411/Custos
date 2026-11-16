@@ -3,12 +3,21 @@ use clap::{Parser, Subcommand};
 use xshell::{cmd, Shell};
 
 fn source_capabilities(root: &std::path::Path) -> Result<std::collections::BTreeSet<String>> {
+    let integrations = root.join("platform/integrations/src");
     let adapters = root.join("platform/adapters/src");
     let ai = root.join("platform/ai/src");
-    let mut exports = std::fs::read_to_string(adapters.join("lib.rs"))?;
-    if let Ok(ai_exports) = std::fs::read_to_string(ai.join("lib.rs")) {
+    let mut exports = String::new();
+    if let Ok(integ_exports) = std::fs::read_to_string(integrations.join("lib.rs")) {
+        exports.push_str(&integ_exports);
         exports.push('\n');
+    }
+    if let Ok(adapters_exports) = std::fs::read_to_string(adapters.join("lib.rs")) {
+        exports.push_str(&adapters_exports);
+        exports.push('\n');
+    }
+    if let Ok(ai_exports) = std::fs::read_to_string(ai.join("lib.rs")) {
         exports.push_str(&ai_exports);
+        exports.push('\n');
     }
     let mut ids = std::collections::BTreeSet::new();
 
@@ -33,6 +42,7 @@ fn source_capabilities(root: &std::path::Path) -> Result<std::collections::BTree
     }
 
     let mut manifests = Vec::new();
+    collect_manifests(&integrations, &mut manifests)?;
     collect_manifests(&adapters, &mut manifests)?;
     collect_manifests(&ai, &mut manifests)?;
 

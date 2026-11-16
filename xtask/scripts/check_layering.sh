@@ -24,7 +24,7 @@ reject_source() {
     fi
 }
 reject_source 'tokio|rusqlite|reqwest|std::fs|std::net' platform/domain/src
-reject_source 'custos_runtime|custos_persistence|custos_storage|custos_adapters|custos_daemon|custos_protocol' platform/core/src
+reject_source 'custos_runtime|custos_persistence|custos_storage|custos_adapters|custos_integrations|custos_daemon|custos_protocol' platform/core/src
 reject_source 'rusqlite' platform/runtime/src/oi
 if [[ -d "platform/components/src" ]]; then
     reject_source 'rusqlite|reqwest' platform/components/src

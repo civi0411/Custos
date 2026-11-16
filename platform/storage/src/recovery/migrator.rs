@@ -139,3 +139,4 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../../migrations/0046_run_supervision.sql"))?;
     Ok(())
 }
+
