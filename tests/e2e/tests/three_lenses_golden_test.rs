@@ -7,6 +7,22 @@
 //! 4. Draft payload lock guarantees content immutability after approval.
 //! 5. Project/workspace switch preserves history, drafts, and context scope without leaking active runs or permissions.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_domain::{
     ConversationTurn, DomainError, SessionMode, SessionStatus, TurnActorKind, WorkbenchLens,
 };

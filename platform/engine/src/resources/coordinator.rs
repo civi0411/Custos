@@ -4,7 +4,7 @@
 //! of sovereign Agent Execution Environments across all four Custos lenses.
 
 use async_trait::async_trait;
-use custos_core::authority::EnvironmentGate;
+use crate::authority::EnvironmentGate;
 use custos_core::contracts::environment::{EnvironmentHandle, EnvironmentPort, GateReport};
 use custos_core::contracts::terminal::TerminalPort;
 use custos_domain::environment::{EnvironmentProfile, EnvironmentSpec, EnvironmentState};

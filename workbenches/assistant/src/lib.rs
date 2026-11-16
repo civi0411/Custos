@@ -3,6 +3,9 @@
 //! Authoritative mapping to Custos SADE Master Specification Part 12.
 //! Covers personal productivity, inbox triage, safe draft generation, calendar scheduling,
 //! and governed external mutations across the Copilot / Assistant Workbench Lens.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
+extern crate custos_engine as custos_runtime;
 
 pub mod application;
 pub mod contribution;

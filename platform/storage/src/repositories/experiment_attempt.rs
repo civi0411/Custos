@@ -7,7 +7,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
 
-use custos_core::contracts::checkpoint_store::PromotionOutcome;
+use custos_contracts::PromotionOutcome;
 use custos_domain::{
     new_id, DomainError, ExecState, ExecutionAttempt, Invocation, InvocationOutcome, ResourceState,
 };

@@ -11,7 +11,7 @@ use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::TaskService;
 use custos_domain::DomainError;
 use custos_persistence::SqliteTaskStore;
-use custos_provider::ModelPort;
+use custos_domain::ModelPort;
 use custos_runtime::session::SessionManager;
 use std::sync::Arc;
 
@@ -66,7 +66,7 @@ impl CustosRuntime {
                 );
                 Some(Arc::new(
                     custos_provider::local::NativeLocalModelAdapter::new(local_provider),
-                ) as Arc<dyn ModelPort>)
+                ) as Arc<dyn custos_provider::ModelPort>)
             }
             Err(err) => {
                 tracing::warn!(error = %err, "Local inference engine not available on this platform");

@@ -2,6 +2,8 @@
 //!
 //! Autonomous academic literature analysis, claim verification,
 //! note-taking, notebooks, and reproducible experiment execution.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
 
 pub mod application;
 pub mod contracts;

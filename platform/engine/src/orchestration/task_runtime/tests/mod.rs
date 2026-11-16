@@ -11,7 +11,7 @@ mod background;
 async fn cancel_only_changes_workers_of_the_selected_run() {
     use custos_core::contracts::storage::RunPort;
     let store = std::sync::Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let task = custos_core::TaskService::new(store.clone())
+    let task = crate::TaskService::new(store.clone())
         .create_task("Cancel scope".into())
         .await
         .unwrap();
@@ -329,7 +329,7 @@ async fn test_task_runtime_model_turn_generates_and_completes() {
 
 #[tokio::test]
 async fn test_task_runtime_recovers_persisted_completed_chat_turn_claim() {
-    use custos_core::contracts::kernel::TrustedKernel;
+    use crate::TrustedKernel;
     use custos_core::TaskStore;
     use custos_domain::{DispatchClaim, Task};
     use custos_storage::SqliteTaskStore;

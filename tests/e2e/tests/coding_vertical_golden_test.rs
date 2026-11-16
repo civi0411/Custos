@@ -7,6 +7,22 @@
 //! 4. Agent-Edited Tests Containment: Agent attempting to tamper with test files to bypass failure cannot fool the trusted evidence verifier.
 //! 5. Containment: Directory traversal and symlink escape attempts are rejected with zero mutations outside workspace.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_adapters::workspace::LocalWorkspaceProvider;
 use custos_core::contracts::sandbox::SandboxPort;

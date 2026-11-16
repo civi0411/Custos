@@ -4,6 +4,22 @@
 //! 1. `task_lifecycle_and_spans`: Task creation, status advancement, execution span recording, continuation packet persistence.
 //! 2. `persistence_restart_and_invariants`: Database reconnection integrity, continuation verification, terminal immutability, and optimistic concurrency.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
 use custos_persistence::SqliteTaskStore;

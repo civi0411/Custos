@@ -1,5 +1,6 @@
 use crate::session::journal::SessionJournal;
-use custos_core::{SessionStateMachine, SessionStore};
+use crate::task::SessionStateMachine;
+use custos_contracts::SessionStore;
 use custos_domain::{
     DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId,
     WorkbenchLens,

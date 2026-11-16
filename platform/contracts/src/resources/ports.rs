@@ -6,9 +6,9 @@ use crate::identity::error::DomainError;
 use crate::resources::workspace::WorkspaceId;
 use crate::resources::artifact::ArtifactRef;
 use crate::resources::compute::{
-    CloudPodLease, HardwareAdaptationPlan, ModelEvaluationReport, ModelEvaluationSpec,
+    CloudPodLease,
     OptionalConsumerPlacement, TrainingCheckpointManifest,
-    TrainingExecutionReceipt, TrainingStepTelemetry,
+    TrainingStepTelemetry,
 };
 use crate::resources::workspace::{
     DirtyManifest, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus,
@@ -197,16 +197,39 @@ pub trait SupervisionStorePort: Send + Sync {
         &self,
         run_id: &str,
     ) -> Result<Option<SupervisionRunRecord>, DomainError>;
-    async fn list_spans_for_run(&self, run_id: &str) -> Result<Vec<RunStepSpan>, DomainError>;
-    async fn list_logs_for_run(
+
+    async fn list_runs(
         &self,
-        run_id: &str,
-        severity: Option<crate::task::run::LogSeverity>,
+        filter: &crate::task::run::SupervisionRunFilter,
+    ) -> Result<Vec<SupervisionRunRecord>, DomainError>;
+
+    async fn list_run_spans(&self, run_id: &str) -> Result<Vec<RunStepSpan>, DomainError>;
+
+    async fn list_logs(
+        &self,
+        filter: &crate::task::run::SupervisionLogFilter,
     ) -> Result<Vec<SupervisionLogEntry>, DomainError>;
-    async fn list_findings_for_task(
+
+    async fn list_run_errors(&self, run_id: &str) -> Result<Vec<StepError>, DomainError>;
+
+    async fn list_errors(
         &self,
-        task_id: &str,
+        workbench_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<StepError>, DomainError>;
+
+    async fn list_findings(
+        &self,
+        filter: &crate::task::run::SupervisionFindingFilter,
     ) -> Result<Vec<SupervisionFinding>, DomainError>;
+
+    async fn count_overview_stats(&self) -> Result<(usize, usize, usize, usize, usize), DomainError>;
+
+    async fn prune_before(
+        &self,
+        log_cutoff_ms: i64,
+        span_cutoff_ms: i64,
+    ) -> Result<usize, DomainError>;
 }
 
 pub trait StoragePort:
@@ -300,12 +323,12 @@ pub struct ComputeTelemetry {
     pub timestamp_epoch_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttemptObservation {
-    pub attempt_id: String,
-    pub telemetry: Vec<ComputeTelemetry>,
-    pub latest_checkpoint: Option<TrainingCheckpointManifest>,
-    pub error: Option<String>,
+    pub exec_state: crate::evidence::experiment_attempt::ExecState,
+    pub resource_state: crate::evidence::experiment_attempt::ResourceState,
+    pub progress: crate::evidence::experiment_attempt::ProgressTriplet,
+    pub exit_code: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,50 +351,130 @@ pub trait ComputePort: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PreflightReport {
-    pub admitted: bool,
-    pub verdict: String,
-    pub plan: Option<HardwareAdaptationPlan>,
-    pub violations: Vec<String>,
+    pub allowed: bool,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+impl PreflightReport {
+    pub fn ok() -> Self {
+        Self {
+            allowed: true,
+            blockers: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    pub fn admitted(verdict: &str) -> Self {
+        Self {
+            allowed: true,
+            blockers: Vec::new(),
+            warnings: vec![verdict.to_string()],
+        }
+    }
+
+    pub fn blocked(reasons: Vec<String>) -> Self {
+        Self {
+            allowed: false,
+            blockers: reasons,
+            warnings: Vec::new(),
+        }
+    }
 }
 
 #[async_trait]
 pub trait WorkloadAdmissionPort: Send + Sync {
+    /// Discovers all available compute devices on the local host or configured targets
+    async fn discover_devices(&self) -> Result<Vec<crate::resources::compute::ComputeDeviceRef>, DomainError>;
+
+    /// Requests admission for a compute workload (notebook, training, eval, inference)
+    async fn admit_workload(
+        &self,
+        request: &crate::resources::compute::WorkloadAdmissionRequest,
+    ) -> Result<crate::resources::compute::WorkloadAdmissionVerdict, DomainError>;
+
+    /// Releases an active workload lease
+    async fn release_lease(&self, lease_id: &str) -> Result<(), DomainError>;
+
+    /// Lists all active workload leases, optionally filtered by device
+    async fn list_active_leases(
+        &self,
+        device_id: Option<&str>,
+    ) -> Result<Vec<crate::resources::compute::WorkloadLease>, DomainError>;
+
     async fn admit_recipe(
         &self,
-        recipe: &crate::resources::compute::FrozenTrainingRecipe,
-        placement: &OptionalConsumerPlacement,
-    ) -> Result<PreflightReport, DomainError>;
+        _recipe: &crate::resources::compute::FrozenTrainingRecipe,
+        _placement: &OptionalConsumerPlacement,
+    ) -> Result<PreflightReport, DomainError> {
+        Ok(PreflightReport::admitted("admission_ok"))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TargetCapabilities {
-    pub accelerator_type: String,
-    pub vram_mb: u64,
-    pub supports_half_precision: bool,
-    pub supports_flash_attention: bool,
-    pub can_offload_cpu: bool,
+    pub supports_interactive_control: bool,
+    pub supports_checkpoint_request: bool,
+    pub supports_direct_storage_upload: bool,
+    pub supports_live_telemetry_streaming: bool,
+    pub supports_graceful_stop: bool,
+}
+
+impl Default for TargetCapabilities {
+    fn default() -> Self {
+        Self {
+            supports_interactive_control: false,
+            supports_checkpoint_request: false,
+            supports_direct_storage_upload: true,
+            supports_live_telemetry_streaming: false,
+            supports_graceful_stop: true,
+        }
+    }
 }
 
 #[async_trait]
 pub trait ExecutionTargetPort: Send + Sync {
     async fn capabilities(&self) -> TargetCapabilities;
-    async fn evaluate_model(
+    async fn preflight(&self, recipe_id: &str) -> Result<PreflightReport, DomainError>;
+    async fn submit(
         &self,
-        spec: &ModelEvaluationSpec,
-    ) -> Result<ModelEvaluationReport, DomainError>;
-    async fn execute_step(
+        attempt: &crate::evidence::experiment_attempt::ExecutionAttempt,
+        idempotency_key: &str,
+    ) -> Result<crate::evidence::experiment_attempt::ExternalJobRef, DomainError>;
+    async fn observe(
         &self,
-        step: u64,
-        batch_size: u32,
-    ) -> Result<TrainingExecutionReceipt, DomainError>;
+        external_ref: &crate::evidence::experiment_attempt::ExternalJobRef,
+    ) -> Result<AttemptObservation, DomainError>;
+    async fn request_checkpoint(
+        &self,
+        external_ref: &crate::evidence::experiment_attempt::ExternalJobRef,
+    ) -> Result<(), DomainError>;
+    async fn stop_job(
+        &self,
+        external_ref: &crate::evidence::experiment_attempt::ExternalJobRef,
+    ) -> Result<(), DomainError>;
+    async fn release_compute(
+        &self,
+        external_ref: &crate::evidence::experiment_attempt::ExternalJobRef,
+    ) -> Result<(), DomainError>;
+    async fn collect_artifacts(
+        &self,
+        external_ref: &crate::evidence::experiment_attempt::ExternalJobRef,
+    ) -> Result<Vec<crate::evidence::execution_record::ExecutionArtifact>, DomainError>;
 }
 
-#[async_trait]
 pub trait ExecutionTargetResolver: Send + Sync {
-    async fn resolve(
+    #[allow(clippy::too_many_arguments)]
+    fn resolve(
         &self,
-        placement: &OptionalConsumerPlacement,
-    ) -> Result<std::sync::Arc<dyn ExecutionTargetPort>, DomainError>;
+        backend: crate::resources::compute::ComputeBackendKind,
+        work_dir: &std::path::Path,
+        ssh_host: Option<&str>,
+        ssh_port: Option<u16>,
+        ssh_user: Option<&str>,
+        pod_id: Option<&str>,
+        cloud_api_key: Option<&str>,
+    ) -> std::sync::Arc<dyn ExecutionTargetPort>;
 }
 
 // ---------------------------------------------------------------------------

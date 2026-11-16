@@ -53,6 +53,33 @@ impl OutboxEntry {
         idempotency_key: Option<String>,
         status: OutboxStatus,
         created_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            task_id: task_id.into(),
+            action_id: action_id.into(),
+            permit_id: permit_id.into(),
+            argument_digest: argument_digest.into(),
+            idempotency_key,
+            status,
+            created_at,
+            receipt: None,
+            recipient: None,
+            payload_json: None,
+            error_message: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_full(
+        id: impl Into<String>,
+        task_id: impl Into<String>,
+        action_id: impl Into<String>,
+        permit_id: impl Into<String>,
+        argument_digest: impl Into<String>,
+        idempotency_key: Option<String>,
+        status: OutboxStatus,
+        created_at: DateTime<Utc>,
         receipt: Option<ExecutionReceipt>,
         recipient: Option<String>,
         payload_json: Option<String>,
@@ -121,19 +148,20 @@ pub struct CommandLedgerEntry {
     pub command_id: String,
     pub method: String,
     pub payload_digest: String,
-    pub scope: Option<String>,
-    pub status: String,
-    pub result_json: Option<String>,
+    pub result_json: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandAdmission {
-    Admitted,
-    Completed(String),
+    /// Newly admitted command, caller may proceed with execution
+    New,
+    /// Already completed with the same method and fingerprint, caller should return cached result
+    Replay(String),
+    /// Currently executing in flight
     InFlight,
+    /// Same command_id attempted with a different method or payload/scope
     Conflict(String),
 }
 

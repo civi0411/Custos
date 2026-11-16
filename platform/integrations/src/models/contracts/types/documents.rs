@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+pub use crate::connectors::documents::SourceFetchAdapter;
+
 use crate::conversation::message::DocumentContent;
 
 #[derive(Debug, Copy, Clone)]

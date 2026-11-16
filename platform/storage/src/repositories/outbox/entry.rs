@@ -1,6 +1,6 @@
 use super::OutboxRepository;
 use async_trait::async_trait;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+use custos_contracts::{OutboxEntry, OutboxPort, OutboxStatus};
 use custos_domain::{DomainError, ExecutionReceipt};
 use rusqlite::{params, OptionalExtension};
 

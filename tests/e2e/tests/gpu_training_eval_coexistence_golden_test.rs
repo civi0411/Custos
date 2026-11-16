@@ -9,6 +9,22 @@
 //! 6. In-Flight Inference Request Eviction Protection (eviction blocked while requests in-flight; clean release once drained).
 //! 7. Training Fault & OOM Recovery (simulated failure immediately reclaims lease, zero zombie allocations).
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use std::sync::Arc;
 
 use custos_provider::local::{evict_model, preload_model_with_profile, InferenceRuntime};

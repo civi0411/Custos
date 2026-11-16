@@ -2,15 +2,9 @@
 resolver = "2"
 members = [
     "platform/contracts",
-    "platform/domain",
-    "platform/core",
-    "platform/engine",
-    "platform/integrations",
-    "platform/ai",
     "platform/storage",
-    "platform/runtime",
-    "platform/adapters",
-    "platform/components",
+    "platform/integrations",
+    "platform/engine",
     "apps/daemon",
     "apps/cli",
     "apps/desktop/native",
@@ -43,21 +37,15 @@ description = "Custos Sovereign Agentic Operating System"
 # Custos Workspace Packages (Inward Dependency Boundaries)
 # ═══════════════════════════════════════════════════════════════════════
 custos-contracts = { path = "platform/contracts" }
-custos-domain = { path = "platform/domain" }
-custos-core = { path = "platform/core" }
-custos-engine = { path = "platform/engine" }
-custos-integrations = { path = "platform/integrations" }
-custos-provider = { path = "platform/ai" }
 custos-storage = { path = "platform/storage" }
-custos-persistence = { package = "custos-storage", path = "platform/storage" }
-custos-runtime = { path = "platform/runtime" }
-custos-adapters = { path = "platform/adapters" }
+custos-integrations = { path = "platform/integrations" }
+custos-engine = { path = "platform/engine" }
+custos-domain = { package = "custos-contracts", path = "platform/contracts" }
 custos-protocol = { path = "sdk/protocol" }
 custos-sdk = { path = "sdk/client-rust" }
 custos-daemon = { path = "apps/daemon" }
 custos-cli = { path = "apps/cli" }
 custos-desktop = { path = "apps/desktop/native" }
-custos-packs = { path = "platform/components", default-features = false }
 custos-workbench-quant = { path = "workbenches/quant" }
 custos-workbench-research = { path = "workbenches/research" }
 custos-workbench-coding = { path = "workbenches/coding" }

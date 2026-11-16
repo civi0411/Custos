@@ -1,6 +1,6 @@
 use super::OutboxRepository;
 use async_trait::async_trait;
-use custos_core::contracts::storage::EffectLedgerPort;
+use custos_contracts::EffectLedgerPort;
 use custos_domain::{DomainError, EffectAttempt, EffectStatus, ExecutionReceipt};
 use rusqlite::{params, OptionalExtension};
 

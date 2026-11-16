@@ -2,7 +2,7 @@ use super::port::{
     AttachMode, BridgePort, ForkReceipt, RecallReceipt, SteerReceipt, SteerResult, TaskObservation,
 };
 use async_trait::async_trait;
-use custos_core::{CreateTask, TaskService};
+use crate::task::{CreateTask, TaskService};
 use custos_domain::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
 use crate::session::SessionManager;
 use crate::workflow::TaskRuntime;
