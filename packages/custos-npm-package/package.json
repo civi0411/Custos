@@ -4,14 +4,23 @@
   "description": "Custos AI Agent with Dual-Cognitive Architecture (System 1 & System 2)",
   "main": "bin/index.js",
   "bin": {
-    "custos": "bin/index.js"
+    "custos": "bin/index.js",
+    "custos-repl": "repl/custos-cli.js"
   },
   "scripts": {
-    "postinstall": "node bin/index.js --install-only"
+    "postinstall": "node bin/index.js --install-only",
+    "repl": "node repl/custos-cli.js"
   },
   "files": [
-    "bin/"
+    "bin/",
+    "repl/"
   ],
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.2",
+    "boxen": "^9.0.0",
+    "chalk": "^6.0.1",
+    "ora": "^9.4.1"
+  },
   "keywords": [
     "ai",
     "agent",
