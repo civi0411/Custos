@@ -4,7 +4,7 @@
   "scripts": {
     "build": "npm --prefix apps/desktop/ui run build",
     "dev": "npm --prefix apps/desktop/ui run dev",
-    "cli": "npm --prefix ui/cli start",
+    "cli": "npm --prefix packages/custos-npm-package run repl --",
     "tauri:desktop:dev": "npm --prefix apps/desktop/ui run tauri:dev --",
     "tauri:desktop:build": "npm --prefix apps/desktop/ui run tauri:build --"
   }

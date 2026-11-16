@@ -134,6 +134,8 @@ eggs/
 lib/
 !**/src/**/lib/
 !**/src/**/lib/**
+!/packages/custos-npm-package/repl/lib/
+!/packages/custos-npm-package/repl/lib/**
 lib64/
 parts/
 sdist/
