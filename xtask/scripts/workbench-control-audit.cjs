@@ -5,7 +5,7 @@
  * Counts are declarations, not rendered controls or a transitive call graph.
  */
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
-const ts = require('../../ui/desktop/node_modules/typescript');
+const ts = require('../../apps/desktop/ui/node_modules/typescript');
 const base = path.resolve(process.argv[2] || path.join(__dirname, '../../..'));
 const outputPath = path.resolve(process.argv[3] || path.join(__dirname, '../../docs/development/workbench-control-inventory.json'));
 const projects = [['orca','orca/src/renderer/src'],['open-science','open-science/apps/desktop/src']];

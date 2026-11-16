@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "ai.custos.desktop",
   "build": {
-    "beforeDevCommand": "npm --prefix ../../../ui/desktop run dev -- --port 1420",
+    "beforeDevCommand": "npm --prefix ../ui run dev -- --port 1420",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --prefix ../../../ui/desktop run build",
-    "frontendDist": "../../../ui/desktop/dist"
+    "beforeBuildCommand": "npm --prefix ../ui run build",
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "windows": [

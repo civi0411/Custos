@@ -234,7 +234,7 @@ fn main() -> Result<()> {
             println!("==> [1/5] Workbench & Capability Manifest Invariants");
             validate_packs()?;
             println!("==> [2/5] Desktop UI Build & Typecheck");
-            cmd!(sh, "npm --prefix ui/desktop run build").run()?;
+            cmd!(sh, "npm --prefix apps/desktop/ui run build").run()?;
             println!("==> [3/5] Canvas Smoke Invariants");
             cmd!(sh, "node --test tests/desktop/canvas-smoke.mjs tests/desktop/model-catalog-smoke.mjs xtask/scripts/checks-smoke.mjs").run()?;
             println!("==> [4/5] Architecture Invariants & Contracts");
