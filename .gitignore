@@ -358,7 +358,7 @@ worktrees/
 !platform/**
 /cache/
 .cache/
-!ui/desktop/src/app/cache/**
+!apps/desktop/ui/src/app/cache/**
 
 # Logs
 logs/

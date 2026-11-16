@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import test from 'node:test';
-const require = createRequire(new URL('../../ui/desktop/package.json', import.meta.url));
+const require = createRequire(new URL('../../apps/desktop/ui/package.json', import.meta.url));
 const ts = require('typescript');
-const source = fs.readFileSync(new URL('../../ui/desktop/src/types/canvas.ts', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../../apps/desktop/ui/src/types/canvas.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 const exports = {};
 vm.runInNewContext(compiled, { exports });
@@ -100,20 +100,20 @@ test('changing focused resources while zoomed shows the destination group', () =
 });
 
 function resolveSrcPath(path) {
-  if (fs.existsSync(new URL(`../../ui/desktop/src/${path}`, import.meta.url))) {
+  if (fs.existsSync(new URL(`../../apps/desktop/ui/src/${path}`, import.meta.url))) {
     return path;
   }
   if (path.includes('components/workbenches/copilot/')) {
     const candidate = path.replace('components/workbenches/copilot/', 'components/workbenches/assistant/');
-    if (fs.existsSync(new URL(`../../ui/desktop/src/${candidate}`, import.meta.url))) return candidate;
+    if (fs.existsSync(new URL(`../../apps/desktop/ui/src/${candidate}`, import.meta.url))) return candidate;
   }
   if (path.includes('components/workbenches/engineering/')) {
     const candidate = path.replace('components/workbenches/engineering/', 'components/workbenches/coding/');
-    if (fs.existsSync(new URL(`../../ui/desktop/src/${candidate}`, import.meta.url))) return candidate;
+    if (fs.existsSync(new URL(`../../apps/desktop/ui/src/${candidate}`, import.meta.url))) return candidate;
   }
   if (path.includes('features/')) {
     const candidate = path.replace('features/', 'components/modals/');
-    if (fs.existsSync(new URL(`../../ui/desktop/src/${candidate}`, import.meta.url))) return candidate;
+    if (fs.existsSync(new URL(`../../apps/desktop/ui/src/${candidate}`, import.meta.url))) return candidate;
   }
   return path;
 }
@@ -121,18 +121,18 @@ function resolveSrcPath(path) {
 // Isolate pure presentation/wire helpers with the repository's existing compiler.
 function helpers(path, names, globals = {}) {
   path = resolveSrcPath(path);
-  let source = fs.readFileSync(new URL(`../../ui/desktop/src/${path}`, import.meta.url), 'utf8');
+  let source = fs.readFileSync(new URL(`../../apps/desktop/ui/src/${path}`, import.meta.url), 'utf8');
   if (source.includes("from './normalizers'")) {
-    const normSource = fs.readFileSync(new URL('../../ui/desktop/src/api/normalizers.ts', import.meta.url), 'utf8');
+    const normSource = fs.readFileSync(new URL('../../apps/desktop/ui/src/api/normalizers.ts', import.meta.url), 'utf8');
     source = normSource + '\n' + source;
   }
   if (source.includes("from './transport'")) {
-    const transSource = fs.readFileSync(new URL('../../ui/desktop/src/api/transport.ts', import.meta.url), 'utf8');
+    const transSource = fs.readFileSync(new URL('../../apps/desktop/ui/src/api/transport.ts', import.meta.url), 'utf8');
     source = transSource + '\n' + source;
   }
   for (const contrib of ['coding', 'research', 'assistant', 'quant']) {
     if (source.includes(`'./${contrib}/contribution'`)) {
-      const contribSource = fs.readFileSync(new URL(`../../ui/desktop/src/components/workbenches/${contrib}/contribution.ts`, import.meta.url), 'utf8');
+      const contribSource = fs.readFileSync(new URL(`../../apps/desktop/ui/src/components/workbenches/${contrib}/contribution.ts`, import.meta.url), 'utf8');
       source = contribSource + '\n' + source;
     }
   }
@@ -361,7 +361,7 @@ test('GitHub login output preserves device code and strips terminal escape seque
 // Execute the actual nested event handlers, without mounting editors or starting runtimes.
 function nestedHandler(path, predicate, globals) {
   path = resolveSrcPath(path);
-  const source = fs.readFileSync(new URL(`../../ui/desktop/src/${path}`, import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL(`../../apps/desktop/ui/src/${path}`, import.meta.url), 'utf8');
   const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let expression;
   function visit(node) {

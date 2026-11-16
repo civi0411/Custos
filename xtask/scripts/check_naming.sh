@@ -16,7 +16,7 @@ if rg -n '^name\s*=\s*"goose([_-]|"|$)' platform apps sdk workbenches --glob 'Ca
 fi
 
 if rg -n '"name"\s*:\s*"(@[^"/]+/)?goose([_-]|"|$)' \
-  ui/desktop packages --glob 'package.json'; then
+  apps/desktop/ui packages --glob 'package.json'; then
   echo "ERROR: Custos-owned application packages must not use Goose product names." >&2
   failures=1
 fi
