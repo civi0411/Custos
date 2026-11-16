@@ -213,7 +213,7 @@ impl TrainingCheckpointManifest {
                     &self.dataset_cursor,
                 ]
                 .iter()
-                .any(|v| v.as_ref().is_none_or(|s| s.trim().is_empty()))
+                .any(|v| v.as_ref().map_or(true, |s| s.trim().is_empty()))
                 || !self.files.iter().any(|f| f.required_for_state_resume))
         {
             return Err(invalid("Full-state resume requires engine/model/data references and inventoried training state"));

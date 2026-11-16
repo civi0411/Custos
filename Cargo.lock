@@ -1364,20 +1364,14 @@ dependencies = [
 name = "custos-contracts"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
- "base64 0.21.7",
- "blake3",
  "bytes",
  "chrono",
  "futures",
  "hex",
- "regex",
- "rmcp",
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "strum",
  "test-case",
  "thiserror 1.0.69",
  "tokio",

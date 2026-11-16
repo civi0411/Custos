@@ -1,5 +1,7 @@
 //! Custos Canonical Zero-I/O Domain Models, Contracts, and SPI Trait Ports
 
+#![allow(clippy::module_inception)]
+
 pub mod authority;
 pub mod context;
 pub mod contributions;

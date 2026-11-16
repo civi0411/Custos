@@ -63,45 +63,6 @@ pub struct TerminalOutputChunk {
     pub is_eof: bool,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_terminal_session_serialization_roundtrip() {
-        let session = TerminalSession {
-            id: "term-123".into(),
-            workspace_id: "ws-abc".into(),
-            working_dir: "/tmp/ws".into(),
-            command: "/bin/zsh".into(),
-            cols: 80,
-            rows: 24,
-            status: TerminalSessionStatus::Active,
-            created_at: 1700000000,
-            closed_at: None,
-        };
-
-        let json = serde_json::to_string(&session).unwrap();
-        let decoded: TerminalSession = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.id, "term-123");
-        assert_eq!(decoded.cols, 80);
-        assert_eq!(decoded.status, TerminalSessionStatus::Active);
-    }
-
-    #[test]
-    fn test_terminal_chunk_seq_continuity() {
-        let chunk = TerminalOutputChunk {
-            session_id: "term-123".into(),
-            start_seq: 100,
-            next_seq: 150,
-            data: "hello world".into(),
-            is_eof: false,
-        };
-        assert_eq!(chunk.next_seq, 150);
-        assert!(!chunk.is_eof);
-    }
-}
-
 use async_trait::async_trait;
 use std::path::Path;
 use crate::identity::error::DomainError;
@@ -187,4 +148,43 @@ pub trait TerminalDriverPort: Send + Sync {
         rows: u16,
         consumer: std::sync::Arc<dyn TerminalOutputConsumer>,
     ) -> std::io::Result<Box<dyn TerminalProcessHandle>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_session_serialization_roundtrip() {
+        let session = TerminalSession {
+            id: "term-123".into(),
+            workspace_id: "ws-abc".into(),
+            working_dir: "/tmp/ws".into(),
+            command: "/bin/zsh".into(),
+            cols: 80,
+            rows: 24,
+            status: TerminalSessionStatus::Active,
+            created_at: 1700000000,
+            closed_at: None,
+        };
+
+        let json = serde_json::to_string(&session).unwrap();
+        let decoded: TerminalSession = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.id, "term-123");
+        assert_eq!(decoded.cols, 80);
+        assert_eq!(decoded.status, TerminalSessionStatus::Active);
+    }
+
+    #[test]
+    fn test_terminal_chunk_seq_continuity() {
+        let chunk = TerminalOutputChunk {
+            session_id: "term-123".into(),
+            start_seq: 100,
+            next_seq: 150,
+            data: "hello world".into(),
+            is_eof: false,
+        };
+        assert_eq!(chunk.next_seq, 150);
+        assert!(!chunk.is_eof);
+    }
 }

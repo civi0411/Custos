@@ -207,13 +207,13 @@ impl ExecutionRecord {
             }
         }
         if let Some(step) = self.latest_protected_checkpoint_step {
-            if self.checkpoint.as_ref().is_none_or(|checkpoint| {
+            if self.checkpoint.as_ref().map_or(true, |checkpoint| {
                 checkpoint.commit_status != CheckpointCommitStatus::CommittedProtected
                     || checkpoint.global_step != step
             }) || self.last_protected_at.is_none()
                 || self
                     .latest_local_checkpoint_step
-                    .is_none_or(|local| local < step)
+                    .map_or(true, |local| local < step)
             {
                 return Err(DomainError::Validation(
                     "Protected progress requires matching committed checkpoint metadata".into(),
