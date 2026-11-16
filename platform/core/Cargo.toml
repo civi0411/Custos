@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Custos Trusted Core: Kernel State Machine, Authority, Capabilities, and Evidence"
 
 [dependencies]
+custos-contracts = { workspace = true }
 custos-domain = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

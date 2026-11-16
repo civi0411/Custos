@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "platform/contracts",
     "platform/domain",
     "platform/core",
     "platform/ai",
@@ -39,6 +40,7 @@ description = "Custos Sovereign Agentic Operating System"
 # ═══════════════════════════════════════════════════════════════════════
 # Custos Workspace Packages (Inward Dependency Boundaries)
 # ═══════════════════════════════════════════════════════════════════════
+custos-contracts = { path = "platform/contracts" }
 custos-domain = { path = "platform/domain" }
 custos-core = { path = "platform/core" }
 custos-provider = { path = "platform/ai" }
