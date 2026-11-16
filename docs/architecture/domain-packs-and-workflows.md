@@ -1,6 +1,6 @@
 # Domain Packs và workflow Coding, Research, Assistant
 
-**Kiến trúc đích cho Custos SADE.** Master [Parts 10–13](../../Custos.md) giữ quyết định; [plan §12–16](../development/workspace-restructuring-plan.md#12-đường-chạy-contracts-và-resource-lifecycle) giữ contracts, cost core, packets và evaluation. Artifact names bên dưới là vocabulary đích, chưa chứng nhận tất cả types/modules đã tồn tại. [Catalog](../development/codebase-architecture.md) xác định physical source.
+**Kiến trúc đích cho Custos SADE.** Master [codebase architecture](../development/codebase-architecture.md) giữ contracts, cost core, packets và evaluation. Artifact names bên dưới là vocabulary đích, chưa chứng nhận tất cả types/modules đã tồn tại. [Catalog](../development/codebase-architecture.md) xác định physical source.
 
 Ba miền cùng dùng Task/run/workspace, source/context, authority, usage và evidence. Pack định nghĩa semantics và cách kiểm kết quả. Mỗi pack có thể dùng độc lập với model/harness phù hợp; không có pipeline ba agent bắt buộc.
 
@@ -140,7 +140,7 @@ Economical default scoped retrieval, deterministic time/identity, stable persona
 | Assistant | assistant skills/profile/verifiers/trigger semantics | workflow/continuation/budget/effects | adapters contacts/mail/calendar/notes/notifications; outbox |
 | Economics | Pack features/quality/fixtures | runtime OI/context/judgment, core budget | provider usage/cache profiles; persistence attempt ledger |
 
-Module roots giữ trong `workbenches/<pack>/src/` (và registry/foundation dùng chung ở `platform/components/src/`), foundations theo [plan mapping](../development/workspace-restructuring-plan.md#13-cost-core-policy-estimator-ledger-và-projections). Extend existing paths/types; proposed workspace/experiment/connectors chỉ tạo khi có behavior. Không copy semantics vào mỗi MCP/harness adapter.
+Module roots giữ trong `workbenches/<pack>/src/` (và registry/foundation dùng chung ở `platform/components/src/`), foundations theo [codebase architecture](../development/codebase-architecture.md). Extend existing paths/types; proposed workspace/experiment/connectors chỉ tạo khi có behavior. Không copy semantics vào mỗi MCP/harness adapter.
 
 ModelPort path nhận tool loop/context/recipes từ Custos. Native AgentRuntimePort giữ loop và receive context/skills/capabilities theo support thật; Custos verify artifacts ngoài harness. Unsupported injection/resume/usage được khai báo. Native coding agent có thể chạy research analysis nếu environment/tool phù hợp; không cần ba agent brands cho ba pack.
 
@@ -179,4 +179,4 @@ Parent completion kiểm obligations từng miền: paper supported không tự 
 | Assistant | Ambiguous contacts/forged approval/payload-account drift/DST/timeout/replayed trigger/revoke | Recipient/payload/time/status, duplicates/false-sent, approval effort/cost |
 | Cross-pack | Private leakage/implicit grant/wrong revision/partial obligation | Combined criteria, provenance/authority, resume/handoff effort |
 
-Operational facts, semantic assessor và human rubric phối hợp theo criterion. Simulator/test pass không là product benchmark; [plan §16](../development/workspace-restructuring-plan.md#16-evaluation-và-release-gate-không-tự-chứng-minh) giữ paired baselines và publication gates.
+Operational facts, semantic assessor và human rubric phối hợp theo criterion. Simulator/test pass không là product benchmark; [codebase architecture](../development/codebase-architecture.md) giữ paired baselines và publication gates.

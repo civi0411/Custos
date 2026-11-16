@@ -4,7 +4,7 @@
 
 **Phạm vi chính:** các thành phần bên trong sản phẩm thực sự tiêu thụ GPU: notebook, training/finetune, inference và evaluation; cách chúng chọn target, xin quyền/tài nguyên, thực thi, thu kết quả, chia sẻ và release. Colab/Kaggle/GPU thuê là execution targets, không phải các thành phần nghiệp vụ riêng.
 
-Đây là decomposition của [F04/F06/F08/F10/F11](sade-core-refactor-plan.md#17-superplan-hoàn-thiện-sau-audit), không campaign refactor cạnh tranh. [Remote notebook](../architecture/remote-compute-colab-kaggle.md#41-notebook-compute-binding-and-recovery-design) giữ kernel protocol; [checkpoint relay](../architecture/compute-relay-and-heterogeneous-failover.md) giữ backup/handoff; [GPU thuê](../architecture/remote-compute-external-gpu.md) giữ cloud/host lifecycle. File này chốt consumers, shared ownership và thứ tự nối vào sản phẩm.
+Đây là decomposition của [runtime composition](../development/runtime-composition-baseline.md), không campaign refactor cạnh tranh. [Remote notebook](../architecture/remote-compute-colab-kaggle.md#41-notebook-compute-binding-and-recovery-design) giữ kernel protocol; [checkpoint relay](../architecture/compute-relay-and-heterogeneous-failover.md) giữ backup/handoff; [GPU thuê](../architecture/remote-compute-external-gpu.md) giữ cloud/host lifecycle. File này chốt consumers, shared ownership và thứ tự nối vào sản phẩm.
 
 ## 1. Các thành phần nào dùng GPU?
 
@@ -26,12 +26,12 @@ Model API cloud không phải GPU lease mà Custos sở hữu. Native agent có 
 
 | Source hiện có | Reuse | Chưa được suy ra |
 |---|---|---|
-| [local_inference/mod.rs](../../crates/custos-adapters/src/local_inference/mod.rs) | InferenceRuntime, model slots/cold-load coordination, loaded-model operations | Đã có arbitration chung với arbitrary notebook/training processes |
-| [local_inference/backend.rs](../../crates/custos-adapters/src/local_inference/backend.rs) | Backend load/generate contracts và model settings | Backend nào cũng hỗ trợ cùng accelerator/training |
-| [notebook coordinator](../../crates/custos-runtime/src/notebook/coordinator.rs) | Persistent worker/epochs/queue; source đang được refactor nên recheck trước patch | GPU binding/remote kernel/full Jupyter semantics đã hoàn chỉnh |
-| [compute contracts](../../crates/custos-core/src/contracts/compute.rs) | Probe/telemetry/allocation/release và compatibility vocabulary | Có production adapters cho mọi cloud hoặc job lifecycle đầy đủ |
-| [recipe](../../crates/custos-domain/src/task/recipe.rs), [execution record](../../crates/custos-domain/src/evidence/execution_record.rs) | Experiment inputs/env/progress/lineage | Recipe ID mutable tự là immutable launch specification |
-| [checkpoint verifier](../../crates/custos-adapters/src/tools/checkpoint.rs) | Local bounded integrity verification | Remote commit attestation hoặc optimizer-state restore |
+| [local_inference/mod.rs](../../platform/ai/src/local/local_inference/mod.rs) | InferenceRuntime, model slots/cold-load coordination, loaded-model operations | Đã có arbitration chung với arbitrary notebook/training processes |
+| [local_inference/backend.rs](../../platform/ai/src/local/local_inference/runtime/backend.rs) | Backend load/generate contracts và model settings | Backend nào cũng hỗ trợ cùng accelerator/training |
+| [notebook coordinator](../../platform/runtime/src/environment/notebook/coordinator/mod.rs) | Persistent worker/epochs/queue; source đang được refactor nên recheck trước patch | GPU binding/remote kernel/full Jupyter semantics đã hoàn chỉnh |
+| [compute contracts](../../platform/core/src/contracts/mod.rs) | Probe/telemetry/allocation/release và compatibility vocabulary | Có production adapters cho mọi cloud hoặc job lifecycle đầy đủ |
+| [recipe](../../platform/domain/src/task/recipe.rs), [execution record](../../platform/domain/src/evidence/mod.rs) | Experiment inputs/env/progress/lineage | Recipe ID mutable tự là immutable launch specification |
+| [checkpoint verifier](../../platform/adapters/src/connectors/compute/checkpoint.rs) | Local bounded integrity verification | Remote commit attestation hoặc optimizer-state restore |
 | [TrainingRunsPane](../../ui/desktop/src/components/workbenches/research/TrainingRunsPane.tsx) | Existing Lab inspection/resource host | Có runner vì UI đã có Training tab |
 
 Mọi proposed path dưới đây chỉ tạo với functional packet, port/fixtures/catalog. Không sinh cả cây rỗng hoặc namespace RPC mới theo tài liệu.
@@ -300,6 +300,6 @@ Rollout/rollback: first additive contracts/fixtures, then one composed path, mig
 - [PyTorch CUDA memory](https://docs.pytorch.org/docs/2.14/notes/cuda.html#memory-management): allocated/reserved/empty_cache semantics; không chứng minh Custos hard isolation.
 - [PyTorch MPS](https://docs.pytorch.org/docs/2.14/notes/mps.html): backend-specific device execution; không mặc định mọi CUDA engine hỗ trợ Mac.
 - [Training source study](../../../TRAINING_COMPUTE_SOURCE_STUDY.md): pinned Colab/Kaggle/Unsloth traces; capability/account/live proof vẫn cần.
-- [Superplan F06/F10](sade-core-refactor-plan.md#17-superplan-hoàn-thiện-sau-audit): canonical migration/safety gates. Không thêm engine/process/service vì tài liệu có thêm một consumer.
+- [runtime composition](../development/runtime-composition-baseline.md): canonical migration/safety gates. Không thêm engine/process/service vì tài liệu có thêm một consumer.
 
 Packet này chỉ viết plan và links; không sửa GPU code, cài model/framework, cấp credentials, allocate resources hay chạy performance benchmark.

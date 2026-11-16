@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use custos_domain::environment::{EnvironmentAssurance, EnvironmentSpec, EnvironmentState};
-use custos_domain::DomainError;
+use custos_domain::{DomainError, WorkspaceId};
 use serde::{Deserialize, Serialize};
 
 /// Report produced by Environment verification gate
@@ -53,6 +53,8 @@ impl GateReport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnvironmentHandle {
     pub env_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<WorkspaceId>,
     pub working_dir: String,
     pub state: EnvironmentState,
     pub assurance: EnvironmentAssurance,
@@ -70,7 +72,6 @@ pub trait EnvironmentPort: Send + Sync {
         spec: &EnvironmentSpec,
     ) -> Result<GateReport, DomainError>;
 
-    /// Idempotently tears down the environment, reclaiming all physical and logical resources.
+    /// Idempotently releases the environment binding. Physical workspace removal is explicit.
     async fn teardown(&self, handle: &EnvironmentHandle) -> Result<(), DomainError>;
 }
-

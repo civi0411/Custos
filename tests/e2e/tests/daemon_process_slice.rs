@@ -11,20 +11,39 @@ use std::path::PathBuf;
 
 fn resolve_daemon_binary() -> PathBuf {
     if let Ok(p) = std::env::var("CARGO_BIN_EXE_custos-daemon") {
-        return PathBuf::from(p);
-    }
-    if let Ok(mut current) = std::env::current_exe() {
-        current.pop();
-        if current.file_name().and_then(|n| n.to_str()) == Some("deps") {
-            current.pop();
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            return p;
         }
-        let candidate = current.join(if cfg!(windows) {
-            "custos-daemon.exe"
-        } else {
-            "custos-daemon"
-        });
-        if candidate.exists() {
-            return candidate;
+    }
+    if let Ok(current) = std::env::current_exe() {
+        let mut dir = current.parent();
+        while let Some(d) = dir {
+            for bin_name in &["custos-daemon", "custos-daemon.exe"] {
+                let candidate = d.join(bin_name);
+                if candidate.is_file() {
+                    return candidate;
+                }
+                let in_debug = d.join("debug").join(bin_name);
+                if in_debug.is_file() {
+                    return in_debug;
+                }
+                let in_target_debug = d.join("target").join("debug").join(bin_name);
+                if in_target_debug.is_file() {
+                    return in_target_debug;
+                }
+            }
+            dir = d.parent();
+        }
+    }
+    for candidate_str in &[
+        "target/debug/custos-daemon",
+        "../../target/debug/custos-daemon",
+        "../../../target/debug/custos-daemon",
+    ] {
+        let p = PathBuf::from(candidate_str);
+        if p.is_file() {
+            return p;
         }
     }
     PathBuf::from("target/debug/custos-daemon")

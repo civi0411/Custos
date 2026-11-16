@@ -50,3 +50,9 @@ impl DecisionSnapshot {
         }
     }
 }
+
+impl Default for DecisionSnapshot {
+    fn default() -> Self {
+        Self::new("default")
+    }
+}

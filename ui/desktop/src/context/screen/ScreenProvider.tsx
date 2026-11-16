@@ -38,12 +38,17 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const defaultScreens: Screen[] = useMemo(() => {
     const initialScreen: Screen = {
       id: 'screen-default',
-      name: currentWb === 'research' ? 'Lab Desk' : currentWb === 'copilot' ? 'Executive Desk' : 'Main Dev',
-      icon: currentWb === 'research' ? 'FlaskConical' : currentWb === 'copilot' ? 'CheckSquare' : 'Code',
+      name: currentWb === 'research' ? 'Lab Desk' : currentWb === 'copilot' ? 'Executive Desk' : currentWb === 'quant' ? 'Alpha Trading Desk' : 'Main Dev',
+      icon: currentWb === 'research' ? 'FlaskConical' : currentWb === 'copilot' ? 'CheckSquare' : currentWb === 'quant' ? 'TrendingUp' : 'Code',
       projectId: activeWorkspace?.metadata?.project_id || currentProject || 'default',
       homeWorkbench: currentWb,
       defaultWorkspaceId: activeWorkspace?.id,
-      canvasState: createCanvas(currentWb === 'research' ? ['conversation', 'lab'] : currentWb === 'copilot' ? ['conversation', 'tasks'] : ['conversation', 'terminal']),
+      canvasState: createCanvas(
+        currentWb === 'research' ? ['conversation', 'lab'] :
+        currentWb === 'copilot' ? ['conversation', 'tasks'] :
+        currentWb === 'quant' ? ['alpha', 'tearsheet'] :
+        ['conversation', 'terminal']
+      ),
       tabRegistry: {},
       isPinned: true,
       createdAt: Date.now(),

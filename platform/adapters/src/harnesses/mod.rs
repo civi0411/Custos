@@ -8,8 +8,8 @@ pub mod spec;
 pub mod stream;
 
 pub use adapter::{
-    ClaudeCodeHarnessAdapter, CliHarness, CodexHarnessAdapter, GenericCliHarnessAdapter,
-    GooseHarnessAdapter, OpenCodeHarnessAdapter,
+    ClaudeCodeHarnessAdapter, CliAgentAdapter, CliHarness, CodexHarnessAdapter,
+    GenericCliHarnessAdapter, GooseHarnessAdapter, OpenCodeHarnessAdapter,
 };
 pub use binary::{probe_binary_available, resolve_binary_path};
 pub use catalog::{find_spec, SPECS};

@@ -6,6 +6,7 @@ use std::sync::Mutex;
 struct MockWorkspaceProvider {
     should_fail_provision: bool,
     should_fail_setup: bool,
+    should_fail_teardown: bool,
     is_dirty: bool,
     recover_result: bool,
     provision_calls: Mutex<usize>,
@@ -17,6 +18,7 @@ impl MockWorkspaceProvider {
         Self {
             should_fail_provision: false,
             should_fail_setup: false,
+            should_fail_teardown: false,
             is_dirty: false,
             recover_result: true,
             provision_calls: Mutex::new(0),
@@ -77,6 +79,9 @@ impl WorkspaceProvider for MockWorkspaceProvider {
 
     async fn teardown(&self, _workspace: &ExecutionWorkspace) -> Result<(), DomainError> {
         *self.teardown_calls.lock().unwrap() += 1;
+        if self.should_fail_teardown {
+            return Err(DomainError::Conflict("Physical cleanup failed".into()));
+        }
         Ok(())
     }
 }
@@ -235,3 +240,34 @@ async fn test_coordinator_recovery_and_reconciliation() {
     assert_eq!(all_recovered.len(), 1);
 }
 
+#[tokio::test]
+async fn failed_physical_cleanup_does_not_archive_workspace() {
+    let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+    let mut provider = MockWorkspaceProvider::new();
+    provider.should_fail_teardown = true;
+    let coordinator = WorkspaceCoordinator::new(store, Arc::new(provider));
+    let workspace = coordinator
+        .create_workspace(CreateWorkspaceRequest {
+            name: "cleanup-retry".into(),
+            kind: WorkspaceKind::Folder {
+                path: "/tmp/cleanup-retry".into(),
+            },
+            path: "/tmp/cleanup-retry".into(),
+            lineage: None,
+            owner_task_id: None,
+            metadata: None,
+            setup_script: None,
+        })
+        .await
+        .unwrap();
+    assert!(coordinator
+        .archive_workspace(&workspace.id, true)
+        .await
+        .is_err());
+    let retained = coordinator
+        .get_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.status, WorkspaceStatus::Ready);
+}

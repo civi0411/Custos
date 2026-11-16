@@ -11,8 +11,8 @@ import {
   SkillsModal,
   HelpModal,
   GitHubAuthModal,
+  WorkbenchLibraryModal,
 } from '@/components/modals';
-import { WorkbenchLibraryModal } from '@/features/workbench-library/WorkbenchLibrary';
 
 /**
  * RootLayout

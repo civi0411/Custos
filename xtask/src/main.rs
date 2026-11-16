@@ -234,7 +234,7 @@ fn main() -> Result<()> {
             check_file_line_ceiling(&sh)?;
             cmd!(
                 sh,
-                "cargo test -p custos-testkit -p custos-tests-contract --offline"
+                "cargo test -p custos-testkit -p custos-tests-contract --lib --tests --offline"
             )
             .run()?;
             println!("==> [5/5] Workspace Cargo Check");

@@ -7,6 +7,7 @@ pub mod t1_single_worker;
 pub mod t2_staged_pipeline;
 pub mod t3_read_fanout;
 pub mod t4_worktree_integrator;
+pub mod t5_lead_worker;
 pub mod t6_repair_loop;
 
 pub use t0_direct::T0DirectCoordinator;
@@ -14,4 +15,5 @@ pub use t1_single_worker::T1SingleWorkerCoordinator;
 pub use t2_staged_pipeline::T2StagedPipelineCoordinator;
 pub use t3_read_fanout::T3ReadFanOutCoordinator;
 pub use t4_worktree_integrator::T4WorktreeCoordinator;
+pub use t5_lead_worker::T5LeadWorkerCoordinator;
 pub use t6_repair_loop::T6RepairLoopCoordinator;

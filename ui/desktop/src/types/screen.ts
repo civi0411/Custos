@@ -154,6 +154,18 @@ export const WORKBENCH_SCREEN_PRESETS: ScreenPreset[] = [
     ],
     splitConfig: { axis: 'horizontal', ratio: 55 },
   },
+  {
+    id: 'preset_res_synthesis',
+    name: 'Synthesis Studio',
+    icon: 'FlaskConical',
+    workbench: 'research',
+    description: 'Research findings and grounded claims beside synthesis studio',
+    initialTabs: [
+      { id: 'findings', title: 'Findings & Claims', ref: { kind: 'claim' } },
+      { id: 'synthesis', title: 'Synthesis Studio', ref: { kind: 'artifact' } },
+    ],
+    splitConfig: { axis: 'horizontal', ratio: 50 },
+  },
 
   // Copilot Presets
   {

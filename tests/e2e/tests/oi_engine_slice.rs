@@ -20,7 +20,7 @@ async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) 
         pack_id: "engineering".into(),
         name: task_name.into(),
         description: "Test the OI engine flow".into(),
-        required_capabilities: vec![],
+        required_capabilities: vec!["fs_read".into()],
         evidence_requirements: vec![],
     };
 

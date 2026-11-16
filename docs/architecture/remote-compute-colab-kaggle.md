@@ -2,7 +2,7 @@
 
 **Trạng thái:** thiết kế tích hợp để review, chưa là tính năng đã triển khai. Khảo sát source ngày 18-10-2026; không login, cấp GPU, gửi dữ liệu hay chạy job thật. Mọi tên module/operation mới bên dưới là target đề xuất, không API hiện hữu. Không thêm crate, dependency hoặc migration trong đợt tài liệu này.
 
-Liên hệ: [Research workbench](research-workbench-blueprint.md), [SADE core refactor](../development/sade-core-refactor-plan.md), [training/compute source study](../../../TRAINING_COMPUTE_SOURCE_STUDY.md). Đây là phần HOW cho remote compute, không một orchestration engine mới.
+Liên hệ: [runtime composition](../development/runtime-composition-baseline.md), [training/compute source study](../../../TRAINING_COMPUTE_SOURCE_STUDY.md). Đây là phần HOW cho remote compute, không một orchestration engine mới.
 
 ## 1. Quyết định kiến trúc
 
@@ -333,7 +333,7 @@ Không thêm top-level workbench. Dùng các surfaces hiện có:
 - **Execution inspector:** Inputs, Code/Config, Environment, Logs, Metrics, Artifacts, Events; thiếu data hiện unknown/incomplete. Không bịa live chart bằng timer.
 - **Artifacts:** remote/local completeness, producing attempt, checkpoint eligibility, open in Coding hoặc compare runs giữ identity/provenance.
 
-UI không gắn remote resources vào Git worktree giả: Project/folder/notebook/Task là resource scope; execution endpoint remote có identity riêng. Đây cần hiệu đính worktree-only rule trong implementation packet, như [core plan](../development/sade-core-refactor-plan.md) đã nêu, không âm thầm bypass.
+UI không gắn remote resources vào Git worktree giả: Project/folder/notebook/Task là resource scope; execution endpoint remote có identity riêng. Đây cần hiệu đính worktree-only rule trong implementation packet, như [runtime composition](../development/runtime-composition-baseline.md) đã nêu, không âm thầm bypass.
 
 Thiết kế interaction theo UI/UX guidance: explicit pending/error recovery, accessible status text và actions; không chỉ một chấm màu hoặc toast biến mất. Uncertain submission có `Check remote status`, không `Run again` mặc định. `Release runtime` tách khỏi close tab và có resource name/account/active work preview. Charts giữ NaN/missing là missing, có table/unit/split và không interpolate thành điểm đo thật.
 

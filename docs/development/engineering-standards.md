@@ -4,11 +4,23 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
-Custos maintains strict engineering standards regarding external dependency adoption, license compliance, operational telemetry, and user privacy protection.
+Custos maintains strict engineering standards regarding external dependency adoption, license compliance, operational telemetry, privacy protection, and architectural integrity. Every component merged into the monorepo must withstand rigorous automated gates and adhere to the core principles of proof-carrying agentic computing.
 
 ---
 
-## 1. Open Source Adoption Philosophy
+## 1. The Five Golden Architectural Rules
+
+To prevent code bloat, architectural decay, and runtime instability, all software written for Custos must comply with the 5 Golden Rules:
+
+1. **Zero-I/O Domain Purity (INV-01):** The `platform/domain` crate contains only pure domain data structures, mathematical models, state machines, and error types. It is strictly forbidden to import `tokio`, perform filesystem I/O, make network calls, or generate random numbers inside domain types.
+2. **Single-Writer SQLite WAL (INV-02):** Persistence is mediated through a single write connection with Write-Ahead Logging (WAL) enabled, strict `busy_timeout(5000)`, and immediate transactions. All state mutations must be serializable and atomic.
+3. **Thin Daemon Transport Adapters (INV-03):** Transport layers (IPC sockets, HTTP servers, CLI parsers) must remain thin delegators. Business logic, state transitions, and authorization checks belong exclusively in `platform/core` and `platform/runtime`.
+4. **Zero-Mock Policy in Production Releases (INV-11):** Production release binaries must remain 100% free of mocks, stubs, or synthetic fallbacks. All mock structures and test harnesses must reside behind `#[cfg(any(test, feature = "test-support"))]`.
+5. **Strict File Line Ceiling ($\le 600$ Lines):** Every source file (`.rs`, `.ts`, `.tsx`, `.css`) across the entire repository must strictly not exceed 600 physical lines. Monolithic files must be decomposed into cohesive submodules grouped by bounded context.
+
+---
+
+## 2. Open Source Adoption Philosophy
 
 Custos follows a disciplined open source strategy: **Own the semantic core, avoid indiscriminate copy-pasting, and integrate high-quality libraries exclusively across strict architectural boundaries.**
 
@@ -45,7 +57,7 @@ Custos follows a disciplined open source strategy: **Own the semantic core, avoi
 
 ---
 
-## 2. Supply Chain & License Compliance
+## 3. Supply Chain & License Compliance
 
 - **Automated License Auditing:** Automated verification via `cargo-deny` in continuous integration. Only **MIT, Apache-2.0, BSD-2-Clause, and BSD-3-Clause** licenses are permitted.
 - **Copyleft Prohibition:** GPL, AGPL, and SSPL dependencies are strictly prohibited in all binary releases.
@@ -53,11 +65,11 @@ Custos follows a disciplined open source strategy: **Own the semantic core, avoi
 
 ---
 
-## 3. Observability Architecture
+## 4. Observability & Supervision Architecture
 
-Custos implements the **OpenTelemetry** standard across all crates, providing comprehensive visibility into local operational internals while preserving user privacy.
+Custos implements the **OpenTelemetry** standard across all crates, providing comprehensive visibility into local operational internals while preserving user privacy and providing real-time supervision.
 
-### 3.1 Trace Span Hierarchy
+### 4.1 Trace Span Hierarchy
 
 All operations within a Task are structured as an explicit hierarchical span tree:
 
@@ -74,7 +86,14 @@ Workspace
     └── Human Approval Span (waiting for user exact-payload authorization)
 ```
 
-### 3.2 Standard Metric Instruments
+### 4.2 Supervised Agent Runner & Telemetry Sink
+
+The `SupervisedAgentRunner` decorator (`platform/runtime/src/agent/runner.rs`) instruments every agent turn:
+- Opens an instrumented `tracing::info_span!("agent_step")`.
+- Dispatches execution events to `SupervisionTraceSink` (`platform/core/src/contracts/supervision.rs`).
+- Alerts `SupervisedObserver` for anomaly detection (e.g. repeated tool failure loops, run budget exhaustion).
+
+### 4.3 Standard Metric Instruments
 
 - **`custos_task_total`:** Total tasks executed, broken down by terminal status (`Succeeded`, `Failed`, `Cancelled`).
 - **`custos_step_duration_seconds`:** Execution latency per step broken down by worker role.
@@ -85,7 +104,15 @@ Workspace
 
 ---
 
-## 4. Privacy & Pre-Log Redaction Standards
+## 5. Process Lifecycle & Zombie Elimination (INV-12)
+
+Every external subprocess spawned by Custos (CLI harnesses, test runners, local model engines) must be governed by `ProcessDropGuard` (`platform/adapters/src/harnesses/stream/process.rs`):
+- Spawned into an isolated process group via `setpgid(0)`.
+- On drop, SIGKILL is sent to the entire process group (`-pid`) to guarantee that no orphaned or zombie background processes leak onto the developer workstation.
+
+---
+
+## 6. Privacy & Pre-Log Redaction Standards
 
 - **Pre-Log Secret Redaction:** All logging through Rust's `tracing` framework automatically strips API keys, OAuth bearer tokens, and detected private keys prior to writing to stdout or disk journals.
 - **Raw Prompt Safeguard:** Raw LLM prompts and model responses are withheld from production logs by default. Developers may enable local prompt logging strictly for offline debugging using `CUSTOS_LOG_PROMPTS=1`.

@@ -196,6 +196,60 @@ impl PlanCompiler {
                 rev.obligations.push("repair_budget_bounded".into());
             }
 
+            ExecutionTopology::T5LeadWorker => {
+                let lead_id = format!("{}_lead", tid);
+                let w1_id = format!("{}_worker_1", tid);
+                let w2_id = format!("{}_worker_2", tid);
+                let synth_id = format!("{}_lead_synthesize", tid);
+                let b = proposal.estimated_tokens / 4;
+
+                rev.nodes.push(Self::node(
+                    &lead_id,
+                    "Lead Decomposition",
+                    "lead",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec![],
+                    vec!["read_file"],
+                ));
+                rev.nodes.push(Self::node(
+                    &w1_id,
+                    "Specialized Sub-Worker 1",
+                    "worker",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &w2_id,
+                    "Specialized Sub-Worker 2",
+                    "worker",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &synth_id,
+                    "Lead Synthesis & Verification",
+                    "lead",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec![],
+                    vec!["shell"],
+                ));
+                rev.dependencies.push((lead_id.clone(), w1_id.clone()));
+                rev.dependencies.push((lead_id, w2_id.clone()));
+                rev.dependencies.push((w1_id, synth_id.clone()));
+                rev.dependencies.push((w2_id, synth_id));
+                rev.obligations.push("lead_synthesis_gate".into());
+            }
+
             _ => {
                 rev.nodes.push(Self::node(
                     format!("{}_fallback_worker", tid),
@@ -318,5 +372,20 @@ mod tests {
         assert_eq!(placements.len(), 3);
         assert!(placements[0].workspace_lease_id.is_some());
         assert!(placements[1].workspace_lease_id.is_some());
+    }
+
+    #[test]
+    fn test_compile_t5_lead_worker() {
+        let mut proposal = StrategyProposal::native_baseline("task_t5", "claude-code");
+        proposal.chosen_topology = ExecutionTopology::T5LeadWorker;
+        proposal.estimated_tokens = 8_000;
+        let rev = PlanCompiler::compile(&proposal, 1);
+        assert_eq!(rev.nodes.len(), 4);
+        assert_eq!(rev.dependencies.len(), 4);
+        assert!(rev.obligations.contains(&"lead_synthesis_gate".into()));
+        assert_eq!(rev.nodes[0].role, "lead");
+        assert_eq!(rev.nodes[1].role, "worker");
+        assert_eq!(rev.nodes[2].role, "worker");
+        assert_eq!(rev.nodes[3].role, "lead");
     }
 }

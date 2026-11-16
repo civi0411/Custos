@@ -15,6 +15,9 @@ pub use custos_domain::{
     ToolMediationLevel, WorktreeOwnership,
 };
 
+/// Canonical type alias for any autonomous agent runtime/driver conforming to Port 7.
+pub use AgentRuntimePort as AgentDriver;
+
 /// Agent Runtime Port (Deep Dissection of Agent Loop & Native Harnesses)
 ///
 /// Dissects the legacy upstream execution loop into a strictly governed contract.

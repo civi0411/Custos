@@ -29,6 +29,6 @@ Custos organizes all agent interactions into four specialized lenses:
 ---
 
 ## 2. Invariants & Match Completeness
-1. **Exhaustive Pattern Matching**: Every pattern match on `WorkbenchLens` across all 11 crates must explicitly handle `Quant`.
+1. **Exhaustive Pattern Matching**: Every pattern match on `WorkbenchLens` across all packages must explicitly handle `Quant`.
 2. **Session Lens Binding**: A Session is created with an immutable lens (`opened_lenses`). Opening a session in a different lens tracks cross-workbench lens promotion without mutating historical journals.
 3. **Packs Mapping Parity**: Each lens corresponds to exactly one default `DomainPack` registered in `DomainPackRegistry` at daemon composition root.

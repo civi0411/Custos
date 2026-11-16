@@ -19,7 +19,7 @@ import { daemonClient } from '@/api/daemon_client';
 import { LocalAiUnifiedPane } from './LocalAiUnifiedPane';
 import { CloudProvidersUnifiedPane } from './CloudProvidersUnifiedPane';
 import { SubAgentsPane } from './SubAgentsPane';
-import { DaemonPane } from '@/features/settings/DaemonPane';
+import { DaemonPane } from '../settings/DaemonPane';
 import { RemoteFleetWorkbenchPane } from '@/components/workbenches/shared/RemoteFleetWorkbenchPane';
 import type { CapabilityDescriptor } from '@/types/domain';
 import { CostQuotasPane } from './CostQuotasPane';

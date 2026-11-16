@@ -128,6 +128,21 @@ impl HarnessRegistry {
         self.harnesses.get(id).map(|e| e.harness.clone())
     }
 
+    /// Replaces the underlying runtime port for an existing registered harness
+    /// (e.g. decorating with SupervisedAgentRunner for Zero-Scatter telemetry).
+    pub fn replace_runtime(&mut self, id: &str, new_harness: Arc<dyn AgentRuntimePort>) {
+        if let Some(entry) = self.harnesses.get_mut(id) {
+            *entry = Arc::new(HarnessEntry {
+                name: entry.name.clone(),
+                description: entry.description.clone(),
+                binary_path: entry.binary_path.clone(),
+                launch_cmd: entry.launch_cmd.clone(),
+                maturity: entry.maturity,
+                harness: new_harness,
+            });
+        }
+    }
+
     /// Returns the composed runtimes keyed by their stable harness identifiers.
     /// The runtime receives only the abstract port; registry metadata and binary
     /// probing remain adapter concerns.

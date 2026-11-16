@@ -279,6 +279,24 @@ impl WorkspaceCoordinator {
             .await
     }
 
+    /// Reads the effective provider guarantees for an existing workspace.
+    pub async fn inspect_environment_assurance(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<custos_domain::environment::EnvironmentAssurance, DomainError> {
+        let workspace =
+            self.repository
+                .get_workspace(id)
+                .await?
+                .ok_or_else(|| DomainError::NotFound {
+                    kind: "ExecutionWorkspace".into(),
+                    id: id.to_string(),
+                })?;
+        self.provider
+            .inspect_environment_assurance(&workspace)
+            .await
+    }
+
     /// Archives a workspace with dirty protection: if delete_physical is true and workspace is dirty,
     /// returns an error unless force is explicitly true.
     pub async fn archive_workspace_with_force(
@@ -311,13 +329,7 @@ impl WorkspaceCoordinator {
                 }
             }
 
-            if let Err(e) = self.provider.teardown(&ws).await {
-                warn!(
-                    workspace_id = %id,
-                    error = %e,
-                    "Failed to teardown physical workspace during archive"
-                );
-            }
+            self.provider.teardown(&ws).await?;
         }
 
         self.repository

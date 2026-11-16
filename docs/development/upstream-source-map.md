@@ -2,29 +2,29 @@
 
 > **Status:** Audit in progress. This inventory records observations in the Custos checkout, not a license-compliance conclusion. Do not claim upstream SHA pinning or production integration until the missing evidence is filled in.
 
-**Three-workbench follow-up:** [Current crates/UI audit](workbench-core-and-controls-audit.md#current-custos-crates-ui-and-three-reference-follow-up) adds source-traced installation/admission and domain evidence findings. QuantDinger's local backend snapshot is `e75f0cfa9cd47de9259844fefbf20c2fa1464d45`; its main checkout supplies backend/jobs/command/lifecycle references. The Vue client is a [separate repository](https://github.com/OpenByteInc/QuantDinger-Vue) with separate source-available terms; only its official README/router were inspected remotely in this follow-up. No QuantDinger source was copied, no frontend dependency installed, and no permission to reuse frontend code is inferred from the backend license.
+**Three-workbench follow-up:** [workbench controls inventory](../development/workbench-control-inventory-panels.md) adds source-traced installation/admission and domain evidence findings. QuantDinger's local backend snapshot is `e75f0cfa9cd47de9259844fefbf20c2fa1464d45`; its main checkout supplies backend/jobs/command/lifecycle references. The Vue client is a [separate repository](https://github.com/OpenByteInc/QuantDinger-Vue) with separate source-available terms; only its official README/router were inspected remotely in this follow-up. No QuantDinger source was copied, no frontend dependency installed, and no permission to reuse frontend code is inferred from the backend license.
 
 ## Goose-derived source
 
 | Custos path | Observed content | Runtime status | Upstream revision / attribution |
 |---|---|---|---|
-| Historical `crates/custos-runtime/src/engine/agents/` | Earlier unmounted Goose-style agent/extension tree | Directory absent in the current follow-up checkout; do not count it as current code or propose deleting it again | Historical source SHA and file-level mapping **unknown** |
-| `crates/custos-runtime/src/agent/` | Extracted machine, inference, tool and conversation primitives | Compiled module; no daemon-composed `StateMachine` call path found at audit commit `3e4dac4` | File-level origin and divergence **unverified** |
-| `crates/custos-provider/src/types/` | Goose-style provider, conversation and model types coexist with `ModelProvider` | Compiled; two model interfaces require a conformance mapping | File-level origin and divergence **unverified** |
-| `crates/custos-sdk/` | Bindings and wire types retain Goose identifiers | Present; runtime usage not established by this inventory | File-level origin and divergence **unverified** |
+| Historical `platform/runtime/src/engine/agents/` | Earlier unmounted Goose-style agent/extension tree | Directory absent in the current follow-up checkout; do not count it as current code or propose deleting it again | Historical source SHA and file-level mapping **unknown** |
+| `platform/runtime/src/agent/` | Extracted machine, inference, tool and conversation primitives | Compiled module; no daemon-composed `StateMachine` call path found at audit commit `3e4dac4` | File-level origin and divergence **unverified** |
+| `platform/ai/src/contracts/types/` | Goose-style provider, conversation and model types coexist with `ModelProvider` | Compiled; two model interfaces require a conformance mapping | File-level origin and divergence **unverified** |
+| `sdk/client-rust/` | Bindings and wire types retain Goose identifiers | Present; runtime usage not established by this inventory | File-level origin and divergence **unverified** |
 
 [Goose's upstream license](https://github.com/aaif-goose/goose/blob/main/LICENSE) is Apache 2.0. Custos's root `LICENSE` now declares AGPL-3.0; that project-level declaration does not fill the missing file-level origin, modification and notice records for Goose-derived source. Complete those records and obtain a human-maintained license review before a release or reuse claim; this inventory is not a legal conclusion.
 
 ## External gateway candidates, not imported Custos code
 
-[OrCa source study](orca-source-study.md) inspects local upstream commit `3f6225deeb08a82448c5f0b0725073401629d462` (MIT, Lovecast Inc.) as an **architecture/UX reference**, not as code imported into Custos. Its Electron/Node runtime, SQLite orchestration tables and React state are not Custos's Task Kernel or DB. Before any selective copy, record exact original path, preserve the applicable MIT copyright/license notice, audit dependencies, behavior parity, platform assumptions and tests; the presence of an MIT license alone is not an integration decision or a blanket compatibility conclusion.
+[upstream source map](../development/upstream-source-map.md) inspects local upstream commit `3f6225deeb08a82448c5f0b0725073401629d462` (MIT, Lovecast Inc.) as an **architecture/UX reference**, not as code imported into Custos. Its Electron/Node runtime, SQLite orchestration tables and React state are not Custos's Task Kernel or DB. Before any selective copy, record exact original path, preserve the applicable MIT copyright/license notice, audit dependencies, behavior parity, platform assumptions and tests; the presence of an MIT license alone is not an integration decision or a blanket compatibility conclusion.
 
-[Open Science source study](open-science-source-study.md) inspects local `ai4s-research/open-science` commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde` as a Research Workbench reference. Its OpenCode sidecar, Tauri commands, file/JSONL provenance, notebook kernels and React pane tree are not Custos canonical Task, authority, evidence or session state. Selective reuse must preserve its license and dependency provenance and must enter Custos through the same ports, IDs and realization gates as every other adapter or resource.
+[upstream source map](../development/upstream-source-map.md) inspects local `ai4s-research/open-science` commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde` as a Research Workbench reference. Its OpenCode sidecar, Tauri commands, file/JSONL provenance, notebook kernels and React pane tree are not Custos canonical Task, authority, evidence or session state. Selective reuse must preserve its license and dependency provenance and must enter Custos through the same ports, IDs and realization gates as every other adapter or resource.
 
 | Upstream | Narrow reason to inspect | Custos integration boundary | Current audit state |
 |---|---|---|---|
-| [decolua/9router](https://github.com/decolua/9router/tree/ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8) | Model/catalog capabilities, transport translation, connection/fallback, quota/usage/price, diagnostics, scoped search/media and dashboard interactions | [First-party source-to-feature plan](9router-custos-integration-plan.md) & [System Design Blueprint](system-design-9router-agentgateway-custos.md) đặt selected behavior vào Rust core (custos-provider, custos-adapters); không ủy thác Task/Authority ra ngoài. | Local source inspected at `ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8` (MIT). Bóc tách catalog, pricing, RTK và fallback cascade vào Rust native. |
-| [agentgateway/agentgateway](https://github.com/agentgateway/agentgateway/blob/main/README.md) | MCP/A2A federation, model proxying, CEL guardrails and connection governance | [System Design Blueprint](system-design-9router-agentgateway-custos.md): Hấp thụ crates/llm conversion, MCP Federation Hub (streamable HTTP/SSE/mergestream) và Google A2A protocol vào `custos-adapters`. | Apache 2.0. Đã mổ xẻ crates/llm, mcp/handler.rs, a2a/mod.rs; không chạy như external proxy mù quáng, lấy patterns chuyển dịch thành module native trong Custos. |
+| [upstream source map](../development/upstream-source-map.md) đặt selected behavior vào Rust core (custos-provider, custos-adapters); không ủy thác Task/Authority ra ngoài. | Local source inspected at `ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8` (MIT). Bóc tách catalog, pricing, RTK và fallback cascade vào Rust native. |
+| [upstream source map](../development/upstream-source-map.md): Hấp thụ crates/llm conversion, MCP Federation Hub (streamable HTTP/SSE/mergestream) và Google A2A protocol vào `custos-adapters`. | Apache 2.0. Đã mổ xẻ crates/llm, mcp/handler.rs, a2a/mod.rs; không chạy như external proxy mù quáng, lấy patterns chuyển dịch thành module native trong Custos. |
 | [rsclaw-ai/cap-protocol](https://cap-protocol.org/) | Draft PTY/structured driver for CLI agents | Optional `AgentRuntimePort` adapter, not Custos's internal protocol | Watchlist; no CAP conformance or first-party manifest established for this checkout |
 
 Before copying source or launching a sidecar, pin upstream repository and commit, inspect license/notices/dependencies, document one real user job, compare against a direct adapter on the same fixture, and verify that no proxy can claim Custos-mediated effects it cannot intercept. A vendor/provider marketing claim is not proof of Custos integration.
@@ -76,7 +76,7 @@ OrCa and Open Science solve different parts of the same supervised environment. 
 | Agent execution | `custos-provider`, `custos-adapters::harness`, runtime agent execution | Structured launch, native agent sessions, continuation, cancellation, unknown launch reconciliation | OpenCode/ACP-style runtime as an optional harness, not as the Task Kernel |
 | Coordination | `custos-core` Task/Run contracts, `custos-runtime::workflow`, persistence | Dispatch claims, mailbox, worker lease, attention and Kanban projections | Experiment/run lifecycle, review barriers, negative and uncertain runs |
 | Research provenance | `custos-packs::research`, research persistence and verification | No separate scientific truth model; reuse workspace/run primitives | Sources, methods, executions, artifacts, trajectory, provenance, annotation, reviewer assessment |
-| Experience projection | `custos-bridge`, `custos-sdk`, `custos-app`, `ui/desktop` | Resource tabs, agent/workspace attention, terminal/diff/browser views | Pane tree, notebook, run/trajectory/provenance/artifact inspectors and selection-driven actions |
+| Experience projection | `custos-runtime::session::bridge`, `custos-sdk`, `custos-desktop`, `ui/desktop` | Resource tabs, agent/workspace attention, terminal/diff/browser views | Pane tree, notebook, run/trajectory/provenance/artifact inspectors and selection-driven actions |
 
 The invariant is one set of canonical identities: Task and Session have many-to-many bindings; Run/Node, Resource, Attempt, Artifact and Evidence records carry stable references back to that work. A pane, terminal, notebook kernel, agent harness, browser, or remote host is a resource or execution backend attached to these identities; it is never a second task database.
 
@@ -114,9 +114,9 @@ The invariant is one set of canonical identities: Task and Session have many-to-
 | LLM, agent, MCP, browser, kernel and platform edges | `custos-adapters` | Declared ports | Task success, grants, canonical projections |
 | Coding, Research and Assistant semantics | `custos-packs` | Core/runtime-facing contracts | Protocol transport and direct canonical writes |
 | SQLite/CAS/projections | `custos-persistence` | Core storage contracts | Product routing and UI decisions |
-| Local API and generated clients | `custos-bridge`, `custos-sdk` | Versioned application commands/events | New domain truth or adapter behavior |
+| Local API and generated clients | `custos-runtime::session::bridge`, `custos-sdk` | Versioned application commands/events | New domain truth or adapter behavior |
 | Composition and process lifecycle | `custos-daemon` | Every concrete implementation needed to wire the app | Domain policy hidden in bootstrap code |
-| Desktop host and workbench UI | `custos-app`, `ui/desktop` | Local API capability/resource projections | Direct DB access, fabricated success, implicit grants |
+| Desktop host and workbench UI | `custos-desktop`, `ui/desktop` | Local API capability/resource projections | Direct DB access, fabricated success, implicit grants |
 
 No feature earns a new crate merely because it came from an upstream product. Split a crate only when dependency direction, platform compilation, independent release/conformance, or security isolation demands it.
 
@@ -171,7 +171,7 @@ The immediate structural pressure is in `custos-daemon/src/api/mod.rs` and `loca
 
 ## Dependency-ordered realization plan
 
-The current packet definitions and acceptance gates live in the [backend–desktop convergence plan §7](sade-frontend-backend-convergence-plan.md#7-packets-triển-khai-có-thứ-tự-và-đầu-ra-kiểm-được). The source-matching dependency is:
+The current packet definitions and acceptance gates live in the [delivery blueprint](../development/delivery-blueprint.md). The source-matching dependency is:
 
 1. **Ingress and UI truth.** Restrict Local API and physical execution to admitted callers/scopes; capability operations drive pane controls. An isolated Python script is labelled as such.
 2. **One live conversation.** A real provider or native harness receives source-backed context and returns a persisted answer, attempt and usage status. This supplies the baseline for cost and quality.

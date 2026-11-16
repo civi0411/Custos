@@ -5,7 +5,9 @@ use custos_core::contracts::sandbox::{verify_permit_binding, SandboxCommand, San
 use custos_domain::{
     digest, new_id, ActionIntent, DomainError, ExecutionReceipt, Permit, ReceiptStatus,
 };
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::Instant;
 
 pub struct SeatbeltSandbox {

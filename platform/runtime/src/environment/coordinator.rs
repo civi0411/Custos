@@ -4,17 +4,14 @@
 //! of sovereign Agent Execution Environments across all four Custos lenses.
 
 use async_trait::async_trait;
+use custos_core::authority::EnvironmentGate;
 use custos_core::contracts::environment::{EnvironmentHandle, EnvironmentPort, GateReport};
 use custos_core::contracts::terminal::TerminalPort;
-use custos_core::authority::EnvironmentGate;
-use custos_domain::authority::action::Assurance;
-use custos_domain::environment::{
-    EnvironmentAssurance, EnvironmentProfile, EnvironmentSpec, EnvironmentState,
-};
-use custos_domain::{DomainError, WorkspaceId, WorkspaceKind};
+use custos_domain::environment::{EnvironmentProfile, EnvironmentSpec, EnvironmentState};
+use custos_domain::{DomainError, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Weak};
+use tokio::sync::{Mutex, OwnedMutexGuard};
 use tracing::{info, warn};
 
 use crate::workspace::coordinator::{CreateWorkspaceRequest, WorkspaceCoordinator};
@@ -22,7 +19,8 @@ use crate::workspace::coordinator::{CreateWorkspaceRequest, WorkspaceCoordinator
 pub struct EnvironmentCoordinator {
     workspace_coordinator: Arc<WorkspaceCoordinator>,
     terminal_port: Option<Arc<dyn TerminalPort>>,
-    handles: Arc<Mutex<HashMap<String, EnvironmentHandle>>>,
+    handles: Mutex<HashMap<String, EnvironmentHandle>>,
+    lifecycle_locks: Mutex<HashMap<String, Weak<Mutex<()>>>>,
 }
 
 impl EnvironmentCoordinator {
@@ -33,8 +31,68 @@ impl EnvironmentCoordinator {
         Self {
             workspace_coordinator,
             terminal_port,
-            handles: Arc::new(Mutex::new(HashMap::new())),
+            handles: Mutex::new(HashMap::new()),
+            lifecycle_locks: Mutex::new(HashMap::new()),
         }
+    }
+
+    async fn lock_lifecycle(&self, env_id: &str) -> OwnedMutexGuard<()> {
+        let lock = {
+            let mut locks = self.lifecycle_locks.lock().await;
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            let lock = locks
+                .get(env_id)
+                .and_then(Weak::upgrade)
+                .unwrap_or_default();
+            locks.insert(env_id.to_owned(), Arc::downgrade(&lock));
+            lock
+        };
+        lock.lock_owned().await
+    }
+
+    async fn workspace_for_handle(
+        &self,
+        handle: &EnvironmentHandle,
+    ) -> Result<ExecutionWorkspace, DomainError> {
+        let workspace = if let Some(id) = &handle.workspace_id {
+            self.workspace_coordinator.get_workspace(id).await?
+        } else {
+            let mut matches = self
+                .workspace_coordinator
+                .list_workspaces()
+                .await?
+                .into_iter()
+                .filter(|workspace| {
+                    workspace.metadata.get("env_id").and_then(|v| v.as_str())
+                        == Some(handle.env_id.as_str())
+                });
+            let workspace = matches.next();
+            if matches.next().is_some() {
+                return Err(DomainError::Conflict(format!(
+                    "Multiple workspace bindings for environment '{}'",
+                    handle.env_id
+                )));
+            }
+            workspace
+        }
+        .ok_or_else(|| DomainError::NotFound {
+            kind: "EnvironmentWorkspace".into(),
+            id: handle.env_id.clone(),
+        })?;
+        if workspace.metadata.get("env_id").and_then(|v| v.as_str()) != Some(handle.env_id.as_str())
+        {
+            return Err(DomainError::Validation(
+                "Environment workspace binding mismatch".into(),
+            ));
+        }
+        if let Some(active) = self.get_handle(&handle.env_id).await {
+            if active.workspace_id.as_ref() != Some(&workspace.id) {
+                return Err(DomainError::Conflict(
+                    "Environment handle refers to an earlier workspace binding".into(),
+                ));
+            }
+        }
+        Ok(workspace)
     }
 
     /// Helper to get an active environment handle
@@ -60,6 +118,14 @@ impl EnvironmentPort for EnvironmentCoordinator {
     async fn provision(&self, spec: &EnvironmentSpec) -> Result<EnvironmentHandle, DomainError> {
         info!("Provisioning Agent Execution Environment '{}'", spec.env_id);
 
+        let _lifecycle = self.lock_lifecycle(&spec.env_id).await;
+        if self.get_handle(&spec.env_id).await.is_some() {
+            return Err(DomainError::Conflict(format!(
+                "Environment '{}' is already provisioned",
+                spec.env_id
+            )));
+        }
+
         let (kind, ws_path) = match &spec.profile {
             EnvironmentProfile::Coding {
                 repo_path,
@@ -75,7 +141,12 @@ impl EnvironmentPort for EnvironmentCoordinator {
             }
             EnvironmentProfile::Assistant { .. } => {
                 let folder = format!("/tmp/custos_assistant_{}", spec.env_id);
-                (WorkspaceKind::Folder { path: folder.clone() }, folder)
+                (
+                    WorkspaceKind::Folder {
+                        path: folder.clone(),
+                    },
+                    folder,
+                )
             }
             EnvironmentProfile::Research { corpus_path, .. } => (
                 WorkspaceKind::Folder {
@@ -85,7 +156,12 @@ impl EnvironmentPort for EnvironmentCoordinator {
             ),
             EnvironmentProfile::Quant { data_partition, .. } => {
                 let folder = format!("data/quant/{}", data_partition);
-                (WorkspaceKind::Folder { path: folder.clone() }, folder)
+                (
+                    WorkspaceKind::Folder {
+                        path: folder.clone(),
+                    },
+                    folder,
+                )
             }
         };
 
@@ -105,31 +181,27 @@ impl EnvironmentPort for EnvironmentCoordinator {
             .create_workspace(ws_req)
             .await
             .map_err(|e| {
-                warn!("Workspace allocation failed for env '{}': {}", spec.env_id, e);
+                warn!(
+                    "Workspace allocation failed for env '{}': {}",
+                    spec.env_id, e
+                );
                 DomainError::Validation(format!("Failed to provision workspace: {e}"))
             })?;
 
-        // Step 2: Determine measured assurance
-        let (network_restricted, isolation_driver) = match &spec.profile {
-            EnvironmentProfile::Quant {
-                is_live_gateway: false,
-                ..
-            } => (true, "quant-airgap".to_string()),
-            EnvironmentProfile::Coding { .. } => (false, "worktree-seatbelt".to_string()),
-            _ => (false, "standard".to_string()),
-        };
-
-        let assurance = EnvironmentAssurance {
-            measured_assurance: Assurance::CustosMediated,
-            filesystem_confined: spec.profile.requires_worktree(),
-            network_restricted,
-            process_isolated: true,
-            isolation_driver,
+        let assurance = match self
+            .workspace_coordinator
+            .inspect_environment_assurance(&ws.id)
+            .await
+        {
+            Ok(assurance) => assurance,
+            Err(error) => {
+                warn!(env_id = %spec.env_id, %error, "Environment assurance unavailable");
+                custos_domain::environment::EnvironmentAssurance::unconstrained()
+            }
         };
 
         // Step 3: Run invariant gates
-        let gate_report =
-            EnvironmentGate::evaluate(spec, &EnvironmentState::Ready, &assurance);
+        let gate_report = EnvironmentGate::evaluate(spec, &EnvironmentState::Ready, &assurance);
 
         let final_state = if gate_report.passed {
             EnvironmentState::Ready
@@ -145,6 +217,7 @@ impl EnvironmentPort for EnvironmentCoordinator {
 
         let handle = EnvironmentHandle {
             env_id: spec.env_id.clone(),
+            workspace_id: Some(ws.id),
             working_dir: ws.path,
             state: final_state,
             assurance,
@@ -161,226 +234,45 @@ impl EnvironmentPort for EnvironmentCoordinator {
         handle: &EnvironmentHandle,
         spec: &EnvironmentSpec,
     ) -> Result<GateReport, DomainError> {
-        Ok(EnvironmentGate::evaluate(spec, &handle.state, &handle.assurance))
+        let _lifecycle = self.lock_lifecycle(&handle.env_id).await;
+        if handle.env_id != spec.env_id {
+            return Err(DomainError::Validation(
+                "Environment specification identity mismatch".into(),
+            ));
+        }
+        let workspace = self.workspace_for_handle(handle).await?;
+        let assurance = self
+            .workspace_coordinator
+            .inspect_environment_assurance(&workspace.id)
+            .await?;
+        let state = if workspace.status == WorkspaceStatus::Archived {
+            &EnvironmentState::TornDown
+        } else {
+            &handle.state
+        };
+        Ok(EnvironmentGate::evaluate(spec, state, &assurance))
     }
 
     async fn teardown(&self, handle: &EnvironmentHandle) -> Result<(), DomainError> {
-        info!("Tearing down Agent Execution Environment '{}'", handle.env_id);
+        info!(
+            "Tearing down Agent Execution Environment '{}'",
+            handle.env_id
+        );
 
-        let mut guard = self.handles.lock().await;
-        if let Some(mut existing) = guard.remove(&handle.env_id) {
-            existing.state = EnvironmentState::TornDown;
+        let _lifecycle = self.lock_lifecycle(&handle.env_id).await;
+        let workspace = self.workspace_for_handle(handle).await?;
+        // Environment release archives the binding. Physical deletion is an explicit workspace operation.
+        if workspace.status != WorkspaceStatus::Archived {
+            self.workspace_coordinator
+                .archive_workspace(&workspace.id, false)
+                .await?;
         }
-
-        // Archive / release associated workspace
-        let _ = self
-            .workspace_coordinator
-            .archive_workspace(&WorkspaceId(format!("env-ws-{}", handle.env_id)), true)
-            .await;
+        self.handles.lock().await.remove(&handle.env_id);
 
         Ok(())
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use custos_core::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
-    use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
-
-    struct MockWorkspaceRepo {
-        workspaces: Mutex<HashMap<WorkspaceId, ExecutionWorkspace>>,
-    }
-
-    impl MockWorkspaceRepo {
-        fn new() -> Self {
-            Self {
-                workspaces: Mutex::new(HashMap::new()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl WorkspaceRepository for MockWorkspaceRepo {
-        async fn save_workspace(&self, ws: &ExecutionWorkspace) -> Result<(), DomainError> {
-            let mut g = self.workspaces.lock().await;
-            g.insert(ws.id.clone(), ws.clone());
-            Ok(())
-        }
-        async fn get_workspace(
-            &self,
-            id: &WorkspaceId,
-        ) -> Result<Option<ExecutionWorkspace>, DomainError> {
-            let g = self.workspaces.lock().await;
-            Ok(g.get(id).cloned())
-        }
-        async fn list_workspaces(&self) -> Result<Vec<ExecutionWorkspace>, DomainError> {
-            let g = self.workspaces.lock().await;
-            Ok(g.values().cloned().collect())
-        }
-        async fn update_workspace_status(
-            &self,
-            id: &WorkspaceId,
-            status: WorkspaceStatus,
-        ) -> Result<(), DomainError> {
-            let mut g = self.workspaces.lock().await;
-            if let Some(ws) = g.get_mut(id) {
-                ws.status = status;
-            }
-            Ok(())
-        }
-        async fn delete_workspace(&self, id: &WorkspaceId) -> Result<(), DomainError> {
-            let mut g = self.workspaces.lock().await;
-            g.remove(id);
-            Ok(())
-        }
-    }
-
-    struct MockWorkspaceProv;
-
-    #[async_trait]
-    impl WorkspaceProvider for MockWorkspaceProv {
-        async fn validate(&self, _kind: &WorkspaceKind, _path: &str) -> Result<(), DomainError> {
-            Ok(())
-        }
-        async fn provision(&self, _ws: &ExecutionWorkspace) -> Result<(), DomainError> {
-            Ok(())
-        }
-        async fn setup(
-            &self,
-            _ws: &ExecutionWorkspace,
-            _script: Option<&str>,
-        ) -> Result<(), DomainError> {
-            Ok(())
-        }
-        async fn teardown(&self, _ws: &ExecutionWorkspace) -> Result<(), DomainError> {
-            Ok(())
-        }
-    }
-
-    #[tokio::test]
-    async fn test_environment_coordinator_provision_verify_teardown_flow() {
-        let repo = Arc::new(MockWorkspaceRepo::new());
-        let prov = Arc::new(MockWorkspaceProv);
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(repo, prov));
-        let env_coord = EnvironmentCoordinator::new(ws_coord, None);
-
-        let spec = EnvironmentSpec::new(
-            "env_test_01",
-            EnvironmentProfile::Assistant { project_id: Some("proj_1".into()) },
-        );
-
-        let handle = env_coord.provision(&spec).await.expect("Provision must succeed");
-        assert_eq!(handle.state, EnvironmentState::Ready);
-        assert_eq!(handle.assurance.measured_assurance, Assurance::CustosMediated);
-
-        let verify_report = env_coord.verify(&handle, &spec).await.unwrap();
-        assert!(verify_report.passed);
-
-        env_coord.teardown(&handle).await.expect("Teardown must succeed");
-        assert!(env_coord.get_handle(&spec.env_id).await.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_environment_coordinator_coding_lens_worktree_isolation() {
-        let repo = Arc::new(MockWorkspaceRepo::new());
-        let prov = Arc::new(MockWorkspaceProv);
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(repo.clone(), prov));
-        let env_coord = EnvironmentCoordinator::new(ws_coord, None);
-
-        let spec = EnvironmentSpec::new(
-            "env_coding_01",
-            EnvironmentProfile::Coding {
-                repo_path: "/repos/custos".into(),
-                branch: "feat/sade-env".into(),
-                worktree_path: "/worktrees/custos_sade".into(),
-            },
-        );
-
-        let handle = env_coord.provision(&spec).await.expect("Provision coding env");
-        assert_eq!(handle.state, EnvironmentState::Ready);
-        assert!(handle.assurance.filesystem_confined);
-        assert!(!handle.assurance.network_restricted);
-        assert_eq!(handle.working_dir, "/worktrees/custos_sade");
-
-        let verify_report = env_coord.verify(&handle, &spec).await.unwrap();
-        assert!(verify_report.passed);
-        assert!(verify_report.violations.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_environment_coordinator_quant_lens_airgap() {
-        let repo = Arc::new(MockWorkspaceRepo::new());
-        let prov = Arc::new(MockWorkspaceProv);
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(repo, prov));
-        let env_coord = EnvironmentCoordinator::new(ws_coord, None);
-
-        let spec = EnvironmentSpec::new(
-            "env_quant_backtest",
-            EnvironmentProfile::Quant {
-                data_partition: "2024-Q1".into(),
-                is_live_gateway: false,
-            },
-        );
-
-        let handle = env_coord.provision(&spec).await.expect("Provision quant env");
-        assert_eq!(handle.state, EnvironmentState::Ready);
-        assert!(handle.assurance.network_restricted);
-        assert_eq!(handle.assurance.isolation_driver, "quant-airgap");
-
-        let verify_report = env_coord.verify(&handle, &spec).await.unwrap();
-        assert!(verify_report.passed);
-    }
-
-    #[tokio::test]
-    async fn test_environment_coordinator_research_lens_corpus() {
-        let repo = Arc::new(MockWorkspaceRepo::new());
-        let prov = Arc::new(MockWorkspaceProv);
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(repo, prov));
-        let env_coord = EnvironmentCoordinator::new(ws_coord, None);
-
-        let spec = EnvironmentSpec::new(
-            "env_research_corpus",
-            EnvironmentProfile::Research {
-                corpus_path: "/data/papers/attention".into(),
-                kernel_spec: Some("python3".into()),
-                dataset_hash: Some("sha256:abc123".into()),
-            },
-        );
-
-        let handle = env_coord.provision(&spec).await.expect("Provision research env");
-        assert_eq!(handle.state, EnvironmentState::Ready);
-        assert_eq!(handle.working_dir, "/data/papers/attention");
-
-        let verify_report = env_coord.verify(&handle, &spec).await.unwrap();
-        assert!(verify_report.passed);
-    }
-
-    #[tokio::test]
-    async fn test_environment_coordinator_degraded_on_invariant_violation() {
-        let repo = Arc::new(MockWorkspaceRepo::new());
-        let prov = Arc::new(MockWorkspaceProv);
-        let ws_coord = Arc::new(WorkspaceCoordinator::new(repo, prov));
-        let env_coord = EnvironmentCoordinator::new(ws_coord, None);
-
-        // Coding profile with empty branch violates ENV-02
-        let spec = EnvironmentSpec::new(
-            "env_coding_invalid",
-            EnvironmentProfile::Coding {
-                repo_path: "/repos/custos".into(),
-                branch: "".into(),
-                worktree_path: "/worktrees/custos".into(),
-            },
-        );
-
-        let handle = env_coord.provision(&spec).await.expect("Provision must proceed");
-        // State must be Degraded according to ENV-07
-        match &handle.state {
-            EnvironmentState::Degraded { reason } => {
-                assert!(reason.contains("ENV-02"));
-            }
-            other => panic!("Expected Degraded state, got {:?}", other),
-        }
-    }
-}
-
+#[path = "coordinator_tests.rs"]
+mod tests;

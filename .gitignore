@@ -966,6 +966,7 @@ jenkins/
 *.lzma
 *.zst
 !platform/provider/src/types/canonical/*.zst
+!platform/ai/data/canonical/*.zst
 
 # Compiled binaries
 *.o

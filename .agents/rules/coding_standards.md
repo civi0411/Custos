@@ -23,23 +23,29 @@
 
 ---
 
-### 2. Inviolable 11 Canonical Crate Boundaries
+### 2. Topic-Driven Monorepo Architecture & Inward Boundaries
 
-1. **`crates/custos-domain`:**
-   - Absolute Zero-I/O invariant.
-   - Prohibited dependencies: `tokio`, `rusqlite`, `reqwest`, `std::fs`, or external model vendor SDKs.
-2. **`crates/custos-core`:**
-   - Coordination kernel and state engine.
-   - Depends exclusively on `custos-domain`. External SDKs or persistence drivers are strictly forbidden.
-3. **`crates/custos-persistence`:**
-   - SQLite WAL storage implementation.
-   - Must operate via a single-writer connection pool to eliminate write contention and WAL starvation.
-4. **`crates/custos-bridge`:**
-   - Session-to-Task promotion and client IPC routing.
-   - STRICTLY PROHIBITED from importing `custos-persistence` directly. Storage queries must route through `custos-core::ports::KernelPort`.
-5. **`crates/custos-daemon`:**
-   - Sole Composition Root.
-   - The only crate permitted to bind concrete adapters, databases, and network transports to launch the daemon.
+1. **`platform/domain` (`custos-domain`):**
+   - Absolute Zero-I/O invariant (INV-01).
+   - Prohibited dependencies: `tokio`, `rusqlite`, `reqwest`, `std::fs`, or external model vendor SDKs. Pure mathematical state representations.
+2. **`platform/core` (`custos-core`):**
+   - Coordination contracts, abstract ports (`KernelPort`, `StoragePort`, `ModelPort`, `SandboxPort`, `WorkflowPort`, `MemoryPort`).
+   - Depends exclusively on `custos-domain`. External SDKs or direct persistence drivers are strictly forbidden.
+3. **`platform/storage` (`custos-persistence`):**
+   - SQLite WAL storage and dynamic partition engine.
+   - Must operate via a single-writer connection pool with dedicated multi-reader pool to eliminate write contention and WAL starvation.
+4. **`platform/ai` (`custos-provider`):**
+   - ModelPort router, provider codecs (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Ollama), local llama.cpp inference, and catalog pricing.
+5. **`platform/runtime` (`custos-runtime`):**
+   - Task execution engine, S1 heuristics, S2 replanner, OI Pareto engine, FastPathFilter, and T0-T6 topologies.
+6. **`platform/adapters` (`custos-adapters`):**
+   - External bridges: MCP federation, A2A card, PTY terminal, OS sandboxing (Seatbelt/Bubblewrap), Git worktrees, remote GPU compute.
+7. **`workbenches/*` (`custos-workbench-*`):**
+   - Specialized vertical domain packs (`assistant`, `coding`, `quant`, `research`). Symmetrical 5-part layout (`manifest/`, `migrations/`, `recipes/`, `schemas/`, `src/`).
+8. **`apps/*`:**
+   - `apps/daemon` (`custos-daemon`): Sole server composition root.
+   - `apps/cli` (`custos-app-cli`): Pure-Rust headless client over `custos-sdk`.
+   - `apps/desktop/native`: Thin Tauri 2 native desktop host.
 
 ---
 

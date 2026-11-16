@@ -1,12 +1,12 @@
 # Research Workbench: thiết kế từ Claude Science và Open Science
 
-**Trạng thái:** kiến trúc đích và kế hoạch implementation cho Custos SADE. Nghiên cứu nguồn công khai và source local ngày 07-10-2026; không truy cập mã nội bộ Claude Science, không chứng nhận đã dùng thử toàn bộ sản phẩm. Bản này đào sâu Research của [desktop blueprint](../development/sade-frontend-backend-convergence-plan.md), không tạo runtime hay roadmap song song. Các object/path mới là đề xuất cần map vào type hiện hữu khi triển khai.
+**Trạng thái:** kiến trúc đích và kế hoạch implementation cho Custos SADE. Nghiên cứu nguồn công khai và source local ngày 07-10-2026; không truy cập mã nội bộ Claude Science, không chứng nhận đã dùng thử toàn bộ sản phẩm. Bản này đào sâu Research của [delivery blueprint](../development/delivery-blueprint.md), không tạo runtime hay roadmap song song. Các object/path mới là đề xuất cần map vào type hiện hữu khi triển khai.
 
 ## 1. Phân biệt nguồn và kết luận thiết kế
 
 **Claude Science của Anthropic** là ứng dụng research riêng, dùng model Claude cùng môi trường thực thi và công cụ khoa học. Tài liệu hiện hành nói hỗ trợ cả computer science/ML và nhiều ngành ngoài life sciences. Đây là nguồn để học hành vi sản phẩm, không phải source có thể copy. [Overview](https://claude.com/docs/claude-science/overview).
 
-**Open Science Desktop `ai4s-research/open-science`** là checkout local ở `AgentHub/open-science`, SHA đã kiểm `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`; dùng Tauri/React, OpenCode sidecar và các phần Rust/skills. Đây là nguồn implementation độc lập, không là bản open-source chính thức của Claude Science. Source study chi tiết ở [Open Science](../development/open-science-source-study.md). Dự án `synthetic-sciences/openscience` khác nữa; không dùng các tên này thay thế nhau.
+**Open Science Desktop `ai4s-research/open-science`** là checkout local ở `AgentHub/open-science`, SHA đã kiểm `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`; dùng Tauri/React, OpenCode sidecar và các phần Rust/skills. Đây là nguồn implementation độc lập, không là bản open-source chính thức của Claude Science. Source study chi tiết ở [upstream source map](../development/upstream-source-map.md). Dự án `synthetic-sciences/openscience` khác nữa; không dùng các tên này thay thế nhau.
 
 **Custos Research** nên cung cấp vòng làm việc hoàn chỉnh: question → evidence → analysis/experiment → artifact → review → revision → reuse. User bắt đầu bằng chat, nhưng thao tác trực tiếp trên paper, bảng, notebook, hình và báo cáo. Research chia sẻ conversation/Task/resource nền với Coding/Copilot; domain-specific services giữ semantics nghiên cứu.
 

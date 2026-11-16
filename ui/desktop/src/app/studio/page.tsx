@@ -27,34 +27,21 @@ export function StudioPage() {
     projectData,
     setCurrentProject,
     currentSessions,
-    tasks,
     activeSessionId,
     setActiveSessionId,
-    workspaces,
-    activeWorkspaceId,
-    setActiveWorkspaceId,
-    activeWorkspace,
-    refreshWorkspaces,
     setIsNewSessionOpen,
     handleSendMessage,
     handleCreateChatSession,
-    handleClearHistory,
     handleDeleteConversation,
     handleAcceptAndRun,
     handleRejectDiff,
     handleCopyDiff,
     showToast,
-    openSettings,
     activeWorkbench: mode,
     setActiveWorkbench: setMode,
-    isSidebarCollapsed,
     setIsSidebarCollapsed,
-    isWebTabOpen,
     setIsWebTabOpen,
-    resourceTabs,
-    isWebTabExpanded,
     setIsWebTabExpanded,
-    setIsResourcePickerOpen,
   } = useAppContext();
 
   const location = useLocation();
@@ -84,11 +71,6 @@ export function StudioPage() {
     const next = { ...sidebarViewByLens, [lens]: view };
     setSidebarViewByLens(next);
     try { localStorage.setItem(SIDEBAR_VIEW_KEY, JSON.stringify(next)); } catch { }
-  };
-  const openResources = (expanded: boolean) => {
-    setIsResourcePickerOpen(true);
-    setIsWebTabExpanded(expanded);
-    setIsWebTabOpen(true);
   };
 
   useEffect(() => {
@@ -251,11 +233,6 @@ export function StudioPage() {
           const remembered = lastSessionByLens[`${p}:${mode}`];
           setActiveSessionId(available.find((session) => session.id === remembered)?.id || available[0]?.id || '');
         }}
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={setActiveWorkspaceId}
-        activeWorkspace={activeWorkspace}
-        workspaces={workspaces}
-        refreshWorkspaces={refreshWorkspaces}
         sessions={displaySessions}
         allSessions={currentSessions}
         activeSessionId={activeSessionId}
@@ -265,7 +242,6 @@ export function StudioPage() {
         onClearTask={() => setActiveTaskId(null)}
         sidebarView={sidebarView}
         onChangeSidebarView={(view) => setSidebarView(mode, view)}
-        tasks={tasks}
         onOpenFullChatIn={openFullChatIn}
         onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
         onNewSession={() => { setSidebarView(mode, 'chats'); setActiveTaskId(null); setIsNewSessionOpen(true); }}
@@ -289,21 +265,10 @@ export function StudioPage() {
           }
           return handleSendMessage(message, mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : 'research');
         }}
-        onClearHistory={handleClearHistory}
         onDeleteConversation={handleDeleteConversation}
         onAcceptAndRun={handleAcceptAndRun}
         onRejectDiff={handleRejectDiff}
         onCopyDiff={handleCopyDiff}
-        onShowToast={showToast}
-        onOpenSettings={() => openSettings('general')}
-        isSidebarCollapsed={isSidebarCollapsed}
-        onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
-        resourceTabs={resourceTabs}
-        isWebTabOpen={isWebTabOpen}
-        isWebTabExpanded={isWebTabExpanded}
-        onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
-        onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
-        openResources={openResources}
       />
     </div>
   );

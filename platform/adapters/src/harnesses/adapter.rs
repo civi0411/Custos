@@ -18,8 +18,12 @@ use custos_core::contracts::harness::{
 use custos_domain::{ActionIntent, ContextPack, DomainError, WorkerRun};
 
 use super::catalog::find_spec;
+#[cfg(any(test, feature = "test-support"))]
 use super::mock::MockHarnessState;
 use super::spec::{HarnessSpec, HeadlessArgs, StreamProtocol};
+
+/// Standardized CLI Agent Adapter alias conforming to SADE Ring 2 specifications.
+pub type CliAgentAdapter = CliHarness;
 
 #[derive(Clone)]
 pub struct CliHarness {
@@ -31,6 +35,7 @@ pub struct CliHarness {
     pub(crate) headless: HeadlessArgs,
     pub(crate) protocol: StreamProtocol,
     pub(crate) cost_visibility: CostVisibility,
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) mock_state: MockHarnessState,
     pub(crate) active_runs: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     pub steer_messages: Arc<Mutex<HashMap<String, Vec<String>>>>,
@@ -54,6 +59,7 @@ impl CliHarness {
             headless: spec.headless,
             protocol: spec.protocol,
             cost_visibility: spec.cost,
+            #[cfg(any(test, feature = "test-support"))]
             mock_state: MockHarnessState::new(),
             active_runs: Arc::new(Mutex::new(HashMap::new())),
             steer_messages: Arc::new(Mutex::new(HashMap::new())),
@@ -84,6 +90,7 @@ impl CliHarness {
             headless: HeadlessArgs::Positional,
             protocol: StreamProtocol::PlainText,
             cost_visibility: CostVisibility::Estimated,
+            #[cfg(any(test, feature = "test-support"))]
             mock_state: MockHarnessState::new(),
             active_runs: Arc::new(Mutex::new(HashMap::new())),
             steer_messages: Arc::new(Mutex::new(HashMap::new())),
@@ -123,6 +130,7 @@ impl CliHarness {
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn with_mock_mode(mut self) -> Self {
         self.mock_state.enabled = true;
         self
@@ -142,6 +150,7 @@ impl CliHarness {
         &self.workspace_root
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn push_mock_response(&self, response: impl Into<String>) {
         self.mock_state.push_response(response).await;
     }
@@ -278,6 +287,7 @@ impl AgentRuntimePort for CliHarness {
         cwd: &Path,
         observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
     ) -> Result<HarnessExecutionResult, DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_state.enabled {
             let default_output = if self.id == "claude-code" {
                 "[tool_call:bash] cargo check\nWriting file: src/lib.rs\nDone".to_string()

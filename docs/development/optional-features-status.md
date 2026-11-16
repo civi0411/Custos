@@ -1,10 +1,20 @@
 # Optional Features Status Ledger
 
-| Crate | Feature | Default | Status | Offline CI Gate | Notes |
+> **Classification:** Normative Feature Matrix Specification  
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
+> **Directory Index:** See [Custos Developer Hub](README.md).
+
+This ledger documents all Cargo feature flags across the workspace packages, their default states, offline CI compatibility, and architectural constraints.
+
+| Package | Physical Path | Feature Flag | Default | Offline CI Status | Architectural Purpose & Invariant |
 |---|---|---|---|---|---|
-| `custos-adapters` | `local-inference-native` | Yes | Supported | Passes in default `cargo check` | Canonical GGUF / llama.cpp inference engine |
-| `custos-adapters` | `local-inference-mlx` | No | Supported (stub) | Passes in `--features local-inference-mlx` | Fallback stub returns typed unsupported error when `safemlx` is not vendor-bundled |
-| `custos-adapters` | `local-inference-hf` | No | Unsupported offline | Explicit `compile_error!` | Requires external `hf-hub` client; gated to avoid accidental offline build breakage |
-| `custos-adapters` | `roaming` | No | Supported | Passes in `--features roaming` | Iroh & Iroh-relay peer-to-peer transport |
-| `custos-adapters` | `mcp-builtins` | No | Supported | Passes in `--features mcp-builtins` | Autovisualiser & Memory MCP built-ins; isolates large 3.3MB JS assets from default desktop build |
-| `custos-sdk` | `uniffi` | No | Unsupported offline | Explicit error (`askama` download / `compile_error!`) | Python/Kotlin uniffi bindings require askama CLI templating |
+| `custos-adapters` | `platform/adapters` | `local-inference-native` | Yes | Supported | Canonical local GGUF / llama.cpp inference engine via Metal/CUDA. |
+| `custos-adapters` | `platform/adapters` | `local-inference-mlx` | No | Supported (stub) | Apple Silicon MLX inference backend; returns typed error when dynamic libs absent. |
+| `custos-adapters` | `platform/adapters` | `local-inference-hf` | No | Unsupported offline | HuggingFace Hub remote weight downloader; gated to prevent offline build failures. |
+| `custos-adapters` | `platform/adapters` | `roaming` | No | Supported | Iroh P2P transport relay for multi-node encrypted synchronization. |
+| `custos-adapters` | `platform/adapters` | `mcp-builtins` | No | Supported | In-process MCP server bundle (isolates large JS assets from default desktop binary). |
+| `custos-app-daemon` | `apps/daemon` | `custos-workbench-assistant` | Yes | Supported | Compiles personal assistant outbox and message drafts handlers. |
+| `custos-app-daemon` | `apps/daemon` | `custos-workbench-coding` | Yes | Supported | Compiles software engineering worktree and patch handlers. |
+| `custos-app-daemon` | `apps/daemon` | `custos-workbench-research` | Yes | Supported | Compiles academic literature citation and recipe synthesis handlers. |
+| `custos-app-daemon` | `apps/daemon` | `custos-workbench-quant` | Yes | Supported | Compiles quantitative backtest, risk gate, and order ticket handlers. |
+| `custos-sdk` | `sdk/client-rust` | `uniffi` | No | Unsupported offline | Multi-language FFI bindings (Python, Swift, Kotlin); requires external codegen tools. |

@@ -2,7 +2,9 @@
 
 **Status:** target architecture with an audited current-state map. A named module, pane, or upstream feature is not proof of an end-to-end capability. The product intent is defined in [Custos.md](../../Custos.md); the physical code map is [codebase-architecture.md](../development/codebase-architecture.md).
 
-**Current refactor target:** the working master currently uses legacy Part headings; [Part 2.2](../../Custos.md#22-cấu-trúc-tầng-và-đồ-thị-phụ-thuộc-cứng) now references the [full crates/UI refactor plan](../development/modular-workbench-refactor-plan.md). Target: shared platform, independently packaged vertical workbenches and optional reusable capabilities; no fixed crate count. The plan contains current findings, P00–P11, data/worker/UI migration gates and a complete per-file candidate ledger. Earlier Chapter 1–2 rewrite links must not be interpreted as current on-disk heading verification.
+**Current refactor target:** the working master currently uses legacy Part headings; [codebase architecture](../development/codebase-architecture.md). Target: shared platform, independently packaged vertical workbenches and optional reusable capabilities; no fixed crate count. The plan contains current findings, P00–P11, data/worker/UI migration gates and a complete per-file candidate ledger. Earlier Chapter 1–2 rewrite links must not be interpreted as current on-disk heading verification.
+
+**Current review:** branch `vi` at `f3cfaa3d` is mapped in [codebase architecture](../development/codebase-architecture.md) and [codebase architecture](../development/codebase-architecture.md). They supersede earlier physical paths and unverified current-state claims below.
 
 **Earlier assembly detail:** §§10–13 retain useful prior source maps and resource analysis, but their keep-current-crates assumptions are not final distribution boundaries. The new plan revalidates source at `9cd903b` plus dirty changes, preserves existing injection/readiness/admission, proposes bridge consolidation and SDK/packs decoupling, and moves specialized implementation/UI toward component packages. No source was moved or package retired in this planning pass.
 
@@ -134,8 +136,8 @@ Every pane can show `loading`, `available`, `degraded`, `unavailable`, `stale`, 
 | Shared context | `custos-runtime/src/context`; pack recipes in `custos-packs` | Versioned inventory, permission filter, retrieval, ContextPack/Receipt, freshness and cost; existing lexical compiler is a component, not the full service. |
 | External reads/effects | `custos-adapters` | Provider, harness, filesystem, MCP, browser, connector and notebook adapters with real capability discovery and receipt semantics. |
 | State and recovery | `custos-persistence` | Task/Run/Attempt, source/artifact/evidence, event cursor, worker claim and uncertain effect reconciliation. |
-| API composition | `custos-daemon`, `custos-bridge`/SDK | Stable command/query/event DTOs; daemon binds actor and resolves workspace/harness; client never writes DB. |
-| Experience | `ui/desktop`, thin host `custos-app` | Shared shell, three lens presets, resource/attention registry, Task binding and explicit handoffs. |
+| API composition | `custos-daemon`, `custos-sdk` | Stable command/query/event DTOs; daemon binds actor and resolves workspace/harness; client never writes DB. |
+| Experience | `ui/desktop`, thin host `apps/desktop` | Shared shell, three lens presets, resource/attention registry, Task binding and explicit handoffs. |
 
 An internal retrieval query is a runtime service call, not MCP. MCP is an adapter for external tools/data and may expose a reviewed subset outward. ACP is an editor-to-agent integration option. A2A is a remote-agent boundary. None of these protocols is required to move from Copilot to Coding or to run local subagents. The protocol hub only provides connection discovery, lifecycle, identity and conformance at those boundaries; Task authority remains in the kernel.
 
@@ -143,7 +145,7 @@ An internal retrieval query is a runtime service call, not MCP. MCP is an adapte
 
 `GetTaskWorkspace(task_id)`, `ListResources(workspace_id)`, `WatchEvents(after_seq)`, `CompileContext(task_id, selected_refs, destination_pack, dry_run)`, `StartRun(task_id, workspace_id, executor_id, expected_revision)`, `GetWorkerGraph(run_id)`, `ContinueWithSelectedRefs(source_session_id, task_id, destination_pack, ref_ids, mode)`, `ApproveExactEffect(intent_digest)`, and `GetOutcome(task_id)` describe behavior, not a declaration that these route names exist. Reuse existing DTOs and commands wherever semantics already match. Each write has actor, `command_id`, expected revision and idempotent result; reads include freshness/version. The UI does not synthesize a successful run from a completed stream.
 
-## 7. Verified state of this checkout
+## 7. Historical capability observations
 
 | Capability | Code evidence | Assessment |
 |---|---|---|
@@ -173,14 +175,14 @@ For every gate report what is implemented, exercised, degraded or unavailable. A
 
 - [Orca orchestration](https://github.com/stablyai/orca/blob/main/docs/site/content/docs/cli/orchestration.mdx) describes Run/Task/Dispatch/worker supervision; [Orca worktrees](https://github.com/stablyai/orca/blob/main/docs/site/content/docs/model/worktrees.mdx) shows checkout-scoped resources and candidate work. Custos adapts those interaction patterns to its own Task/authority/evidence contracts.
 - [OpenCode agents](https://opencode.ai/docs/agents/) describes primary agents, subagents and tool permissions. It is evidence for OpenCode's interface, not proof that Custos currently observes or mediates every native child action.
-- [Open Science repository](https://github.com/ai4s-research/open-science/blob/master/README.md) describes notebook, run, provenance and reviewer surfaces. The pinned [local source study](../development/open-science-source-study.md) identifies what its code actually records and what is best effort.
+- [upstream source map](../development/upstream-source-map.md) identifies what its code actually records and what is best effort.
 - [The original RAG paper](https://arxiv.org/abs/2005.11401) motivates combining a generator with retrieved material. Custos's scope, provenance, freshness and per-pack recipes are product design decisions requiring its own evaluation.
 
-## 10. Cohesive assembly blocks inside the current crates
+## 10. Cohesive assembly blocks and historical source locations
 
-A block is a responsibility with owned state, inputs, outputs and lifetime. It is not necessarily a crate, service, folder, process or agent. Keep the existing canonical crate groups and 12 product Cargo packages; use modules to express cohesive responsibilities, and split a build unit only when measured dependency/release constraints justify it.
+A block is a responsibility with owned state, inputs, outputs and lifetime. It is not necessarily a crate, service, folder, process or agent. Use modules to express cohesive responsibilities and split build units when dependency, release or distribution constraints justify them. Current metadata has 20 workspace packages, including SDK/test/build packages. The current physical owners are listed in canonical plan §17.3.
 
-| Block | Current home and public seam | Owns | Must not own |
+| Block | Earlier source home and public seam, revalidate against §17 | Owns | Must not own |
 |---|---|---|---|
 | Domain vocabulary | `custos-domain/src/{task,session,authority,evidence,workspace,research,quant,shared,...}` | Persisted identities, pure records/invariants and deterministic math | HTTP, process, DB handles, plugin loading |
 | Trusted policy | `custos-core/src/{kernel,authority,evidence,oi}` and `contracts/` | State transitions, grants/permits, budget/evidence gates, boundary interfaces | Concrete driver construction or native provider wire mechanics |
@@ -192,12 +194,12 @@ A block is a responsibility with owned state, inputs, outputs and lifetime. It i
 | Domain specialization | `custos-packs/src/{engineering,research,assistant,quant}` | Jobs, input/output/rubrics, role/context recipes and verifiers | Direct subprocess/HTTP/SQLite ownership disguised as skill semantics |
 | Canonical storage | `custos-persistence/src/{repositories,store,artifacts}` | Durable topic records, transaction/command/event ownership, CAS metadata and storage implementations | Deciding model route or treating a renderer import as installed capability |
 | Application composition | `custos-daemon/src/{runtime,application,api}` | Construct/share concrete instances; orchestrate use cases; validate/route API and publish projections | Another agent loop, per-workbench store or default native driver creation inside transport |
-| Session linkage | `custos-bridge/src/{port,service}` | Explicit promote/attach/steer behavior using existing services | Independent worker scheduler or transcript clone |
-| Product clients | `custos-sdk`, `custos-app/{cli,desktop}`, desktop renderer | Versioned client transport, host/native UI lifecycle and presentation | Direct DB/effect access or internal backend composition |
+| Session linkage | `platform/runtime/src/session/bridge` | Explicit promote/attach/steer behavior using existing services | Independent worker scheduler or transcript clone |
+| Product clients | `custos-sdk`, `apps/{cli,desktop}`, desktop renderer | Versioned client transport, host/native UI lifecycle and presentation | Direct DB/effect access or internal backend composition |
 
-### 10.1. Current assembly defects to retire
+### 10.1. Historical assembly findings
 
-The following observations are source-backed, not a request to move every file immediately:
+These findings describe the earlier assembly snapshot. Current source has moved and several items have been addressed, including optional lazy local inference and specialist crate extraction. Revalidate each claim against canonical plan §§17–18 before creating implementation work:
 
 1. `LocalApiDispatcher::new` constructs native terminal/Python/file coordinators, a default all-pack registry and an MCP hub. `CustosRuntime::bootstrap` constructs some of the same responsibilities and replaces them through `with_*`. Construct the selected concrete graph once in daemon composition, then inject the dispatcher dependencies. A transport constructor must not secretly choose production capability.
 2. `TaskRuntime::new` permits many missing dependencies and relies on a sequence of `with_*`. Preserve builders where useful for tests, but require a validated ready composition before production start; explicitly disabled capability is different from accidentally missing mandatory store/kernel.
@@ -208,7 +210,7 @@ The following observations are source-backed, not a request to move every file i
 7. `llama-cpp-2`/sys are currently non-optional adapter dependencies, `local-inference-native` is an empty feature, and bootstrap calls native runtime initialization eagerly. A lightweight API-only Base needs a supported feature/build path and lazy runtime initialization or a verified engine subprocess. No savings claim until build contents and startup are measured.
 8. Root glob re-exports and compatibility aliases broaden the apparent public API. Narrow new caller imports to topic paths; retire aliases only after export/config/fixture callers are migrated. Do not rename serialized IDs to match Rust folder aesthetics.
 
-Full source evidence and severity are tracked in the [crate assembly follow-up](../development/workbench-core-and-controls-audit.md#crate-assembly-follow-up). P00–P11 remains the execution queue.
+Full source evidence and severity are tracked in the [workbench controls inventory](../development/workbench-control-inventory-panels.md). P00–P11 remains the execution queue.
 
 ### 10.2. OOP principles expressed in Rust
 
@@ -296,4 +298,17 @@ Performance has separate budgets: startup/build footprint, interactive rendering
 - **Model economics:** context source coverage, exact search/cache, optional S1/OI under hard constraints; count failed/parallel attempts and verifier/human time. Native harness spend remains unknown unless transport exposes reliable accounting.
 - **Distribution:** Cargo features control compilation/optional dependencies, not runtime installation. A feature with no cfg/dependency effect does not remove native code. [Cargo feature semantics](https://doc.rust-lang.org/cargo/reference/features.html).
 
-Assembly acceptance requires: one production construction path; no all-pack fallback on inventory failure; no physical skill execution outside the admitted capability boundary; one shared lifecycle owner per resource; replaceable executor conformance; same historical data across package/lens changes; scoped UI events; actual Base contents and measured resource/cost results. Keep unit/integration tests and compatibility adapters until their callers are retired. The complete implementation/caller/data/test order is [P00–P11](../development/modular-workbench-refactor-plan.md#28-work-breakdown-chi-tiết-p00p11).
+Assembly acceptance requires: one production construction path; no all-pack fallback on inventory failure; no physical skill execution outside the admitted capability boundary; one shared lifecycle owner per resource; replaceable executor conformance; same historical data across package/lens changes; scoped UI events; actual Base contents and measured resource/cost results. Keep unit/integration tests and compatibility adapters until their callers are retired. The complete implementation/caller/data/test order is [codebase architecture](../development/codebase-architecture.md).
+
+
+## 14. Synthesis corrections and current contracts
+
+The attached SADE synthesis mixes target ideas with stale paths and unmeasured guarantees. The [codebase architecture](../development/codebase-architecture.md) supplies the source disposition and extends the existing packet queue.
+
+- SADE uses the master meaning Supervised Agent Development Environment. Constitutional AI is model-training research. Custos runtime authorization uses explicit trusted policy and tested execution boundaries.
+- Shared capabilities are selected by lifetime, policy and dependency needs. Training/evaluation/relay remain shared compute mechanisms, specialist objectives live in the consuming workbench.
+- `platform/domain/src/pipeline` has live callers. Preserve common types and serialization while evaluating payload-bound validation, hash error handling and specialist modality coupling.
+- Production `CliHarness` contains mock mode used by integration tests. Extract test implementations through testkit or an explicit test-support build, preserving consumers that compile dependencies without `cfg(test)`.
+- Current deterministic training/evaluation helpers establish simulated lifecycle behavior. Real backend metrics, materialized checkpoint bytes, verified digests and external execution receipts are required for actual experiment evidence.
+- Quant thresholds currently differ across jobs, skills and verifier. Define one versioned assessment specification with sufficient source inputs and frequency conventions before using a result for criterion completion.
+- UI, workbench, package and executor lifecycles are distinct. Installing a manifest requires compatibility/trust checks, explicit enablement and readiness probing before admitted execution.

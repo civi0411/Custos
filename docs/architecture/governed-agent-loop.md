@@ -1,7 +1,7 @@
 # Governed Agent Loop, Budget & Gateway Ownership (F08)
 
-> SADE Master Specification — Phase 7 / F08 Architectural Blueprint
-> Governs: `custos-domain`, `custos-core`, `custos-runtime`, `custos-daemon`, `custos-persistence`, and Golden Acceptance Test `G07`.
+> SADE Master Specification — Phase 7 / F08 Architectural Blueprint  
+> Governs: `custos-domain`, `custos-core`, `custos-runtime`, `custos-adapters`, `custos-daemon`, `custos-persistence`, and Golden Acceptance Test `G07`.
 
 ---
 
@@ -12,17 +12,28 @@ Unconstrained agent loops in legacy frameworks suffer from severe structural lia
 2. **Infinite Loops & Runaway Cost:** Loops lacking hard iteration bounds or budget guards consume unbounded API tokens and memory when models fail to converge or get stuck in repetitive tool-calling cycles.
 3. **Double Execution Across Layers:** When a governed agent runtime intercepts and executes tools, downstream orchestration layers often receive returned intents and erroneously re-dispatch them, causing duplicate physical writes on disk or duplicate network calls.
 4. **Leaked Handlers & Poor Cancellation Responsiveness:** Runs canceled by users often finish in-flight turns, run additional tools, or leave dangling cancellation/steering listeners in memory.
+5. **Orphaned Subprocesses & Zombie Leaks:** Terminated CLI agent processes leave orphaned background child processes that continue consuming CPU and holding locks on disk files.
 
-Phase 7 (F08) implements the governed multi-turn agent loop with two-phase authority checks, transactional outbox admission, duplicate execution prevention, hard budget limits, and deterministic cancellation.
+Phase 7 (F08) and the SuperAgent Refactoring implement the governed multi-turn agent loop with two-phase authority checks, transactional outbox admission, duplicate execution prevention, hard budget limits, deterministic cancellation, and the `SupervisedAgentRunner` decorator with process-group kill guards.
 
 ---
 
 ## 2. Core Architecture & Workflow
 
 ```
-[ Model API / Provider ]
-          │ (tool calls)
-          ▼
+[ Model API / Provider / CLI Agent ]
+                  │ (turn / tool calls)
+                  ▼
+┌────────────────────────────────────────────────────────┐
+│ SupervisedAgentRunner (custos-runtime::agent::runner)  │
+│                                                        │
+│ 1. Decorates AgentDriver / AgentRuntimePort            │
+│ 2. Emits hierarchical StepSpan telemetry               │
+│ 3. Records execution to SupervisionTraceSink           │
+│ 4. Notifies SupervisedObserver of state anomalies      │
+└────────────────────────────────────────────────────────┘
+                  │
+                  ▼
 ┌────────────────────────────────────────────────────────┐
 │ GovernedAgentRuntime (custos-runtime)                  │
 │                                                        │
@@ -31,8 +42,8 @@ Phase 7 (F08) implements the governed multi-turn agent loop with two-phase autho
 │ 3. Bound iterations (max_iterations, default 10)       │
 │ 4. Bound tool outputs (LimitedWriter, default 64 KiB)  │
 └────────────────────────────────────────────────────────┘
-          │ (authorize / execute)
-          ▼
+                  │ (authorize / execute)
+                  ▼
 ┌────────────────────────────────────────────────────────┐
 │ DaemonGovernedToolExecutor (custos-daemon)             │
 │                                                        │
@@ -50,8 +61,8 @@ Phase 7 (F08) implements the governed multi-turn agent loop with two-phase autho
 │  - update_effect_status() & mark_receipted()           │
 │  - Atomic fallback: mark Uncertain if settlement fails │
 └────────────────────────────────────────────────────────┘
-          │
-          ▼
+                  │
+                  ▼
 ┌────────────────────────────────────────────────────────┐
 │ TaskRuntime Orchestration (custos-runtime)             │
 │                                                        │
@@ -99,7 +110,47 @@ Phase 7 (F08) implements the governed multi-turn agent loop with two-phase autho
 
 ---
 
-## 4. Golden Acceptance Test G07
+## 4. Supervised Agent Runner & Zombie Process Elimination
+
+### 4.1 SupervisedAgentRunner Decorator
+Implemented in `platform/runtime/src/agent/runner.rs` (265 lines):
+- Wraps any implementation of `AgentDriver` / `AgentRuntimePort`.
+- Automatically measures turn duration, token usage, and status transitions.
+- Records hierarchical `StepSpan` spans and publishes them to `SupervisionTraceSink` for real-time observability.
+- Monitors step duration and failure rates, notifying `SupervisedObserver` when anomalies occur.
+- Enforces transparent supervision without modifying the inner agent driver logic.
+
+### 4.2 ProcessDropGuard & Zombie Elimination
+Implemented in `platform/adapters/src/harnesses/stream/process.rs`:
+- External CLI agents (e.g. Claude Code, Aider, Codex) run as OS subprocesses.
+- To prevent orphaned processes when tasks are aborted or run objects are dropped:
+  ```rust
+  #[cfg(unix)]
+  {
+      command.process_group(0); // Spawns in isolated process group
+  }
+  ```
+- The inner process handle implements `Drop`:
+  ```rust
+  #[cfg(unix)]
+  if let Some(pid) = self.pid {
+      unsafe {
+          libc::kill(-(pid as i32), libc::SIGKILL); // Kill whole process group!
+      }
+  }
+  ```
+- This guarantees that background compiler runs, dev servers, or agent loops started by child processes are cleanly and immediately terminated.
+
+### 4.3 Canonical Naming & Zero-Mock Policy
+- **Typed Interface:** Legacy untyped "harness" terminology is superseded by the `AgentDriver` trait in `platform/core/src/contracts/agent.rs` and `CliAgentAdapter` in `platform/adapters/src/harnesses/adapter.rs`.
+- **Zero-Mock Policy:** Production code contains zero mock implementations. All test harnesses, double adapters, and state stubs are strictly isolated behind:
+  ```rust
+  #[cfg(any(test, feature = "test-support"))]
+  ```
+
+---
+
+## 5. Golden Acceptance Test G07
 
 Golden Acceptance Test G07 (`tests/e2e/tests/governed_loop_golden_test.rs`) validates the end-to-end integration:
 
@@ -114,16 +165,17 @@ Golden Acceptance Test G07 (`tests/e2e/tests/governed_loop_golden_test.rs`) vali
 
 ---
 
-## 5. Verification Commands
+## 6. Verification Commands
 
 ```bash
 # Run Golden Acceptance Test G07
 cargo test -p custos-tests-e2e --test governed_loop_golden_test
 
+# Verify Process Drop Guard & Adapter Tests
+cargo test -p custos-adapters --lib harnesses
+
 # Workspace Quality Gates
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-bash ./xtask/scripts/check_deps.sh --strict
-npm --prefix ui/desktop run build
-node tests/desktop/canvas-smoke.mjs
+cargo xtask gate
 ```

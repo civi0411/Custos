@@ -20,9 +20,9 @@ import {
 import { useAppContext } from '@/context/AppContext';
 import { formatKeyCombo } from '@/lib/utils';
 import { DaemonPane } from './DaemonPane';
-import { CloudProvidersUnifiedPane } from '@/features/ai-setup/CloudProvidersUnifiedPane';
-import { LocalAiUnifiedPane } from '@/features/ai-setup/LocalAiUnifiedPane';
-import { CostQuotasPane } from '@/features/ai-setup/CostQuotasPane';
+import { CloudProvidersUnifiedPane } from '../ai-setup/CloudProvidersUnifiedPane';
+import { LocalAiUnifiedPane } from '../ai-setup/LocalAiUnifiedPane';
+import { CostQuotasPane } from '../ai-setup/CostQuotasPane';
 
 export interface SettingsModalProps {
   isOpen: boolean;

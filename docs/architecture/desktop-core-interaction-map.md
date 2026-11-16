@@ -87,11 +87,11 @@ OrCa cung cấp cảm hứng workspace/worktree, PTY và resource canvas. Open S
 
 ## 3. Process, host và transport
 
-### 3.1 `custos-app` thực sự làm gì?
+### 3.1 `apps/` thực sự làm gì?
 
-`apps/` chứa các executable hosts/daemon, không phải một Rust package sở hữu mọi logic. Desktop package hiện tên `custos-app-desktop` (`apps/desktop/native`); headless CLI host là `custos-app-cli` (`apps/cli`). Workspace hiện gồm 20 Cargo members phân theo 3 ring (`platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`), nên “11 canonical crates” chỉ là vocabulary phân tầng lịch sử, không phải số package thực tế trong Cargo metadata.
+`apps/` chứa các executable hosts/daemon, không phải một Rust package sở hữu mọi logic. Desktop package tên `custos-desktop` (`apps/desktop/native`); headless CLI host là `custos-app-cli` (`apps/cli`); daemon nền là `custos-daemon` (`apps/daemon`). Workspace phân bổ rõ theo 3 ring: Platform (`platform/*`), Vertical Workbenches (`workbenches/*`), Applications (`apps/*`), SDK (`sdk/*`), Tests (`tests/*`) và Engineering Automation (`xtask`).
 
-Desktop host `desktop/src/lib.rs` sở hữu:
+Desktop host `apps/desktop/native/src/lib.rs` sở hữu:
 
 - Khởi tạo/attach daemon qua SDK và profile.
 - Trạng thái Connecting/Ready/Recovering/Degraded/Incompatible.
@@ -99,7 +99,7 @@ Desktop host `desktop/src/lib.rs` sở hữu:
 - Window/webview và embedded browser registry; kiểm caller qua `browser::authorize`.
 - Retry attachment khi mất kết nối; không sở hữu Task reducer, SQL hoặc GPU scheduler.
 
-Desktop Cargo dependencies có SDK/domain/Tauri, không link persistence/runtime/daemon. Đây là host mỏng đã thể hiện trong source. **CLI host chưa đồng nhất:** manifest vẫn phụ thuộc daemon/core; không gọi toàn bộ client layer đã tách sạch.
+Desktop Cargo dependencies có SDK/domain/Tauri, không link persistence/runtime/daemon. Headless CLI host (`custos-app-cli` tại `apps/cli`) là client mỏng thuần Rust giao tiếp hoàn toàn qua `custos-sdk` trên loopback.
 
 ### 3.2 Hai đường vào cùng backend
 

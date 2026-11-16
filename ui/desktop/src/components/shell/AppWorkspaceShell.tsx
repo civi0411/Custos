@@ -15,17 +15,13 @@ import { useWorkspaceTabRouter } from '@/components/shell/useWorkspaceTabRouter'
 import { ShellModals, type CreateTaskPrefill } from '@/components/shell/ShellModals';
 import { useResourcePicker } from '@/components/shell/useResourcePicker';
 
-interface AppWorkspaceShellProps {
+export interface AppWorkspaceShellProps {
   mode: ActiveWorkbench;
   onSwitchMode: (mode: ActiveWorkbench) => void;
-  currentProject: string;
-  projectNames: string[];
-  onSelectProject: (name: string) => void;
   sessions: Session[];
   allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
-  tasks: import('@/types/domain').Task[];
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
   onClearTask: () => void;
@@ -36,21 +32,25 @@ interface AppWorkspaceShellProps {
   onNewSession: () => void;
   onNewSessionForTask: (taskId: string) => Promise<void>;
   onSendMessage: (text: string) => Promise<boolean>;
-  onClearHistory: () => void;
   onDeleteConversation: (sessionId: string) => void | Promise<void>;
   onAcceptAndRun?: () => void;
   onRejectDiff?: () => void;
   onCopyDiff?: () => void;
+  currentProject?: string;
+  projectNames?: string[];
+  onSelectProject?: (name: string) => void;
+  tasks?: import('@/types/domain').Task[];
+  onClearHistory?: () => void;
   onShowToast?: (msg: string) => void;
   onOpenSettings?: () => void;
-  isSidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
-  resourceTabs: ResourceTabsState;
-  isWebTabOpen: boolean;
-  isWebTabExpanded: boolean;
-  onToggleWebTab: () => void;
-  onToggleExpandWebTab: () => void;
-  openResources: (expanded: boolean) => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  resourceTabs?: ResourceTabsState;
+  isWebTabOpen?: boolean;
+  isWebTabExpanded?: boolean;
+  onToggleWebTab?: () => void;
+  onToggleExpandWebTab?: () => void;
+  openResources?: (expanded: boolean) => void;
   workspaces?: import('@/types/domain').ExecutionWorkspace[];
   activeWorkspaceId?: string;
   setActiveWorkspaceId?: (id: string) => void;
@@ -62,14 +62,14 @@ interface AppWorkspaceShellProps {
 export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   mode,
   onSwitchMode,
-  currentProject,
-  projectNames,
-  onSelectProject,
+  currentProject: propCurrentProject,
+  projectNames: propProjectNames,
+  onSelectProject: propOnSelectProject,
   sessions,
   allSessions,
   activeSessionId,
   onSelectSession,
-  tasks,
+  tasks: propTasks,
   selectedTaskId,
   onSelectTask,
   onClearTask,
@@ -85,15 +85,15 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onAcceptAndRun,
   onRejectDiff,
   onCopyDiff,
-  onShowToast,
+  onShowToast: propOnShowToast,
   onOpenSettings: _onOpenSettings,
-  isSidebarCollapsed,
+  isSidebarCollapsed: propIsSidebarCollapsed,
   onToggleSidebar: _onToggleSidebar,
-  resourceTabs,
-  isWebTabOpen,
-  isWebTabExpanded,
-  onToggleWebTab,
-  onToggleExpandWebTab,
+  resourceTabs: propResourceTabs,
+  isWebTabOpen: propIsWebTabOpen,
+  isWebTabExpanded: propIsWebTabExpanded,
+  onToggleWebTab: propOnToggleWebTab,
+  onToggleExpandWebTab: propOnToggleExpandWebTab,
   openResources: _openResources,
   workspaces: propWorkspaces,
   activeWorkspaceId: propActiveWorkspaceId,
@@ -109,6 +109,17 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     setActiveWorkspaceId: ctxSetActiveWorkspaceId,
     activeWorkspace: ctxActiveWorkspace,
     refreshWorkspaces: ctxRefreshWorkspaces,
+    tasks: ctxTasks,
+    currentProject: ctxCurrentProject,
+    setCurrentProject: ctxSetCurrentProject,
+    projectData: ctxProjectData,
+    isSidebarCollapsed: ctxIsSidebarCollapsed,
+    showToast: ctxShowToast,
+    isWebTabOpen: ctxIsWebTabOpen,
+    setIsWebTabOpen: ctxSetIsWebTabOpen,
+    isWebTabExpanded: ctxIsWebTabExpanded,
+    setIsWebTabExpanded: ctxSetIsWebTabExpanded,
+    resourceTabs: ctxResourceTabs,
     createTask,
     advanceTask,
     completeTask,
@@ -129,6 +140,17 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const setActiveWorkspaceId = propOnSelectWorkspace ?? propSetActiveWorkspaceId ?? ctxSetActiveWorkspaceId;
   const activeWorkspace = propActiveWorkspace ?? ctxActiveWorkspace;
   const refreshWorkspaces = propRefreshWorkspaces ?? ctxRefreshWorkspaces;
+  const tasks = propTasks ?? ctxTasks;
+  const currentProject = propCurrentProject ?? ctxCurrentProject;
+  const projectNames = propProjectNames ?? Array.from(new Set([ctxCurrentProject, 'AgentHub', ...Object.keys(ctxProjectData)].filter(Boolean)));
+  const onSelectProject = propOnSelectProject ?? ctxSetCurrentProject;
+  const isSidebarCollapsed = propIsSidebarCollapsed ?? ctxIsSidebarCollapsed;
+  const onShowToast = propOnShowToast ?? ctxShowToast;
+  const isWebTabOpen = propIsWebTabOpen ?? ctxIsWebTabOpen;
+  const isWebTabExpanded = propIsWebTabExpanded ?? ctxIsWebTabExpanded;
+  const resourceTabs = propResourceTabs ?? ctxResourceTabs;
+  const onToggleWebTab = propOnToggleWebTab ?? (() => ctxSetIsWebTabOpen((prev) => !prev));
+  const onToggleExpandWebTab = propOnToggleExpandWebTab ?? (() => ctxSetIsWebTabExpanded(!ctxIsWebTabExpanded));
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [compactWorkspace, setCompactWorkspace] = useState(false);
 
