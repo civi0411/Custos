@@ -9,6 +9,7 @@ rust-version.workspace = true
 description = "Custos Sovereign Research Workbench (Academic literature, note-taking, notebooks, citation verification, experiment reproduction)"
 
 [dependencies]
+custos-contracts = { workspace = true }
 custos-domain = { path = "../../platform/domain" }
 custos-core = { path = "../../platform/core" }
 custos-protocol = { workspace = true }

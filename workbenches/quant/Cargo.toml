@@ -9,6 +9,7 @@ rust-version.workspace = true
 description = "Custos Sovereign Quantitative Trading Workbench (Alpha discovery, backtesting, risk audits, execution)"
 
 [dependencies]
+custos-contracts = { workspace = true }
 custos-domain = { path = "../../platform/domain" }
 custos-core = { path = "../../platform/core" }
 serde = { workspace = true, features = ["derive"] }

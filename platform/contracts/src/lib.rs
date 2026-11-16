@@ -162,12 +162,15 @@ pub use resources::{
 pub use execution::{
     validate_browser_url, AgentDriver, AgentRuntimePort, BrowserConsoleEntry,
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
-    CaptureSnapshotParams, CommandExecutionResult, CommandRunnerPort, CostVisibility,
-    CreateTabParams, EnvSnapshot, EnvironmentAssurance, EnvironmentHandle, EnvironmentPort,
-    EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecutionLane, GateReport,
-    HarnessDescriptor, HarnessExecutionResult, HarnessMaturity,
-    HarnessProfile, LanePolicy, NavigateTabParams, RunObserver, SandboxCommand, SandboxPort,
-    ToolGate, ToolMediationLevel, WorktreeOwnership,
+    CaptureSnapshotParams, CellExecutionStatus, CommandExecutionResult, CommandRunnerPort,
+    CostVisibility, CreateTabParams, EnvSnapshot, EnvironmentAssurance, EnvironmentHandle,
+    EnvironmentPort, EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecuteCellParams,
+    ExecuteCellResult, ExecutionLane, FleetExecParams, FleetExecReceipt, FleetExecResult,
+    GateReport, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity, HarnessProfile,
+    KernelStatus, LanePolicy, NavigateTabParams, NotebookCell, NotebookCellType, NotebookDocument,
+    NotebookKernelBinding, NotebookKernelState, RegisterHostParams, RemoteHostNode,
+    RemoteHostStatus, RunObserver, SandboxCommand, SandboxPort, SshAuthMethod, ToolGate,
+    ToolMediationLevel, WorktreeOwnership,
 };
 
 // --- Inference & Models ---

@@ -1462,6 +1462,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "custos-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "async-trait",
+ "base64 0.21.7",
+ "blake3",
+ "bytes",
+ "chrono",
+ "custos-adapters",
+ "custos-contracts",
+ "custos-core",
+ "custos-domain",
+ "custos-integrations",
+ "custos-provider",
+ "custos-storage",
+ "futures",
+ "hex",
+ "lru 0.12.5",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "tracing-futures",
+ "uuid",
+]
+
+[[package]]
 name = "custos-integrations"
 version = "0.1.0"
 dependencies = [
@@ -1696,6 +1733,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "custos-contracts",
  "custos-core",
  "custos-domain",
  "custos-runtime",
@@ -1714,6 +1752,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "custos-adapters",
+ "custos-contracts",
  "custos-core",
  "custos-domain",
  "custos-runtime",
@@ -1731,6 +1770,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "custos-contracts",
  "custos-core",
  "custos-domain",
  "rusqlite",
@@ -1747,6 +1787,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "custos-contracts",
  "custos-core",
  "custos-domain",
  "custos-protocol",

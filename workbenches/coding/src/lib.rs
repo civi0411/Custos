@@ -4,6 +4,8 @@
 //! Covers autonomous software engineering, codebase intelligence, Git patch operations,
 //! and regression testing across the Coding Workbench Lens.
 
+pub mod application;
+pub mod contribution;
 pub mod fixtures;
 pub mod pipeline_invariant;
 pub mod profile;
@@ -12,12 +14,15 @@ pub mod skills;
 pub mod supervision;
 pub mod verifiers;
 
+pub use application::*;
+pub use contribution::*;
 pub use fixtures::*;
 pub use pipeline_invariant::AstSyntaxInvariant;
 pub use profile::*;
 pub use recipe::*;
 pub use skills::*;
 pub use verifiers::*;
+pub use EngineeringPack as CodingPack;
 
 use async_trait::async_trait;
 use custos_domain::oi::ExecutionTopology;

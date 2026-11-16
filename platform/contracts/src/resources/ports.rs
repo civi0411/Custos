@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use crate::identity::error::DomainError;
 use crate::resources::workspace::WorkspaceId;
 use crate::resources::artifact::ArtifactRef;
@@ -11,7 +10,6 @@ use crate::resources::compute::{
     OptionalConsumerPlacement, TrainingCheckpointManifest,
     TrainingExecutionReceipt, TrainingStepTelemetry,
 };
-use crate::resources::terminal::{TerminalOutputChunk, TerminalSession};
 use crate::resources::workspace::{
     DirtyManifest, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus,
 };
@@ -48,44 +46,48 @@ pub trait WorkspaceRepository: Send + Sync {
 
 #[async_trait]
 pub trait WorkspaceProvider: Send + Sync {
-    async fn create_workspace(
-        &self,
-        parent_repo: &str,
-        branch: &str,
-        kind: WorkspaceKind,
-    ) -> Result<ExecutionWorkspace, DomainError>;
-
-    async fn inspect_workspace(&self, workspace: &ExecutionWorkspace)
-        -> Result<bool, DomainError>;
-
-    async fn check_dirty(
+    async fn validate(&self, kind: &WorkspaceKind, path: &str) -> Result<(), DomainError>;
+    async fn provision(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError>;
+    async fn setup(
         &self,
         workspace: &ExecutionWorkspace,
-    ) -> Result<DirtyManifest, DomainError>;
-
-    async fn cleanup_workspace(
-        &self,
-        workspace: &ExecutionWorkspace,
-        force: bool,
+        script: Option<&str>,
     ) -> Result<(), DomainError>;
+    async fn inspect_dirty(
+        &self,
+        _workspace: &ExecutionWorkspace,
+    ) -> Result<DirtyManifest, DomainError> {
+        Ok(DirtyManifest::default())
+    }
+    async fn diff(&self, _workspace: &ExecutionWorkspace) -> Result<String, DomainError> {
+        Ok(String::new())
+    }
+    async fn recover(&self, _workspace: &ExecutionWorkspace) -> Result<bool, DomainError> {
+        Ok(true)
+    }
+    async fn inspect_environment_assurance(
+        &self,
+        _workspace: &ExecutionWorkspace,
+    ) -> Result<crate::execution::assurance::EnvironmentAssurance, DomainError> {
+        Ok(crate::execution::assurance::EnvironmentAssurance::unconstrained())
+    }
+    async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError>;
 }
 
-#[async_trait]
 pub trait RepositoryGitPort: Send + Sync {
-    async fn clone_repository(
+    fn add_worktree(
         &self,
-        remote_url: &str,
-        target_dir: &Path,
-        branch: Option<&str>,
+        repo_dir: &std::path::Path,
+        worktree_path: &std::path::Path,
     ) -> Result<(), DomainError>;
-
-    async fn create_branch(&self, repo_dir: &Path, branch_name: &str) -> Result<(), DomainError>;
-    async fn current_branch(&self, repo_dir: &Path) -> Result<String, DomainError>;
-    async fn head_commit(&self, repo_dir: &Path) -> Result<String, DomainError>;
-    async fn is_dirty(&self, repo_dir: &Path) -> Result<bool, DomainError>;
-    async fn stage_all(&self, repo_dir: &Path) -> Result<(), DomainError>;
-    async fn commit(&self, repo_dir: &Path, message: &str) -> Result<String, DomainError>;
-    async fn push(&self, repo_dir: &Path, remote: &str, branch: &str) -> Result<(), DomainError>;
+    fn remove_worktree(
+        &self,
+        repo_dir: &std::path::Path,
+        worktree_path: &std::path::Path,
+    ) -> Result<(), DomainError>;
+    fn diff_head(&self, _worktree_path: &std::path::Path) -> Result<String, DomainError> {
+        Ok(String::new())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -373,100 +375,15 @@ pub trait ExecutionTargetResolver: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Terminal PTY Port
+// 6. Terminal PTY Port & 7. Notebook Driver Port
 // ---------------------------------------------------------------------------
 
-#[async_trait]
-pub trait TerminalPort: Send + Sync {
-    async fn spawn(
-        &self,
-        workspace_id: &str,
-        working_dir: &Path,
-        command: Option<&str>,
-        cols: u16,
-        rows: u16,
-    ) -> Result<TerminalSession, DomainError>;
-
-    async fn write(&self, session_id: &str, data: &[u8]) -> Result<usize, DomainError>;
-    async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<(), DomainError>;
-    async fn read_output(
-        &self,
-        session_id: &str,
-        from_seq: u64,
-        max_bytes: usize,
-    ) -> Result<TerminalOutputChunk, DomainError>;
-    async fn terminate(&self, session_id: &str) -> Result<(), DomainError>;
-}
-
-pub trait TerminalOutputConsumer: Send + Sync {
-    fn consume_output(&self, session_id: &str, chunk: TerminalOutputChunk);
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TerminalProcessHandle {
-    pub session_id: String,
-    pub pid: u32,
-}
-
-#[async_trait]
-pub trait TerminalDriverPort: Send + Sync {
-    async fn create_pty(
-        &self,
-        working_dir: &Path,
-        command: Option<&str>,
-        cols: u16,
-        rows: u16,
-    ) -> Result<(TerminalProcessHandle, Box<dyn TerminalPort>), DomainError>;
-}
-
-// ---------------------------------------------------------------------------
-// 7. Notebook Driver Port
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotebookWorkerResponse {
-    pub status: String,
-    pub stdout: String,
-    pub stderr: String,
-}
-
-#[async_trait]
-pub trait NotebookWorkerSession: Send + Sync {
-    async fn execute(
-        &self,
-        code: String,
-        cwd: Option<String>,
-    ) -> Result<NotebookWorkerResponse, DomainError>;
-    fn interrupt(&self);
-}
-
-#[async_trait]
-pub trait NotebookDriverPort: Send + Sync {
-    fn discover_python_path(&self) -> PathBuf {
-        PathBuf::from("python3")
-    }
-    async fn start_kernel(
-        &self,
-        python_path: &Path,
-        working_dir: &Path,
-    ) -> Result<std::sync::Arc<dyn NotebookWorkerSession>, DomainError>;
-}
-
-#[async_trait]
-pub trait NotebookStoragePort: Send + Sync {
-    async fn get_document(
-        &self,
-        doc_id: &str,
-    ) -> Result<Option<crate::execution::notebook::NotebookDocument>, DomainError>;
-    async fn save_document(
-        &self,
-        doc: &crate::execution::notebook::NotebookDocument,
-    ) -> Result<(), DomainError>;
-    async fn list_documents(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Vec<crate::execution::notebook::NotebookDocument>, DomainError>;
-}
+pub use crate::execution::terminal::{
+    TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
+};
+pub use crate::execution::notebook::{
+    NotebookDriverPort, NotebookStoragePort, NotebookWorkerResponse, NotebookWorkerSession,
+};
 
 // ---------------------------------------------------------------------------
 // 8. Source Acquisition Port

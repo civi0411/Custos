@@ -4,6 +4,7 @@ members = [
     "platform/contracts",
     "platform/domain",
     "platform/core",
+    "platform/engine",
     "platform/integrations",
     "platform/ai",
     "platform/storage",
@@ -44,6 +45,7 @@ description = "Custos Sovereign Agentic Operating System"
 custos-contracts = { path = "platform/contracts" }
 custos-domain = { path = "platform/domain" }
 custos-core = { path = "platform/core" }
+custos-engine = { path = "platform/engine" }
 custos-integrations = { path = "platform/integrations" }
 custos-provider = { path = "platform/ai" }
 custos-storage = { path = "platform/storage" }

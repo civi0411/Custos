@@ -102,19 +102,20 @@ fn test_all_capability_manifests_exist_and_valid_json() {
         .unwrap();
 
     let capabilities = [
-        ("notebook", "platform/adapters/src/host/notebook", "notebook"),
-        ("workspace", "platform/adapters/src/host/workspace", "workspace"),
-        ("terminal", "platform/adapters/src/host/terminal", "terminal"),
-        ("compute", "platform/adapters/src/connectors/compute", "compute"),
-        ("documents", "platform/adapters/src/host/documents", "documents"),
-        ("local-inference", "platform/ai/src/local/local_inference", "local_inference"),
-        ("mcp", "platform/adapters/src/connectors/mcp", "mcp"),
-        ("remote-agents", "platform/adapters/src/connectors/a2a", "a2a"),
+        ("notebook", "platform/integrations/src/notebook", "notebook"),
+        ("workspace", "platform/integrations/src/filesystem/workspace", "workspace"),
+        ("terminal", "platform/integrations/src/terminal", "terminal"),
+        ("compute", "platform/integrations/src/compute", "compute"),
+        ("documents", "platform/integrations/src/connectors/documents", "documents"),
+        ("local-inference", "platform/integrations/src/models/local/local_inference", "local_inference"),
+        ("mcp", "platform/integrations/src/protocols/mcp", "mcp"),
+        ("remote-agents", "platform/integrations/src/protocols/a2a", "a2a"),
     ];
     let exports = format!(
-        "{}\n{}",
-        fs::read_to_string(root_dir.join("platform/adapters/src/lib.rs")).unwrap(),
-        fs::read_to_string(root_dir.join("platform/ai/src/lib.rs")).unwrap(),
+        "{}\n{}\n{}",
+        fs::read_to_string(root_dir.join("platform/integrations/src/lib.rs")).unwrap(),
+        fs::read_to_string(root_dir.join("platform/adapters/src/lib.rs")).unwrap_or_default(),
+        fs::read_to_string(root_dir.join("platform/ai/src/lib.rs")).unwrap_or_default(),
     );
     for (cap, path, export_name) in capabilities {
         let module_dir = root_dir.join(path);

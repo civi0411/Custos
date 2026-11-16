@@ -14,6 +14,26 @@ use crate::jobs;
 use crate::roles;
 use crate::verifiers;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct QuantPackDescriptor {
+    pub name: String,
+    pub version: String,
+    pub features: Vec<String>,
+}
+
+pub fn get_descriptor() -> QuantPackDescriptor {
+    QuantPackDescriptor {
+        name: "custos-pack-quant".to_string(),
+        version: "0.1.0".to_string(),
+        features: vec![
+            "Alpha Signal Discovery & Formulation".to_string(),
+            "Non-Lookahead Backtesting Engine".to_string(),
+            "Deflated Sharpe Ratio & PBO Verification".to_string(),
+            "Governed Order Routing & Risk Gate".to_string(),
+        ],
+    }
+}
+
 pub struct QuantPack;
 
 impl QuantPack {
