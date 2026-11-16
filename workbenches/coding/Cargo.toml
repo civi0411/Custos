@@ -9,6 +9,7 @@ rust-version.workspace = true
 description = "Custos Autonomous Software Engineering Workbench (Codebase intelligence, Git patch operations, regression testing)"
 
 [dependencies]
+custos-contracts = { workspace = true }
 custos-domain = { path = "../../platform/domain" }
 custos-core = { path = "../../platform/core" }
 custos-runtime = { path = "../../platform/runtime" }

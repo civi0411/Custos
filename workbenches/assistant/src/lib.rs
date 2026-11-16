@@ -4,6 +4,8 @@
 //! Covers personal productivity, inbox triage, safe draft generation, calendar scheduling,
 //! and governed external mutations across the Copilot / Assistant Workbench Lens.
 
+pub mod application;
+pub mod contribution;
 pub mod domain;
 pub mod fixtures;
 pub mod profile;
@@ -12,6 +14,8 @@ pub mod skills;
 pub mod supervision;
 pub mod verifiers;
 
+pub use application::*;
+pub use contribution::*;
 pub use domain::{AssistantDraft, AssistantDraftPort, GovernedOutboxInvariant};
 pub use fixtures::*;
 pub use profile::*;

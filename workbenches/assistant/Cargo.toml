@@ -9,6 +9,7 @@ rust-version.workspace = true
 description = "Custos Sovereign Assistant Workbench (Personal productivity, agenda, drafts, user confirmation oracle)"
 
 [dependencies]
+custos-contracts = { workspace = true }
 custos-domain = { path = "../../platform/domain" }
 custos-core = { path = "../../platform/core" }
 custos-runtime = { path = "../../platform/runtime" }

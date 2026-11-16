@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use custos_core::contracts::notebook::{
     NotebookDriverPort, NotebookWorkerResponse, NotebookWorkerSession,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};

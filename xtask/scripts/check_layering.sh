@@ -26,6 +26,14 @@ reject_source() {
 reject_source 'tokio|rusqlite|reqwest|std::fs|std::net' platform/domain/src
 reject_source 'custos_runtime|custos_persistence|custos_storage|custos_adapters|custos_integrations|custos_daemon|custos_protocol' platform/core/src
 reject_source 'rusqlite' platform/runtime/src/oi
+if [[ -d "platform/engine/src" ]]; then
+    reject_source 'rusqlite|reqwest|custos_integrations|custos_daemon' platform/engine/src
+    reject_source '(std|tokio)::process::Command::new' platform/engine/src
+    if grep -rnE --include='*.rs' --exclude='*test*' 'custos_storage|custos_persistence' platform/engine/src | grep -v 'cfg(test)'; then
+        echo "ERROR: forbidden production dependency in platform/engine/src" >&2
+        exit 1
+    fi
+fi
 if [[ -d "platform/components/src" ]]; then
     reject_source 'rusqlite|reqwest' platform/components/src
 fi
