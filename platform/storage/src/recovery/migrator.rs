@@ -1,22 +1,22 @@
 use rusqlite::{Connection, Result};
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
-    let schema_core = include_str!("../migrations/0001_core.sql");
+    let schema_core = include_str!("../../migrations/0001_core.sql");
     conn.execute_batch(schema_core)?;
 
-    let schema_runtime = include_str!("../migrations/0002_runtime.sql");
+    let schema_runtime = include_str!("../../migrations/0002_runtime.sql");
     conn.execute_batch(schema_runtime)?;
 
-    let schema_authority = include_str!("../migrations/0003_authority.sql");
+    let schema_authority = include_str!("../../migrations/0003_authority.sql");
     conn.execute_batch(schema_authority)?;
 
-    let schema_usage = include_str!("../migrations/0004_usage.sql");
+    let schema_usage = include_str!("../../migrations/0004_usage.sql");
     conn.execute_batch(schema_usage)?;
 
-    let schema_evidence = include_str!("../migrations/0005_evidence.sql");
+    let schema_evidence = include_str!("../../migrations/0005_evidence.sql");
     conn.execute_batch(schema_evidence)?;
 
-    let schema_session = include_str!("../migrations/0006_session_and_bridge.sql");
+    let schema_session = include_str!("../../migrations/0006_session_and_bridge.sql");
     conn.execute_batch(schema_session)?;
 
     let has_contract_column = conn
@@ -26,15 +26,15 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .iter()
         .any(|column| column == "contract_json");
     if !has_contract_column {
-        conn.execute_batch(include_str!("../migrations/0007_task_contract.sql"))?;
+        conn.execute_batch(include_str!("../../migrations/0007_task_contract.sql"))?;
     }
 
-    conn.execute_batch(include_str!("../migrations/0008_task_events.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0009_outbox_and_effects.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0008_task_events.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0009_outbox_and_effects.sql"))?;
     conn.execute_batch(include_str!(
-        "../migrations/0010_harden_outbox_and_effects.sql"
+        "../../migrations/0010_harden_outbox_and_effects.sql"
     ))?;
-    conn.execute_batch(include_str!("../migrations/0011_runs_and_worker_runs.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0011_runs_and_worker_runs.sql"))?;
     let has_run_version = conn
         .prepare("PRAGMA table_info(runs)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -43,17 +43,17 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .any(|column| column == "state_version");
     if !has_run_version {
         let transaction = conn.unchecked_transaction()?;
-        transaction.execute_batch(include_str!("../migrations/0040_run_state_versions.sql"))?;
+        transaction.execute_batch(include_str!("../../migrations/0040_run_state_versions.sql"))?;
         transaction.commit()?;
     }
-    conn.execute_batch(include_str!("../migrations/0012_decision_records.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0014_node_placements.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0015_replan_records.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0016_execution_workspaces.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0019_providers_and_keys.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0012_decision_records.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0013_workflow_revisions.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0014_node_placements.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0015_replan_records.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0016_execution_workspaces.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0019_providers_and_keys.sql"))?;
     conn.execute_batch(include_str!(
-        "../migrations/0024_browser_fleet_automation.sql"
+        "../../migrations/0024_browser_fleet_automation.sql"
     ))?;
 
     let existing_provider_cols = conn
@@ -81,22 +81,22 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     conn.execute_batch(include_str!(
-        "../migrations/0025_provider_model_catalog.sql"
+        "../../migrations/0025_provider_model_catalog.sql"
     ))?;
 
-    conn.execute_batch(include_str!("../migrations/0026_provider_oauth_tokens.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0026_provider_oauth_tokens.sql"))?;
 
     conn.execute_batch(include_str!(
-        "../migrations/0027_dispatch_claims_and_fencing.sql"
+        "../../migrations/0027_dispatch_claims_and_fencing.sql"
     ))?;
 
     conn.execute_batch(include_str!(
-        "../migrations/0028_secure_provider_credentials.sql"
+        "../../migrations/0028_secure_provider_credentials.sql"
     ))?;
     conn.execute_batch(include_str!(
-        "../migrations/0029_provider_account_routing.sql"
+        "../../migrations/0029_provider_account_routing.sql"
     ))?;
-    conn.execute_batch(include_str!("../migrations/0031_daemon_settings.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0031_daemon_settings.sql"))?;
     let catalog_columns = conn
         .prepare("PRAGMA table_info(provider_model_catalog)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -106,36 +106,36 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .any(|column| column == "capabilities_json")
     {
         conn.execute_batch(include_str!(
-            "../migrations/0032_provider_model_capabilities.sql"
+            "../../migrations/0032_provider_model_capabilities.sql"
         ))?;
     }
-    conn.execute_batch(include_str!("../migrations/0033_local_models.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0033_local_models.sql"))?;
     conn.execute_batch(include_str!(
-        "../migrations/0034_local_model_load_profiles.sql"
+        "../../migrations/0034_local_model_load_profiles.sql"
     ))?;
-    conn.execute_batch(include_str!("../migrations/0036_command_ledger.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0036_command_ledger.sql"))?;
     let ledger_columns = conn
         .prepare("PRAGMA table_info(command_ledger)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     if !ledger_columns.iter().any(|column| column == "state") {
-        conn.execute_batch(include_str!("../migrations/0037_command_ledger_v2.sql"))?;
+        conn.execute_batch(include_str!("../../migrations/0037_command_ledger_v2.sql"))?;
     }
-    conn.execute_batch(include_str!("../migrations/0038_experiment_attempts.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0038_experiment_attempts.sql"))?;
     let outbox_columns = conn
         .prepare("PRAGMA table_info(outbox_entries)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     if !outbox_columns.iter().any(|column| column == "payload_json") {
         conn.execute_batch(include_str!(
-            "../migrations/0039_outbox_dispatch_intent.sql"
+            "../../migrations/0039_outbox_dispatch_intent.sql"
         ))?;
     }
-    conn.execute_batch(include_str!("../migrations/0043_package_inventory.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0043_package_inventory.sql"))?;
     conn.execute_batch(include_str!(
-        "../migrations/0044_universal_resource_registry.sql"
+        "../../migrations/0044_universal_resource_registry.sql"
     ))?;
-    conn.execute_batch(include_str!("../migrations/0045_shared_capabilities.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0046_run_supervision.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0045_shared_capabilities.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0046_run_supervision.sql"))?;
     Ok(())
 }
