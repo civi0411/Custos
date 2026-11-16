@@ -423,7 +423,8 @@ heapdump.*
 # Secrets directory
 secrets/
 . secrets/
-credentials/
+/credentials/
+!platform/integrations/src/credentials/
 .keys/
 
 # Certificates & Keys
@@ -969,6 +970,7 @@ jenkins/
 *.zst
 !platform/provider/src/types/canonical/*.zst
 !platform/ai/data/canonical/*.zst
+!platform/integrations/data/canonical/*.zst
 
 # Compiled binaries
 *.o
