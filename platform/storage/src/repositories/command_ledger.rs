@@ -1,5 +1,5 @@
 use crate::connection::DbConnection;
-use custos_core::contracts::storage::{CommandAdmission, CommandLedgerEntry};
+use custos_contracts::{CommandAdmission, CommandLedgerEntry};
 use custos_domain::DomainError;
 use rusqlite::{params, Connection, OptionalExtension};
 

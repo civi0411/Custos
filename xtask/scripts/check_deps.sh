@@ -20,36 +20,30 @@ command -v jq >/dev/null || { echo "ERROR: jq is required" >&2; exit 2; }
 
 metadata="$(cargo metadata --offline --no-deps --format-version 1)"
 
-domain_id="$(jq -r '.packages[] | select(.name == "custos-domain") | .id' <<<"$metadata")"
-if [[ -z "$domain_id" ]]; then
-  echo "ERROR: custos-domain is not a Cargo workspace member" >&2
-  exit 1
+contracts_id="$(jq -r '.packages[] | select(.name == "custos-contracts") | .id' <<<"$metadata")"
+if [[ -n "$contracts_id" ]]; then
+  contracts_workspace_deps="$(jq -r --arg id "$contracts_id" \
+    '.packages[] | select(.id == $id) | .dependencies[]? | select(.path != null) | .name' \
+    <<<"$metadata")"
+  if [[ -n "$contracts_workspace_deps" ]]; then
+    echo "ERROR: custos-contracts must not depend on workspace crates:" >&2
+    sed 's/^/  - /' <<<"$contracts_workspace_deps" >&2
+    exit 1
+  fi
+  echo "[OK] custos-contracts has no workspace-crate dependencies."
 fi
-
-domain_workspace_deps="$(jq -r --arg id "$domain_id" \
-  '.packages[] | select(.id == $id) | .dependencies[]? | select(.path != null) | .name' \
-  <<<"$metadata")"
-if [[ -n "$domain_workspace_deps" ]]; then
-  echo "ERROR: custos-domain must not depend on workspace crates:" >&2
-  sed 's/^/  - /' <<<"$domain_workspace_deps" >&2
-  exit 1
-fi
-echo "[OK] custos-domain has no workspace-crate dependencies."
 
 forbidden_edges="$(jq -r '
   .packages[] as $pkg
   | $pkg.dependencies[]? | select(.kind == null or .kind == "normal") as $dep
   | select(
-      ($pkg.name == "custos-domain" and (["tokio", "rusqlite", "reqwest"] | index($dep.name))) or
-      ($pkg.name == "custos-protocol" and ($dep.path != null) and ($dep.name != "custos-domain")) or
-      ($pkg.name == "custos-sdk" and (["custos-core", "custos-runtime", "custos-persistence", "custos-adapters", "custos-daemon", "custos-workbench-research", "custos-workbench-coding", "custos-workbench-assistant", "custos-workbench-quant"] | index($dep.name))) or
+      ($pkg.name == "custos-contracts" and (["rusqlite", "reqwest"] | index($dep.name))) or
+      ($pkg.name == "custos-protocol" and ($dep.path != null) and ($dep.name != "custos-contracts")) or
+      ($pkg.name == "custos-sdk" and (["custos-engine", "custos-storage", "custos-integrations", "custos-daemon", "custos-workbench-research", "custos-workbench-coding", "custos-workbench-assistant", "custos-workbench-quant"] | index($dep.name))) or
       ($pkg.name == "custos-daemon" and ($dep.name == "custos-sdk")) or
-      ($pkg.name == "custos-core" and (["custos-runtime", "custos-persistence", "custos-adapters", "custos-daemon", "custos-protocol"] | index($dep.name))) or
-      ($pkg.name == "custos-packs" and ($dep.name == "reqwest")) or
-      ($pkg.name == "custos-provider" and ($dep.name == "keyring")) or
-      ($pkg.name == "custos-runtime" and (["custos-persistence", "rusqlite", "custos-daemon"] | index($dep.name))) or
-      ($pkg.name == "custos-app-cli" and (["tauri", "tauri-build", "tauri-plugin-opener", "custos-persistence", "custos-core", "custos-adapters", "custos-daemon"] | index($dep.name))) or
-      ($pkg.name == "custos-app-desktop" and (["custos-persistence", "custos-core", "custos-adapters", "custos-daemon"] | index($dep.name)))
+      ($pkg.name == "custos-engine" and (["custos-storage", "custos-integrations", "custos-daemon", "custos-protocol", "rusqlite", "reqwest"] | index($dep.name))) or
+      ($pkg.name == "custos-app-cli" and (["tauri", "tauri-build", "tauri-plugin-opener", "custos-storage", "custos-integrations", "custos-daemon"] | index($dep.name))) or
+      ($pkg.name == "custos-app-desktop" and (["custos-storage", "custos-integrations", "custos-daemon"] | index($dep.name)))
     )
   | "\($pkg.name) -> \($dep.name)"' <<<"$metadata")"
 if [[ -n "$forbidden_edges" ]]; then
@@ -60,7 +54,7 @@ fi
 
 app_names="$(jq -c '[.packages[] | select(.manifest_path | contains("/apps/")) | .name]' <<<"$metadata")"
 adapter_to_app="$(jq -r --argjson apps "$app_names" \
-  '.packages[] | select(.manifest_path | contains("/platform/adapters/")) as $pkg
+  '.packages[] | select(.manifest_path | (contains("/platform/adapters/") or contains("/platform/integrations/"))) as $pkg
    | $pkg.dependencies[]? | select(.path != null) | select(.kind == null or .kind == "normal") as $dep
    | select($apps | index($dep.name))
    | "\($pkg.name) -> \($dep.name)"' <<<"$metadata")"

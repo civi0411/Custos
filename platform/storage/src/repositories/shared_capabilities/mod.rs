@@ -13,7 +13,7 @@ mod reviews;
 mod tests;
 
 use crate::connection::DbConnection;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex, MutexGuard};
 

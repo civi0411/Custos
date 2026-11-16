@@ -2,8 +2,12 @@
 //!
 //! Autonomous academic literature analysis, claim verification,
 //! note-taking, notebooks, and reproducible experiment execution.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
 
+pub mod application;
 pub mod contracts;
+pub mod contribution;
 pub mod domain;
 pub mod fixtures;
 pub mod jobs;
@@ -15,6 +19,8 @@ pub mod services;
 pub mod skills;
 pub mod supervision;
 pub mod verifiers;
+
+pub use contribution::*;
 
 // Contracts re-exports (canonical ownership lives in platform/core & platform/domain)
 pub use contracts::research_ingress::{

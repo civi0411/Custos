@@ -2,6 +2,11 @@
 //! Kernel -> Context Compiler -> Model -> Authority -> Sandbox -> Outbox -> Evidence -> Kernel
 //! plus the negative paths that Custos.md's invariants demand.
 
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
+extern crate custos_engine as custos_runtime;
+extern crate custos_integrations as custos_provider;
+
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::{
     KernelPort, MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxPort,

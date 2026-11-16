@@ -441,18 +441,18 @@ mod conversation_effort_api_tests {
     use super::*;
     struct EffortModel;
     #[async_trait::async_trait]
-    impl custos_provider::ModelPort for EffortModel {
+    impl custos_domain::ModelPort for EffortModel {
         fn provider_id(&self) -> &str {
             "fixture"
         }
         async fn generate(
             &self,
-            request: &custos_provider::ProviderRequest,
-        ) -> Result<custos_provider::ModelResponse, DomainError> {
+            request: &custos_domain::inference::ProviderRequest,
+        ) -> Result<custos_domain::inference::ModelResponse, DomainError> {
             assert_eq!(request.reasoning_effort.as_deref(), Some("ultra"));
             assert_eq!(request.provider_account_id.as_deref(), Some("account-A"));
             assert_eq!(request.model, "gpt-6.1-sol");
-            Ok(custos_provider::ModelResponse::text(
+            Ok(custos_domain::inference::ModelResponse::text(
                 "answer",
                 "gpt-6.1-sol",
                 3,

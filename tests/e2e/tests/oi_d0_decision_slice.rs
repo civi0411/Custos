@@ -5,6 +5,22 @@
 //! - `d0_planner_baseline_strategy`: D0 rule-based baseline planning with sub-50ms latency overhead.
 //! - `durable_decision_ledger`: Appending and querying DecisionRecords from SQLite ledger.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_domain::task::{ContractEvidence, EvidenceKind, TaskContract};
 use custos_persistence::SqliteTaskStore;

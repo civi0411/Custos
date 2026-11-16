@@ -6,6 +6,22 @@
 //! - `s1_judge_calibration`: Calibrated confidence evaluations, criteria satisfaction, and S2 escalation.
 //! - `s1_scout_and_micro_executor`: Fast read-only discovery and zero-risk preview execution with authority denial.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_domain::workflow::RevisionNode;
 
 fn make_node(id: &str, role: &str) -> RevisionNode {

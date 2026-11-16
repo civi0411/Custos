@@ -5,6 +5,22 @@
 //! 2. `gate3_idempotency_conflict`: Strict rejection of duplicate idempotency keys with DomainError::Conflict.
 //! 3. `crash_reconciliation_and_cancellation`: InFlight to Uncertain startup recovery and graceful run cancellation.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use async_trait::async_trait;
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};

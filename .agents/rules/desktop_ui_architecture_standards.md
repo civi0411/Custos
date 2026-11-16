@@ -1,7 +1,7 @@
 # Desktop UI & Frontend Architecture Standards
 ## Custos Desktop Application Protocol (React 19, TypeScript, Vite, Tailwind CSS, Tauri v2)
 
-> **Scope:** All AI Coding Assistants (Cursor, Claude Code, Antigravity, Codex, Copilot, Windsurf) developing, modifying, or refactoring code within `Custos/ui/desktop`.
+> **Scope:** All AI Coding Assistants (Cursor, Claude Code, Antigravity, Codex, Copilot, Windsurf) developing, modifying, or refactoring code within `Custos/apps/desktop/ui`.
 > **Inviolable Principle:** Any change to the desktop UI must strictly adhere to this specification before touching source code.
 
 ---
@@ -113,7 +113,7 @@ Every frontend edit must pass both quality gates prior to declaring completion:
 
 1. **TypeScript & Vite Compilation Gate**:
    ```bash
-   npm --prefix Custos/ui/desktop run build
+   npm --prefix Custos/apps/desktop/ui run build
    ```
    *Requirement:* Exit code **0** with zero `tsc` type errors or Vite bundling warnings.
 

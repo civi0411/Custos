@@ -9,8 +9,8 @@ rust-version.workspace = true
 description = "Custos Sovereign Research Workbench (Academic literature, note-taking, notebooks, citation verification, experiment reproduction)"
 
 [dependencies]
-custos-domain = { path = "../../platform/domain" }
-custos-core = { path = "../../platform/core" }
+custos-contracts = { workspace = true }
+custos-engine = { workspace = true }
 custos-protocol = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

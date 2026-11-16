@@ -3,12 +3,21 @@ use clap::{Parser, Subcommand};
 use xshell::{cmd, Shell};
 
 fn source_capabilities(root: &std::path::Path) -> Result<std::collections::BTreeSet<String>> {
+    let integrations = root.join("platform/integrations/src");
     let adapters = root.join("platform/adapters/src");
     let ai = root.join("platform/ai/src");
-    let mut exports = std::fs::read_to_string(adapters.join("lib.rs"))?;
-    if let Ok(ai_exports) = std::fs::read_to_string(ai.join("lib.rs")) {
+    let mut exports = String::new();
+    if let Ok(integ_exports) = std::fs::read_to_string(integrations.join("lib.rs")) {
+        exports.push_str(&integ_exports);
         exports.push('\n');
+    }
+    if let Ok(adapters_exports) = std::fs::read_to_string(adapters.join("lib.rs")) {
+        exports.push_str(&adapters_exports);
+        exports.push('\n');
+    }
+    if let Ok(ai_exports) = std::fs::read_to_string(ai.join("lib.rs")) {
         exports.push_str(&ai_exports);
+        exports.push('\n');
     }
     let mut ids = std::collections::BTreeSet::new();
 
@@ -33,6 +42,7 @@ fn source_capabilities(root: &std::path::Path) -> Result<std::collections::BTree
     }
 
     let mut manifests = Vec::new();
+    collect_manifests(&integrations, &mut manifests)?;
     collect_manifests(&adapters, &mut manifests)?;
     collect_manifests(&ai, &mut manifests)?;
 
@@ -224,7 +234,7 @@ fn main() -> Result<()> {
             println!("==> [1/5] Workbench & Capability Manifest Invariants");
             validate_packs()?;
             println!("==> [2/5] Desktop UI Build & Typecheck");
-            cmd!(sh, "npm --prefix ui/desktop run build").run()?;
+            cmd!(sh, "npm --prefix apps/desktop/ui run build").run()?;
             println!("==> [3/5] Canvas Smoke Invariants");
             cmd!(sh, "node --test tests/desktop/canvas-smoke.mjs tests/desktop/model-catalog-smoke.mjs xtask/scripts/checks-smoke.mjs").run()?;
             println!("==> [4/5] Architecture Invariants & Contracts");
@@ -322,29 +332,20 @@ fn check_boundaries() -> Result<()> {
     println!("\nChecking Target Architecture Debt (Kernel-Workbench isolation):");
     let mut warnings = 0;
 
-    let domain_lib = fs::read_to_string(root.join("platform/domain/src/lib.rs"))?;
-    if domain_lib.contains("pub mod quant;") {
-        println!("  ⚠ [LEAK] platform/domain/src/lib.rs declares 'pub mod quant;'");
+    let contracts_lib = fs::read_to_string(root.join("platform/contracts/src/lib.rs"))?;
+    if contracts_lib.contains("pub mod quant;") {
+        println!("  ⚠ [LEAK] platform/contracts/src/lib.rs declares 'pub mod quant;'");
         warnings += 1;
     }
-    if domain_lib.contains("pub mod research;") {
-        println!("  ⚠ [LEAK] platform/domain/src/lib.rs declares 'pub mod research;'");
-        warnings += 1;
-    }
-
-    if root.join("platform/domain/src/evidence/claim.rs").exists() {
-        println!("  ⚠ [LEAK] platform/domain/src/evidence/claim.rs must reside in custos-workbench-research");
-        warnings += 1;
-    }
-    if root.join("platform/domain/src/evidence/synthesis.rs").exists() {
-        println!("  ⚠ [LEAK] platform/domain/src/evidence/synthesis.rs must reside in custos-workbench-research");
+    if contracts_lib.contains("pub mod research;") {
+        println!("  ⚠ [LEAK] platform/contracts/src/lib.rs declares 'pub mod research;'");
         warnings += 1;
     }
 
-    let core_contracts = root.join("platform/core/src/contracts");
-    for wb_contract in &["quant.rs", "research.rs", "research_ingress.rs"] {
-        if core_contracts.join(wb_contract).exists() {
-            println!("  ⚠ [LEAK] platform/core/src/contracts/{wb_contract} contains workbench-specific contract");
+    let legacy_crates = ["domain", "core", "runtime", "components", "adapters", "ai"];
+    for legacy in &legacy_crates {
+        if root.join(format!("platform/{legacy}")).exists() {
+            println!("  ⚠ [LEAK] platform/{legacy} legacy directory still exists");
             warnings += 1;
         }
     }
@@ -373,14 +374,9 @@ fn check_boundaries() -> Result<()> {
         warnings += 1;
     }
 
-    if root.join("platform/components/src/builtins").exists() {
-        println!("  ⚠ [LEAK] platform/components/src/builtins directory exists in platform");
-        warnings += 1;
-    }
-
-    let components_cargo = fs::read_to_string(root.join("platform/components/Cargo.toml"))?;
-    if components_cargo.contains("custos-workbench-") {
-        println!("  ⚠ [LEAK] platform/components/Cargo.toml has direct dependencies on workbench crates");
+    let engine_cargo = fs::read_to_string(root.join("platform/engine/Cargo.toml"))?;
+    if engine_cargo.contains("custos-workbench-") {
+        println!("  ⚠ [LEAK] platform/engine/Cargo.toml has direct dependencies on workbench crates");
         warnings += 1;
     }
 
@@ -432,15 +428,17 @@ fn check_boundaries() -> Result<()> {
         violations.push("sdk/protocol/Cargo.toml missing: custos-protocol must own neutral wire schemas".into());
     }
     for (manifest, forbidden, rule) in [
-        ("platform/core/Cargo.toml", "custos-protocol", "platform/core must stay transport-agnostic and never depend on custos-protocol"),
-        ("platform/ai/Cargo.toml", "keyring", "platform/ai must stay pure model/provider logic without OS keychain crates"),
-        ("platform/runtime/Cargo.toml", "reqwest", "platform/runtime must not depend on reqwest"),
-        ("platform/components/Cargo.toml", "reqwest", "platform/components must stay pure pack registry/verifier without reqwest"),
+        ("platform/contracts/Cargo.toml", "reqwest", "platform/contracts must stay zero-I/O without reqwest"),
+        ("platform/contracts/Cargo.toml", "rusqlite", "platform/contracts must stay zero-I/O without rusqlite"),
+        ("platform/engine/Cargo.toml", "reqwest", "platform/engine must not depend on reqwest in production"),
+        ("platform/engine/Cargo.toml", "rusqlite", "platform/engine must not depend on rusqlite in production"),
         ("apps/cli/Cargo.toml", "tauri", "apps/cli must stay a headless pure-Rust CLI without tauri"),
     ] {
-        let cargo_text = fs::read_to_string(root.join(manifest))?;
-        if cargo_text.contains(forbidden) {
-            violations.push(format!("{rule} ({manifest} references '{forbidden}')"));
+        if root.join(manifest).exists() {
+            let cargo_text = fs::read_to_string(root.join(manifest))?;
+            if cargo_text.contains(forbidden) {
+                violations.push(format!("{rule} ({manifest} references '{forbidden}')"));
+            }
         }
     }
     if violations.is_empty() {

@@ -134,6 +134,8 @@ eggs/
 lib/
 !**/src/**/lib/
 !**/src/**/lib/**
+!/packages/custos-npm-package/repl/lib/
+!/packages/custos-npm-package/repl/lib/**
 lib64/
 parts/
 sdist/
@@ -358,7 +360,7 @@ worktrees/
 !platform/**
 /cache/
 .cache/
-!ui/desktop/src/app/cache/**
+!apps/desktop/ui/src/app/cache/**
 
 # Logs
 logs/
@@ -421,7 +423,8 @@ heapdump.*
 # Secrets directory
 secrets/
 . secrets/
-credentials/
+/credentials/
+!platform/integrations/src/credentials/
 .keys/
 
 # Certificates & Keys
@@ -967,6 +970,7 @@ jenkins/
 *.zst
 !platform/provider/src/types/canonical/*.zst
 !platform/ai/data/canonical/*.zst
+!platform/integrations/data/canonical/*.zst
 
 # Compiled binaries
 *.o

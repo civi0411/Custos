@@ -2,10 +2,10 @@
   "name": "custos-workspace",
   "private": true,
   "scripts": {
-    "build": "npm --prefix ui/desktop run build",
-    "dev": "npm --prefix ui/desktop run dev",
-    "cli": "npm --prefix ui/cli start",
-    "tauri:desktop:dev": "npm --prefix ui/desktop run tauri:dev --",
-    "tauri:desktop:build": "npm --prefix ui/desktop run tauri:build --"
+    "build": "npm --prefix apps/desktop/ui run build",
+    "dev": "npm --prefix apps/desktop/ui run dev",
+    "cli": "npm --prefix packages/custos-npm-package run repl --",
+    "tauri:desktop:dev": "npm --prefix apps/desktop/ui run tauri:dev --",
+    "tauri:desktop:build": "npm --prefix apps/desktop/ui run tauri:build --"
   }
 }

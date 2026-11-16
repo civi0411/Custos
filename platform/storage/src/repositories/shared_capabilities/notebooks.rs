@@ -5,7 +5,7 @@ use custos_core::contracts::notebook::{
     CellExecutionStatus, KernelStatus, NotebookCell, NotebookCellType, NotebookKernelState,
     NotebookStoragePort,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::params;
 
 impl SharedCapabilitiesRepository {

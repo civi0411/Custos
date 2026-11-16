@@ -5,10 +5,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 // Exercise the exported presentation functions with the existing desktop compiler.
-const require = createRequire(new URL('../../ui/desktop/package.json', import.meta.url));
+const require = createRequire(new URL('../../apps/desktop/ui/package.json', import.meta.url));
 const ts = require('typescript');
-const typesSource = fs.readFileSync(new URL('../../ui/desktop/src/components/chat/ModelSelector/types.ts', import.meta.url), 'utf8');
-const catalogSource = fs.readFileSync(new URL('../../ui/desktop/src/components/chat/ModelSelector/catalog.ts', import.meta.url), 'utf8');
+const typesSource = fs.readFileSync(new URL('../../apps/desktop/ui/src/components/chat/ModelSelector/types.ts', import.meta.url), 'utf8');
+const catalogSource = fs.readFileSync(new URL('../../apps/desktop/ui/src/components/chat/ModelSelector/catalog.ts', import.meta.url), 'utf8');
 const source = `${typesSource}\n${catalogSource}`;
 const parsed = ts.createSourceFile('ModelSelectorCatalog.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const isolated = ts.factory.updateSourceFile(parsed, parsed.statements.filter(statement => !ts.isImportDeclaration(statement)));

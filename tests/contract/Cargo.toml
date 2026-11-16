@@ -6,8 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-custos-domain = { workspace = true }
-custos-provider = { workspace = true }
-custos-adapters = { workspace = true }
+custos-contracts = { workspace = true }
+custos-integrations = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }

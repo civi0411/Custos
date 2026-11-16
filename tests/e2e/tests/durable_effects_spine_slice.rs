@@ -4,6 +4,22 @@
 //! 1. `outbox_and_crash_reconciliation`: Durable outbox enqueuing, InFlight recording, startup crash reconciliation to Uncertain, and INV-03 enforcement.
 //! 2. `receipt_resolution_and_terminal_idempotency`: Outbox receipting, effect resolution to Succeeded, and idempotency key audit.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
 use custos_core::kernel::{CreateTask, TaskService};
 use custos_domain::{

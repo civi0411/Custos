@@ -5,6 +5,22 @@
 //! 2. `replan_record_crash_resilience`: ReplanBrief persistence and recovery across multiple crash/reboot cycles.
 //! 3. `decision_ledger_crash_resilience`: Audit trail recovery of DecisionRecord across store reboots.
 
+
+#[allow(unused_extern_crates)]
+extern crate custos_contracts as custos_domain;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_core;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_runtime;
+#[allow(unused_extern_crates)]
+extern crate custos_engine as custos_packs;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_provider;
+#[allow(unused_extern_crates)]
+extern crate custos_integrations as custos_adapters;
+#[allow(unused_extern_crates)]
+extern crate custos_storage as custos_persistence;
+
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::oi::OiPlannerPort;
 use custos_core::contracts::storage::{DecisionPort, ReplanPort, WorkflowRevisionPort};

@@ -19,14 +19,14 @@ function fixture(t, script) {
 test('layer guard fails on missing roots and forbidden source instead of reporting success', t => {
   const { root, run } = fixture(t, 'check_layering.sh');
   assert.equal(run().status, 1);
-  for (const folder of ['domain/src', 'core/src', 'runtime/src/oi']) {
+  for (const folder of ['contracts/src', 'storage/src', 'integrations/src', 'engine/src']) {
     fs.mkdirSync(path.join(root, 'platform', folder), { recursive: true });
   }
   assert.equal(run().status, 0);
-  fs.writeFileSync(path.join(root, 'platform/domain/src/lib.rs'), 'use std::fs;\n');
+  fs.writeFileSync(path.join(root, 'platform/contracts/src/lib.rs'), 'use std::fs;\n');
   assert.equal(run().status, 1);
-  fs.writeFileSync(path.join(root, 'platform/domain/src/lib.rs'), '');
-  fs.writeFileSync(path.join(root, 'platform/core/src/lib.rs'), 'use custos_adapters::documents;\n');
+  fs.writeFileSync(path.join(root, 'platform/contracts/src/lib.rs'), '');
+  fs.writeFileSync(path.join(root, 'platform/engine/src/lib.rs'), 'use reqwest::Client;\n');
   assert.equal(run().status, 1);
 });
 

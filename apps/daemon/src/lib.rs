@@ -2,6 +2,14 @@
 //!
 //! Provides the local background service composition root, IPC dispatch,
 //! and local API client bindings.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
+extern crate custos_engine as custos_runtime;
+extern crate custos_engine as custos_packs;
+extern crate custos_integrations as custos_provider;
+extern crate custos_integrations as custos_adapters;
+extern crate custos_storage as custos_persistence;
+
 pub use custos_protocol::local_api;
 pub use custos_protocol::local_api as custos_local_api;
 

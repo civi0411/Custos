@@ -1,7 +1,7 @@
 use super::*;
 use crate::connection::DbConnection;
 use chrono::Utc;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+use custos_contracts::{OutboxEntry, OutboxPort, OutboxStatus};
 use custos_domain::{Assurance, DomainError, EffectAttempt, EffectStatus, ExecutionReceipt, ReceiptStatus};
 
 #[tokio::test]

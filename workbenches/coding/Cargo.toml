@@ -9,10 +9,9 @@ rust-version.workspace = true
 description = "Custos Autonomous Software Engineering Workbench (Codebase intelligence, Git patch operations, regression testing)"
 
 [dependencies]
-custos-domain = { path = "../../platform/domain" }
-custos-core = { path = "../../platform/core" }
-custos-runtime = { path = "../../platform/runtime" }
-custos-adapters = { path = "../../platform/adapters" }
+custos-contracts = { workspace = true }
+custos-engine = { workspace = true }
+custos-integrations = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-trait = "0.1"

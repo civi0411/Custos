@@ -5,11 +5,11 @@ param(
 )
 
 if ($ScriptArgs -contains "--web" -or $ScriptArgs -contains "web") {
-    Write-Host "[Custos] Starting Custos Web Interface on http://localhost:1420 ..." -ForegroundColor Cyan
-    Set-Location -Path (Join-Path $PSScriptRoot "ui\cli")
+    Write-Host "[Custos] Starting Custos Desktop UI on http://localhost:1420 ..." -ForegroundColor Cyan
+    Set-Location -Path (Join-Path $PSScriptRoot "apps\desktop\ui")
     Start-Process "http://localhost:1420/"
     npm run dev
 } else {
-    $cliScript = Join-Path $PSScriptRoot "ui\cli\bin\custos-cli.js"
+    $cliScript = Join-Path $PSScriptRoot "packages\custos-npm-package\repl\custos-cli.js"
     & node $cliScript @ScriptArgs
 }

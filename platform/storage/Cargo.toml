@@ -1,5 +1,5 @@
 [package]
-name = "custos-persistence"
+name = "custos-storage"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -9,9 +9,9 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-custos-domain = { workspace = true }
-custos-core = { workspace = true }
+custos-contracts = { workspace = true }
 rusqlite = { workspace = true, features = ["bundled"] }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid = { workspace = true, features = ["v4"] }

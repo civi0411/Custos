@@ -6,6 +6,11 @@
 //!   Trường -> in-memory SQLite (`SqliteTaskStore::new_in_memory`), `InMemoryOutbox`
 //!   Vinh   -> `MockSandbox`
 //! Nothing here touches the network, spawns a process, or needs a database file.
+extern crate custos_contracts as custos_domain;
+extern crate custos_engine as custos_core;
+extern crate custos_engine as custos_runtime;
+extern crate custos_integrations as custos_provider;
+extern crate custos_storage as custos_persistence;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;

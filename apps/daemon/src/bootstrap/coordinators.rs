@@ -13,7 +13,7 @@ use custos_domain::DomainError;
 use custos_packs::DomainPackRegistry;
 use custos_persistence::SqliteTaskStore;
 use custos_provider::routing::availability::ModelAvailability;
-use custos_provider::ModelPort;
+use custos_domain::ModelPort;
 use custos_runtime::bridge::BridgeService;
 use custos_runtime::compute::WorkloadAdmissionCoordinator;
 use custos_runtime::session::SessionManager;
