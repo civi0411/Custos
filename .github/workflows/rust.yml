@@ -52,7 +52,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Core Tests (Blocking)
-        run: cargo test -p custos-domain -p custos-core -p custos-persistence -p custos-runtime -p custos-daemon -p custos-sdk -p custos-packs --lib
+        run: cargo test -p custos-contracts -p custos-storage -p custos-integrations -p custos-engine -p custos-daemon -p custos-sdk --lib
 
       - name: Build Daemon Binary for E2E Tests
         run: cargo build -p custos-daemon --bin custos-daemon
