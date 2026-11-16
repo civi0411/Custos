@@ -27,3 +27,4 @@ pub fn apply_reader_pragmas(reader: &Connection) -> Result<(), DomainError> {
         )
         .map_err(|e| DomainError::Validation(format!("Failed to configure reader PRAGMAs: {}", e)))
 }
+

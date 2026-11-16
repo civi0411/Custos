@@ -48,3 +48,4 @@ impl Drop for PooledReader {
         }
     }
 }
+
