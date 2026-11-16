@@ -1,12 +1,15 @@
+pub mod pool;
+pub mod pragmas;
+
+pub use pool::{PooledReader, ReaderPool, DEFAULT_POOL_MAX_SIZE};
+pub use pragmas::{apply_reader_pragmas, apply_writer_pragmas};
+
 use crate::migrations::run_migrations;
 use custos_domain::DomainError;
 use rusqlite::{Connection, OpenFlags};
-use std::ops::Deref;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-const DEFAULT_POOL_MAX_SIZE: usize = 16;
-
-/// Managed thread-safe SQLite connection handle with dedicated WAL Reader Pool (P0).
+/// Managed thread-safe SQLite connection handle with dedicated WAL Reader Pool.
 /// Writes acquire the single sovereign writer lock.
 /// Reads acquire independent read-only connections from the reader pool,
 /// enabling high-concurrency read fan-out without serializing workers.
@@ -14,40 +17,6 @@ const DEFAULT_POOL_MAX_SIZE: usize = 16;
 pub struct DbConnection {
     writer: Arc<Mutex<Connection>>,
     reader_pool: Arc<ReaderPool>,
-}
-
-pub struct ReaderPool {
-    uri: String,
-    is_memory: bool,
-    idle: Mutex<Vec<Connection>>,
-    max_size: usize,
-}
-
-pub struct PooledReader {
-    conn: Option<Connection>,
-    pool: Arc<ReaderPool>,
-}
-
-impl Deref for PooledReader {
-    type Target = Connection;
-
-    fn deref(&self) -> &Self::Target {
-        self.conn
-            .as_ref()
-            .expect("Connection available in PooledReader")
-    }
-}
-
-impl Drop for PooledReader {
-    fn drop(&mut self) {
-        if let Some(conn) = self.conn.take() {
-            if let Ok(mut idle) = self.pool.idle.lock() {
-                if idle.len() < self.pool.max_size {
-                    idle.push(conn);
-                }
-            }
-        }
-    }
 }
 
 impl DbConnection {
@@ -84,29 +53,12 @@ impl DbConnection {
         uri: String,
         is_memory: bool,
     ) -> Result<Self, DomainError> {
-        // Enforce foreign key constraints and WAL mode
-        writer
-            .execute_batch(
-                r#"
-                PRAGMA foreign_keys = ON;
-                PRAGMA journal_mode = WAL;
-                PRAGMA busy_timeout = 5000;
-                PRAGMA synchronous = NORMAL;
-                "#,
-            )
-            .map_err(|e| {
-                DomainError::Validation(format!("Failed to apply SQLite PRAGMAs: {}", e))
-            })?;
+        apply_writer_pragmas(&writer)?;
 
         run_migrations(&writer)
             .map_err(|e| DomainError::Validation(format!("Failed to run migrations: {}", e)))?;
 
-        let reader_pool = Arc::new(ReaderPool {
-            uri,
-            is_memory,
-            idle: Mutex::new(Vec::new()),
-            max_size: DEFAULT_POOL_MAX_SIZE,
-        });
+        let reader_pool = Arc::new(ReaderPool::new(uri, is_memory, DEFAULT_POOL_MAX_SIZE));
 
         Ok(Self {
             writer: Arc::new(Mutex::new(writer)),
@@ -155,16 +107,7 @@ impl DbConnection {
         }
         .map_err(|e| DomainError::Validation(format!("Failed to open reader connection: {}", e)))?;
 
-        conn.execute_batch(
-            r#"
-            PRAGMA foreign_keys = ON;
-            PRAGMA busy_timeout = 5000;
-            PRAGMA query_only = ON;
-            "#,
-        )
-        .map_err(|e| {
-            DomainError::Validation(format!("Failed to configure reader PRAGMAs: {}", e))
-        })?;
+        apply_reader_pragmas(&conn)?;
 
         Ok(PooledReader {
             conn: Some(conn),
@@ -182,9 +125,6 @@ impl DbConnection {
     }
 
     /// Attaches an auxiliary SQLite database file under a schema alias (e.g. "quant", "research").
-    ///
-    /// This allows domain-partitioned databases (`custos_quant.db`, `custos_research.db`)
-    /// to be queried or updated without polluting or locking the primary `custos_kernel.db` WAL.
     pub fn attach_partition(&self, schema_alias: &str, file_path: &str) -> Result<(), DomainError> {
         let conn = self.lock()?;
         if !schema_alias.chars().all(|c| c.is_alphanumeric() || c == '_') || schema_alias.is_empty() {

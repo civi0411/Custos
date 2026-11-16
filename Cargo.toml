@@ -44,7 +44,8 @@ custos-contracts = { path = "platform/contracts" }
 custos-domain = { path = "platform/domain" }
 custos-core = { path = "platform/core" }
 custos-provider = { path = "platform/ai" }
-custos-persistence = { path = "platform/storage" }
+custos-storage = { path = "platform/storage" }
+custos-persistence = { package = "custos-storage", path = "platform/storage" }
 custos-runtime = { path = "platform/runtime" }
 custos-adapters = { path = "platform/adapters" }
 custos-protocol = { path = "sdk/protocol" }
