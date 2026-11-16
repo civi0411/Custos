@@ -150,3 +150,22 @@ env-lock = "1.0"
 tempfile = "3.8"
 test-case = "3.2"
 wiremock = "0.6"
+
+# ═══════════════════════════════════════════════════════════════════════
+# Build Profiles — Disk Space & Compilation Optimization
+# ═══════════════════════════════════════════════════════════════════════
+[profile.dev]
+# Giảm mức debug info từ 2 (full) xuống 1 (line-tables):
+# Vẫn giữ 100% stack trace và file/line khi panic/lỗi, nhưng giảm 60-80% dung lượng dSYM và binary.
+debug = 1
+
+# Tắt debuginfo cho các thư viện bên thứ 3 (tokio, serde, tauri, reqwest...):
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test]
+debug = 1
+
+[profile.test.package."*"]
+debug = 0
+
