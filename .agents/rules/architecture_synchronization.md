@@ -66,8 +66,8 @@ Before executing any file modification:
    - Identify which package and topic owns the target file, and verify all constraints.
    - Avoid creating loose, unstructured files or unapproved utility directories.
 2. **Zero Guesswork Policy:**
-   - If unsure whether a struct or contract belongs to `custos-domain` or `custos-core`, consult `Custos.md` and `docs/development/codebase-architecture.md`.
+   - If unsure whether a struct or contract belongs to `custos-contracts` or another platform crate, consult `Custos.md` and `docs/development/codebase-architecture.md`.
 3. **Absolute Invariants:**
    - Ensure all files and modules align strictly with their declared topic responsibility.
-   - Never violate the Zero-I/O invariant of `custos-domain`.
+   - Never violate the Zero-I/O invariant of `custos-contracts`.
    - Never violate inward dependency boundaries (Ring 0 -> Ring 1 -> Ring 2).
