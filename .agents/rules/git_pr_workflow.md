@@ -1,78 +1,72 @@
-# Git Team Workflow Rule: `vi` -> `dev` Achievement & Delivery Flow
+# Git Team Delivery & PR Workflow Specification
 
-> Scope: Standard development and achievement-compatible workflow for Vĩ (civi0411) in the Custos workspace.
-
----
-
-## 1. Context & Default Branch
-- **Working Branch**: `vi` (local and `origin/vi`).
-- **Default Target Branch**: `dev` (CRITICAL: Must merge into `dev` because `dev` is the remote default branch; PRs merged to other branches do not trigger achievements).
-- **Team accounts**:
-  - Vĩ: `civi0411 <cuuvi985@gmail.com>`
-  - Vinh: `Vinh <phuvi301@gmail.com>`
-  - Trường: `NhatTruong1905 <tn696199@gmail.com>`
+> Scope: Standard Git collaboration, commit convention, and PR delivery workflow in the Custos workspace.
 
 ---
 
-## 2. Achievement Attribution Mechanics
+## 1. Branch Strategy & Target Branch
 
-### Scenario C: Hybrid Rotation Strategy (MANDATORY DEFAULT)
-To maximize achievements naturally and sustainably across the entire team:
-- **Odd Batches (PR 1, 3, 5... — Credit both badges for Vĩ)**:
-  - Commit Author: Set to teammate (Vinh or Trường).
-  - Trailing `Co-authored-by:`: Assigned to Vĩ (`civi0411`).
-  - Vĩ opens PR via `gh pr create` and merges into `dev`.
-  - **Result**: Vĩ simultaneously earns **Pull Shark** (PR Author) and **Pair Extraordinaire** (Co-author).
-  ```bash
-  git commit --author="Vinh <phuvi301@gmail.com>" \
-    -m "<type>(<scope>): <thematic subject>" \
-    -m "Co-authored-by: civi0411 <cuuvi985@gmail.com>"
-  ```
-- **Even Batches (PR 2, 4, 6... — Vĩ upgrades Pull Shark & awards Pair Extraordinaire to teammates)**:
-  - Commit Author: Vĩ (`civi0411 <cuuvi985@gmail.com>`).
-  - Trailing `Co-authored-by:`: Both Vinh and Trường included.
-  - Vĩ opens PR and merges into `dev`.
-  - **Result**: Vĩ upgrades **Pull Shark**, while Vinh and Trường both receive **Pair Extraordinaire**.
-  ```bash
-  git commit \
-    -m "<type>(<scope>): <thematic subject>" \
-    -m "Co-authored-by: Vinh <phuvi301@gmail.com>
-
-  Co-authored-by: NhatTruong1905 <tn696199@gmail.com>"
-  ```
+- **Feature / Topic Branches**: `feat/<topic>`, `refactor/<topic>`, `fix/<topic>` (or developer working branch).
+- **Default Target Branch**: `dev` (Primary development integration branch for all PRs).
+- **Release Branch**: `main` (Production releases only, governed by release tags and automated CI gates).
 
 ---
 
-## 3. Automatic PR Topic Decomposition Rubric
+## 2. Commit Standards & Collaboration Attribution
 
-Upon completing a scope of work, agents MUST NOT bundle everything into a monolithic PR. Instead, decompose changes into architectural layers (1–2 coherent topics per PR):
-1. **Batch 1 (Contracts & Core Specs)**: Domain schemas, Provider traits, DTOs, catalog & pricing specifications.
-2. **Batch 2 (Adapters & Protocol Translators)**: Client implementations, wire protocol translators, fallback logic.
-3. **Batch 3 (Runtime & Engine Logic)**: Cognitive loop, Context compression/pruning, token management.
-4. **Batch 4 (Gateway/MCP & Documentation Triad)**: Federation routers, MCP gateways, updating `Custos.md`, `codebase-architecture.md`, and playbooks.
+1. **Conventional Commits**:
+   - Format: `<type>(<scope>): <concise technical English summary, max 72 chars>`
+   - Allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`.
+   - Zero decorative emojis in commit headers and descriptions.
+
+2. **Standard Git Trailers for Collaboration**:
+   - When a commit is produced collaboratively, append standard `Co-authored-by` trailer headers:
+     ```text
+     feat(engine): integrate pareto optimization into task supervisor
+
+     Evaluate multi-objective utility scoring against candidate topologies.
+
+     Co-authored-by: Collaborator Name <collaborator@domain.com>
+     ```
+   - Exactly one blank line must separate the commit message body from trailer blocks.
+   - Strict casing: `Co-authored-by: Name <email>`.
 
 ---
 
-## 4. Formatting Invariants & Execution Pipeline
+## 3. Modular Thematic PR Decomposition
 
-1. **Mandatory Blank Line**: Exactly one blank line between Commit Subject/Body and `Co-authored-by:` trailers.
-2. **Exact Syntax**: Strict casing: `Co-authored-by: Name <email@domain>`.
-3. **Commit & PR Standard**: 100% Technical English, Conventional Commits (`feat(...)`, `refactor(...)`), zero decorative emojis.
-4. **Sequential Execution Loop**:
-   ```bash
-   # 1. Stage specific thematic files
-   git add <thematic files>
+To maintain fast code review cycles and bisectable git histories, avoid monolithic PRs. Decompose changes into discrete architectural layers (1–2 coherent topics per PR):
 
-   # 2. Commit with designated author & co-author trailers
-   git commit ...
+1. **Batch 1 (Contracts & Protocols)**:
+   - Domain schemas, traits, DTOs, wire envelopes (`platform/contracts`, `sdk/protocol`).
+2. **Batch 2 (Storage & Integrations)**:
+   - Persistence drivers, outbox tables, provider codecs, adapters (`platform/storage`, `platform/integrations`).
+3. **Batch 3 (Engine & Workbenches)**:
+   - Governed agent loop, supervisors, verification gates, vertical packs (`platform/engine`, `workbenches/*`).
+4. **Batch 4 (Applications & Documentation)**:
+   - Daemon composition root, CLI, desktop UI, architecture docs (`apps/*`, `docs/*`).
 
-   # 3. Push working branch
-   git push origin vi
+---
 
-   # 4. Create and merge PR directly to dev
-   gh pr create --base dev --head vi --title "<thematic title>" --body "<technical summary>"
-   gh pr merge --merge
+## 4. Pre-PR Quality Verification & Delivery Flow
 
-   # 5. Sync upstream dev before next batch
-   git pull origin dev
-   ```
+Before opening or merging a PR, verify local gates:
+
+```bash
+# 1. Verify Rust workspace compilation
+cargo check --workspace --all-targets
+
+# 2. Run architecture boundary validation
+cargo xtask check-boundaries
+
+# 3. Run desktop smoke tests if UI was modified
+node tests/desktop/canvas-smoke.mjs
+
+# 4. Stage and commit thematic files
+git add <thematic files>
+git commit -m "<type>(<scope>): <thematic subject>"
+
+# 5. Push branch and open Pull Request
+git push origin <working-branch>
+gh pr create --base dev --head <working-branch> --title "<thematic title>" --body "<technical summary>"
+```

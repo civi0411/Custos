@@ -25,27 +25,30 @@
 
 ### 2. Topic-Driven Monorepo Architecture & Inward Boundaries
 
-1. **`platform/domain` (`custos-domain`):**
+1. **`platform/contracts` (`custos-contracts`):**
+   - Ring 0: Pure domain entities and coordination contracts.
    - Absolute Zero-I/O invariant (INV-01).
-   - Prohibited dependencies: `tokio`, `rusqlite`, `reqwest`, `std::fs`, or external model vendor SDKs. Pure mathematical state representations.
-2. **`platform/core` (`custos-core`):**
-   - Coordination contracts, abstract ports (`KernelPort`, `StoragePort`, `ModelPort`, `SandboxPort`, `WorkflowPort`, `MemoryPort`).
-   - Depends exclusively on `custos-domain`. External SDKs or direct persistence drivers are strictly forbidden.
-3. **`platform/storage` (`custos-persistence`):**
-   - SQLite WAL storage and dynamic partition engine.
+   - Prohibited dependencies: `tokio`, `rusqlite`, `reqwest`, `std::fs`, or external model vendor SDKs. Pure mathematical state representations, domain entities, event definitions, and abstract coordination ports.
+2. **`platform/storage` (`custos-storage`):**
+   - Ring 1: SQLite WAL storage and dynamic partition engine.
+   - Transactional Outbox pattern, state persistence, and content-addressed storage (CAS).
    - Must operate via a single-writer connection pool with dedicated multi-reader pool to eliminate write contention and WAL starvation.
-4. **`platform/ai` (`custos-provider`):**
-   - ModelPort router, provider codecs (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Ollama), local llama.cpp inference, and catalog pricing.
-5. **`platform/runtime` (`custos-runtime`):**
-   - Task execution engine, S1 heuristics, S2 replanner, OI Pareto engine, FastPathFilter, and T0-T6 topologies.
-6. **`platform/adapters` (`custos-adapters`):**
-   - External bridges: MCP federation, A2A card, PTY terminal, OS sandboxing (Seatbelt/Bubblewrap), Git worktrees, remote GPU compute.
-7. **`workbenches/*` (`custos-workbench-*`):**
+3. **`platform/integrations` (`custos-integrations`):**
+   - Ring 1: External model providers, credentials, and capability bridges.
+   - ModelPort router, provider codecs (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Ollama), local llama.cpp inference, pricing catalogs.
+   - External adapters: MCP federation, A2A card, PTY terminal, OS sandboxing (Seatbelt/Bubblewrap), Git worktrees, remote GPU compute relays.
+4. **`platform/engine` (`custos-engine`):**
+   - Ring 2: Governed execution, cognitive orchestration, and verification.
+   - Task execution engine, S1 heuristics, S2 replanner, OI Pareto engine, FastPathFilter, T0-T6 topologies, Completion Gate, and workbench pack registration.
+5. **`workbenches/*` (`custos-workbench-*`):**
    - Specialized vertical domain packs (`assistant`, `coding`, `quant`, `research`). Symmetrical 5-part layout (`manifest/`, `migrations/`, `recipes/`, `schemas/`, `src/`).
-8. **`apps/*`:**
+6. **`apps/*`:**
    - `apps/daemon` (`custos-daemon`): Sole server composition root.
    - `apps/cli` (`custos-app-cli`): Pure-Rust headless client over `custos-sdk`.
    - `apps/desktop/native`: Thin Tauri 2 native desktop host.
+7. **`sdk/*`:**
+   - `sdk/protocol` (`custos-protocol`): Wire protocol, envelopes, and DTO schemas.
+   - `sdk/client-rust` (`custos-sdk`): Strongly typed Rust client SDK over Local API transport.
 
 ---
 
@@ -71,20 +74,19 @@
 
 ### 5. Commit Standards, PR Decomposition & Attribution
 
-> **Objective:** Ensure team members (Vĩ, Vinh, Nhật Trường) receive proper attribution, streak credits, and GitHub Achievements (Pair Extraordinaire, Pull Shark).
+> **Objective:** Ensure consistent team collaboration attribution and clean atomic PR decomposition according to industry standards.
 
-1. **Mandatory Co-authored-by Trailers:**
-   - Every commit must include trailing `Co-authored-by` headers for collaborators:
-     - `Co-authored-by: Vinh <phuvi301@gmail.com>`
-     - `Co-authored-by: NhatTruong1905 <tn696199@gmail.com>`
-     *(or `Co-authored-by: civi0411 <cuuvi985@gmail.com>` when authored by Vinh or Trường)*.
-   - Exactly one blank line must separate the commit message body from the trailers.
-2. **Hybrid Rotation Strategy:**
-   - Rotate `--author` when generating PR batches to maintain balanced contribution graphs across the team.
+1. **Standard Co-authored-by Attribution:**
+   - When multiple developers or agents collaborate on a commit, append standard git trailers following the Git trailer specification:
+     `Co-authored-by: Contributor Name <contributor@example.com>`
+   - Exactly one blank line must separate the commit message body from trailer blocks.
+   - Never embed private credentials or personal email addresses directly in public repository documentation.
+2. **Contribution Attribution:**
+   - Maintain clear and balanced author attribution across collaborative workstreams.
 3. **Modular Thematic PR Decomposition:**
    - Decompose features into single-responsibility, atomic PRs:
-     - Batch 1: Domain schemas and provider contracts.
-     - Batch 2: Adapters and wire protocols.
-     - Batch 3: Runtime coordination and cognitive loop.
-     - Batch 4: Gateways, MCP integrations, and documentation updates.
+     - Batch 1: Contracts and domain schema specifications (`platform/contracts`, `sdk/protocol`).
+     - Batch 2: Storage and external integration adapters (`platform/storage`, `platform/integrations`).
+     - Batch 3: Engine coordination, runtime loops, and workbenches (`platform/engine`, `workbenches/*`).
+     - Batch 4: Applications, gateways, and documentation updates (`apps/*`, `docs/*`).
    - Validate with `cargo check --workspace` before pushing.

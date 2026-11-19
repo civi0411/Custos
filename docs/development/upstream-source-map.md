@@ -23,8 +23,8 @@
 
 | Upstream | Narrow reason to inspect | Custos integration boundary | Current audit state |
 |---|---|---|---|
-| [upstream source map](../development/upstream-source-map.md) đặt selected behavior vào Rust core (custos-provider, custos-adapters); không ủy thác Task/Authority ra ngoài. | Local source inspected at `ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8` (MIT). Bóc tách catalog, pricing, RTK và fallback cascade vào Rust native. |
-| [upstream source map](../development/upstream-source-map.md): Hấp thụ crates/llm conversion, MCP Federation Hub (streamable HTTP/SSE/mergestream) và Google A2A protocol vào `custos-adapters`. | Apache 2.0. Đã mổ xẻ crates/llm, mcp/handler.rs, a2a/mod.rs; không chạy như external proxy mù quáng, lấy patterns chuyển dịch thành module native trong Custos. |
+| [upstream source map](../development/upstream-source-map.md) places selected behavior into the Rust platform core (`custos-integrations`, `custos-engine`); it never delegates Task authority externally. | Local source inspected at `ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8` (MIT). Extracts catalog, pricing, RTK, and fallback cascade into native Rust. |
+| [upstream source map](../development/upstream-source-map.md): Absorbs crates/llm conversion, MCP Federation Hub (streamable HTTP/SSE/mergestream) and Google A2A protocol into `custos-integrations`. | Apache 2.0. Analyzed crates/llm, mcp/handler.rs, a2a/mod.rs; instead of running as an external blind proxy, translates design patterns into native modules in Custos. |
 | [rsclaw-ai/cap-protocol](https://cap-protocol.org/) | Draft PTY/structured driver for CLI agents | Optional `AgentRuntimePort` adapter, not Custos's internal protocol | Watchlist; no CAP conformance or first-party manifest established for this checkout |
 
 Before copying source or launching a sidecar, pin upstream repository and commit, inspect license/notices/dependencies, document one real user job, compare against a direct adapter on the same fixture, and verify that no proxy can claim Custos-mediated effects it cannot intercept. A vendor/provider marketing claim is not proof of Custos integration.
@@ -72,11 +72,11 @@ OrCa and Open Science solve different parts of the same supervised environment. 
 
 | Theme | Custos owner | OrCa behavior to absorb | Open Science behavior to absorb |
 |---|---|---|---|
-| Workspace host | `custos-runtime::{workspace,terminal}`, platform adapters | Isolated workspace lifecycle, terminal/process ownership, file/diff/browser resources, local/remote host affinity | Project environment, kernel working directory, dataset and artifact locations |
-| Agent execution | `custos-provider`, `custos-adapters::harness`, runtime agent execution | Structured launch, native agent sessions, continuation, cancellation, unknown launch reconciliation | OpenCode/ACP-style runtime as an optional harness, not as the Task Kernel |
-| Coordination | `custos-core` Task/Run contracts, `custos-runtime::workflow`, persistence | Dispatch claims, mailbox, worker lease, attention and Kanban projections | Experiment/run lifecycle, review barriers, negative and uncertain runs |
-| Research provenance | `custos-packs::research`, research persistence and verification | No separate scientific truth model; reuse workspace/run primitives | Sources, methods, executions, artifacts, trajectory, provenance, annotation, reviewer assessment |
-| Experience projection | `custos-runtime::session::bridge`, `custos-sdk`, `custos-desktop`, `ui/desktop` | Resource tabs, agent/workspace attention, terminal/diff/browser views | Pane tree, notebook, run/trajectory/provenance/artifact inspectors and selection-driven actions |
+| Workspace host | `custos-integrations::{filesystem,terminal}`, `custos-engine` | Isolated workspace lifecycle, terminal/process ownership, file/diff/browser resources, local/remote host affinity | Project environment, kernel working directory, dataset and artifact locations |
+| Agent execution | `custos-integrations`, runtime agent execution in `custos-engine` | Structured launch, native agent sessions, continuation, cancellation, unknown launch reconciliation | OpenCode/ACP-style runtime as an optional harness, not as the Task Kernel |
+| Coordination | `custos-contracts` Task/Run contracts, `custos-engine::orchestration`, `custos-storage` | Dispatch claims, mailbox, worker lease, attention and Kanban projections | Experiment/run lifecycle, review barriers, negative and uncertain runs |
+| Research provenance | `workbenches/research`, research persistence and verification | No separate scientific truth model; reuse workspace/run primitives | Sources, methods, executions, artifacts, trajectory, provenance, annotation, reviewer assessment |
+| Experience projection | `sdk/protocol`, `custos-sdk`, `apps/desktop`, `ui/desktop` | Resource tabs, agent/workspace attention, terminal/diff/browser views | Pane tree, notebook, run/trajectory/provenance/artifact inspectors and selection-driven actions |
 
 The invariant is one set of canonical identities: Task and Session have many-to-many bindings; Run/Node, Resource, Attempt, Artifact and Evidence records carry stable references back to that work. A pane, terminal, notebook kernel, agent harness, browser, or remote host is a resource or execution backend attached to these identities; it is never a second task database.
 
@@ -90,7 +90,7 @@ The invariant is one set of canonical identities: Task and Session have many-to-
 | Attention board and Kanban | Desktop has task/run/workspace projections but no single durable attention model equivalent to an acknowledged event stream. | UI fragments are `exercised`; the unified behavior is `target`. | Project attention from canonical events with reason, severity, reveal target, acknowledge actor and cursor; do not store a separate board truth. |
 | Terminal, file, diff and agent resources | Engineering panes and runtime resource APIs exist. | Mixed `composed`/`exercised`. | Make every resource advertise operations and assurance; use stable `ResourceId`; preserve the same Task/Run context across pane changes. |
 | Browser, remote fleet and headless automation | Metadata/listing paths and panes exist; important effect paths intentionally fail closed or remain degraded. | `composed` for discovery; effects are `target` unless a real adapter proves otherwise. | UI must disable unavailable operations. Add connector-specific attempt, authority, receipt and reconcile tests before upgrading status. |
-| Legacy Goose-derived runtime engine | `custos-runtime/src/engine/` remains present but is not mounted from `runtime/src/lib.rs`. | `inventory`/dormant. | Select behavior file by file. Do not mount the tree wholesale or create a third agent-loop owner. |
+| Legacy Goose-derived runtime engine | `custos-engine/src/agent/` provides governed agent loops. | `composed`/canonical. | Replaces legacy Goose loop with canonical topic-driven engine loop. |
 
 ## Open Science matching ledger
 
@@ -108,63 +108,48 @@ The invariant is one set of canonical identities: Task and Session have many-to-
 
 | Concern | Canonical owner | May depend on | Must not own |
 |---|---|---|---|
-| IDs, contracts, FSM and authority/evidence decisions | `custos-core` | Domain values and ports | React state, provider SDKs, SQLite implementations |
-| Model inference semantics and autonomous harness contract | `custos-provider` for `ModelPort`; `custos-core::contracts::harness` for `AgentRuntimePort` | Domain values and core-facing ports | Workflow scheduling, pack acceptance, UI layout |
-| Scheduling, workspace, terminal, context and execution coordination | `custos-runtime` | Core/provider ports and pack contracts | Provider-specific wire details, canonical DB implementation |
-| LLM, agent, MCP, browser, kernel and platform edges | `custos-adapters` | Declared ports | Task success, grants, canonical projections |
-| Coding, Research and Assistant semantics | `custos-packs` | Core/runtime-facing contracts | Protocol transport and direct canonical writes |
-| SQLite/CAS/projections | `custos-persistence` | Core storage contracts | Product routing and UI decisions |
-| Local API and generated clients | `custos-runtime::session::bridge`, `custos-sdk` | Versioned application commands/events | New domain truth or adapter behavior |
+| IDs, contracts, FSM and authority/evidence decisions | `custos-contracts` | Pure domain types and ports | React state, provider SDKs, SQLite implementations |
+| Model inference semantics and autonomous harness contract | `custos-contracts` for `ModelPort` & `AgentRuntimePort` | Domain values and core-facing ports | Workflow scheduling, pack acceptance, UI layout |
+| Scheduling, workspace, terminal, context and execution coordination | `custos-engine` | Platform contracts and workbench traits | Provider-specific wire details, canonical DB implementation |
+| LLM, agent, MCP, browser, kernel and platform edges | `custos-integrations` | Declared ports | Task success, grants, canonical projections |
+| Coding, Research, Assistant, and Quant semantics | `workbenches/*` | Platform contracts and engine interfaces | Protocol transport and direct canonical writes |
+| SQLite/CAS/projections | `custos-storage` | Core storage contracts | Product routing and UI decisions |
+| Local API and generated clients | `sdk/protocol`, `custos-sdk` | Versioned application commands/events | New domain truth or adapter behavior |
 | Composition and process lifecycle | `custos-daemon` | Every concrete implementation needed to wire the app | Domain policy hidden in bootstrap code |
-| Desktop host and workbench UI | `custos-desktop`, `ui/desktop` | Local API capability/resource projections | Direct DB access, fabricated success, implicit grants |
+| Desktop host and workbench UI | `apps/desktop/native`, `apps/desktop/ui` | Local API capability/resource projections | Direct DB access, fabricated success, implicit grants |
 
 No feature earns a new crate merely because it came from an upstream product. Split a crate only when dependency direction, platform compilation, independent release/conformance, or security isolation demands it.
 
-### Target module shape inside the existing crates
-
-This is a thematic extraction plan, not a claim that the files already exist and not a request for new crates:
+### Target module shape inside the canonical blocks
 
 ```text
-crates/
-├── custos-core/src/
-│   ├── task/                 # contract revisions, FSM, completion
-│   ├── execution/            # Run/Node/Attempt identities and invariants
-│   ├── authority/            # grants, permits, exact effects
-│   ├── evidence/             # criterion verification and staleness
-│   └── capability/           # capability/resource descriptors and assurance
-├── custos-provider/src/      # ModelPort, stream, usage and model capability semantics
-├── custos-runtime/src/
-│   ├── workflow/             # plan/compile/schedule/claim/reconcile
-│   ├── workspace/            # ExecutionWorkspace and host coordination
-│   ├── agent/                # governed worker loop and native-harness coordination
-│   ├── terminal/             # PTY lifecycle tied to Workspace/Resource IDs
-│   ├── notebook/             # compute-session coordination; no scientific truth
-│   ├── context/              # scoped context/continuation compilation
-│   └── projection/           # attention and rebuildable resource projections
-├── custos-packs/src/
-│   ├── engineering/          # repo/diagnose/patch/verify semantics
-│   ├── research/             # source/method/run/artifact/reviewer semantics
-│   └── assistant/            # identity/draft/effect/automation semantics
-├── custos-adapters/src/
-│   ├── providers/            # direct/local model transports
-│   ├── harness/              # Claude/Codex/Goose/OpenCode-style runtimes
-│   ├── compute/              # Python/R/Jupyter/local/SSH/HPC implementations
-│   ├── tools/                # filesystem/shell/git and deterministic capabilities
-│   ├── mcp/                  # external tool/resource protocol only
-│   └── platform/             # browser, remote host, sandbox and OS primitives
-├── custos-persistence/src/   # repositories grouped by canonical aggregate
-└── custos-daemon/src/
-    ├── api/                  # handlers grouped by task/execution/resource/research/connections
-    ├── local_api/            # envelopes/transports/typed client grouped the same way
-    └── runtime.rs            # composition only
+Custos/
+ platform/
+ contracts/src/ # Ring 0: Pure domain entities, port traits, schemas
+ storage/src/ # Ring 1: SQLite WAL, CAS, Outbox, migrations
+ integrations/src/ # Ring 1: Model providers, harnesses, sandboxes, relays
+ engine/src/ # Ring 2: Governed loop, S1/S2 OI, verifiers, FSM
+ workbenches/ # Ring 3: Specialized vertical domains
+ assistant/
+ coding/
+ quant/
+ research/
+ apps/ # Ring 4: Applications
+ daemon/ # Sole composition root
+ cli/ # Pure Rust headless CLI
+ desktop/ # Tauri v2 native host & React 19 UI
+ sdk/ # SDK and Wire Protocols
+ protocol/ # Neutral wire envelopes and RPC schemas
+ client-rust/ # Strongly typed LocalApiClient
+```
 
 ui/desktop/src/
-├── components/shell/         # navigation, conversation and Task anchor
-├── components/views/         # resource catalog and pane-layout projection
-├── components/workspaces/engineering/
-├── components/research/
-├── components/assistant/
-└── api/                      # generated/typed Local API client; no domain truth
+ components/shell/ # navigation, conversation and Task anchor
+ components/views/ # resource catalog and pane-layout projection
+ components/workspaces/engineering/
+ components/research/
+ components/assistant/
+ api/ # generated/typed Local API client; no domain truth
 ```
 
 The immediate structural pressure is in `custos-daemon/src/api/mod.rs` and `local_api/lib.rs`, not in the number of crates. Extract handlers and typed client groups mechanically while preserving one dispatcher, one schema surface and identical contract fixtures. Do not combine this move with semantic redesign of Task, Run or authority.
@@ -185,13 +170,13 @@ The current packet definitions and acceptance gates live in the [delivery bluepr
 In OrCa upstream, the **Browser** (`src/main/browser`) and **Mobile Emulator** (`src/main/emulator`, `skills/orca-emulator`, `skills/orca-emulator-android`) serve two core operational roles that Custos absorbs:
 
 1. **Coding Loop Visual Feedback & Mobile Responsiveness:**
-   - **Dual Execution Surfaces**: Coding agents require both Desktop Browser and Mobile Phone Simulator (iPhone 15 Pro, Pixel 8, iPad Mini) preview canvases to detect responsive layout breaks, viewport clipping, and mobile touch targets.
-   - **Accessibility Tree (AX Tree) Extraction**: Rather than guessing raw coordinates, OrCa normalizes the accessibility tree (`snapshot-ax-tree-walk`, `serve-sim-accessibility-tree`), allowing Coding LLMs to perceive headings, buttons, and inputs as structured nodes for accurate UI generation and debugging.
-   - **Visual Proof Closure**: Simulator and browser render receipts feed into Custos invariant evidence (`ProofClosure`).
+ - **Dual Execution Surfaces**: Coding agents require both Desktop Browser and Mobile Phone Simulator (iPhone 15 Pro, Pixel 8, iPad Mini) preview canvases to detect responsive layout breaks, viewport clipping, and mobile touch targets.
+ - **Accessibility Tree (AX Tree) Extraction**: Rather than guessing raw coordinates, OrCa normalizes the accessibility tree (`snapshot-ax-tree-walk`, `serve-sim-accessibility-tree`), allowing Coding LLMs to perceive headings, buttons, and inputs as structured nodes for accurate UI generation and debugging.
+ - **Visual Proof Closure**: Simulator and browser render receipts feed into Custos invariant evidence (`ProofClosure`).
 2. **Searching & Research Agent Runtime:**
-   - Live browser navigation enables deep web search, documentation exploration (MDN, GitHub, arXiv), and structured scraping that standard text-only search endpoints cannot deliver.
+ - Live browser navigation enables deep web search, documentation exploration (MDN, GitHub, arXiv), and structured scraping that standard text-only search endpoints cannot deliver.
 3. **Custos Architecture Mapping:**
-   - In Custos, these are projected in `ui/desktop` as `BrowserWorkbenchPane` and `MobileSimulatorWorkbenchPane` under Engineering and Shared resources, governed by `custos-adapters/src/platform/` (CDP and `simctl`/`adb` bridges).
+ - In Custos, these are projected in `ui/desktop` as `BrowserWorkbenchPane` and `MobileSimulatorWorkbenchPane` under Engineering and Shared resources, governed by `custos-integrations/src/platform/` (CDP and `simctl`/`adb` bridges).
 
 ## Native GGUF loader references
 
@@ -201,7 +186,7 @@ references, not code imported into Custos or proof that a given GGUF runs.
 
 | Source behavior | Custos owner | Required gate |
 |---|---|---|
-| `llama.cpp` parses GGUF tensors and executes inference | `custos-adapters/local_inference/llamacpp` | Pin the version actually bundled by `llama-cpp-sys-2`, then load and generate with a real fixture. A separate clone does not upgrade the Rust binary. |
+| `llama.cpp` parses GGUF tensors and executes inference | `custos-integrations/local_inference/llamacpp` | Pin the version actually bundled by `llama-cpp-sys-2`, then load and generate with a real fixture. A separate clone does not upgrade the Rust binary. |
 | Ollama's `llama/compat` rewrites some published GGUF metadata/tensors at load time | Adapter compatibility investigation only | Identify the exact model format and failing tensor before selectively porting any translation; audit license, upstream version, memory mapping and tests. Do not copy the whole patch layer. |
 | Jan's synchronous load endpoint and engine smoke tests report load failure and require a nonempty chat completion | Existing daemon `v1.local_models.load` and local inference tests | Keep load synchronous and preserve its actual error. Add a real-file generation fixture before calling a model usable; scanning and memory preflight are estimates only. |
 

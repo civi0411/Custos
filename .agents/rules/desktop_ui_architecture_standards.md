@@ -119,6 +119,6 @@ Every frontend edit must pass both quality gates prior to declaring completion:
 
 2. **Canvas Smoke Test Suite Gate**:
    ```bash
-   node Custos/tools/canvas-smoke.mjs
+   node tests/desktop/canvas-smoke.mjs
    ```
-   *Requirement:* All **26/26 tests must pass** (`pass 26, fail 0`). Never break tab tree operations, split-pane mechanics, draft persistence, or workspace recovery.
+   *Requirement:* All tests must pass (`pass 43+, fail 0`). Never break tab tree operations, split-pane mechanics, draft persistence, or workspace recovery.

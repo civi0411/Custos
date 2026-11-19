@@ -1,7 +1,7 @@
 # Remote Compute Adapters & Mock Mode Specification
 
-> **Scope**: `platform/adapters/src/connectors/compute/` (Colab, Kaggle, Rented GPU / SSH / Cloud Pods)  
-> **Classification**: Architecture Reference  
+> **Scope**: `platform/adapters/src/connectors/compute/` (Colab, Kaggle, Rented GPU / SSH / Cloud Pods) 
+> **Classification**: Architecture Reference 
 > **Status**: Canonical Specification (Phase 2 / F06)
 
 ---
@@ -11,19 +11,19 @@
 Remote compute runtimes incur financial billing and allocate scarce GPU resources. Under no circumstance may a production adapter execute placeholder or stub code on a live target.
 
 ```
-                  ┌────────────────────────┐
-                  │ submit(attempt, key)   │
-                  └───────────┬────────────┘
-                              │
-               Is self.mock_mode == true?
-                              │
-               ├─── YES ──────┴────── NO ───┐
-               ▼                            ▼
-      Write mock script            Check entrypoint/recipe
-      Return simulated job ref              │
-                                   ├─── VALID ─────────── INVALID ───┐
-                                   ▼                                 ▼
-                         Launch real job on host         Return DomainError::Validation
+ 
+ submit(attempt, key) 
+ 
+ 
+ Is self.mock_mode == true?
+ 
+ YES NO 
+ 
+ Write mock script Check entrypoint/recipe
+ Return simulated job ref 
+ VALID INVALID 
+ 
+ Launch real job on host Return DomainError::Validation
 ```
 
 ### 1.1 Invariants
@@ -31,8 +31,8 @@ Remote compute runtimes incur financial billing and allocate scarce GPU resource
 2. **Upfront Fail-Fast Validation**: Host format, username safety, and recipe existence must be validated prior to establishing any remote network connection or SSH channel.
 3. **Pinned Versions**: Remote jobs must reference immutable external versions (`v1`, `pid_<N>`, pinned kernel version). The identifier `"latest"` is strictly forbidden as it permits mutable aliasing.
 4. **Decoupled Stop vs. Release**:
-   - `stop_job()` terminates the training process but leaves the GPU runtime allocated (`ResourceState::Held`) for inspection and artifact collection.
-   - `release_compute()` deallocates the underlying cloud pod / kernel (`ResourceState::ReleaseConfirmed`) to halt billing.
+ - `stop_job()` terminates the training process but leaves the GPU runtime allocated (`ResourceState::Held`) for inspection and artifact collection.
+ - `release_compute()` deallocates the underlying cloud pod / kernel (`ResourceState::ReleaseConfirmed`) to halt billing.
 
 ---
 

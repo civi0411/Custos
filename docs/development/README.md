@@ -1,7 +1,7 @@
 # Custos Developer Hub & Engineering Manual
 
-> **Classification:** Normative Developer Hub & Engineering Manual  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
+> **Classification:** Normative Developer Hub & Engineering Manual 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md). 
 > **Repository Documentation Hub:** See [Custos Documentation Overview](../README.md).
 
 Welcome to the Custos developer engineering portal. Custos is a local-first, human-governed runtime for proof-carrying agentic AI work. This directory serves as the technical manual for systems engineers, AI cognitive architects, runtime developers, and UI contributors operating within the Custos monorepo.
@@ -26,32 +26,32 @@ The Custos repository is organized as a unified Cargo workspace containing **20 
 
 ```text
 Custos/
-├── platform/                 # Ring 0: Foundational Platform Subsystems
-│   ├── domain/               # Pure mathematical types, state machines, zero I/O (INV-01)
-│   ├── core/                 # Abstract contracts, ports, TaskService, supervisor traits
-│   ├── storage/              # SQLite WAL persistence, partition engine, migrations
-│   ├── ai/                   # ModelPort router, provider adapters, local inference engine
-│   ├── runtime/              # TaskRuntime, DAG coordinators, OI engine, FastPathFilter
-│   ├── adapters/             # Sandbox, PTY terminal, MCP federation hub, Git worktrees
-│   └── components/           # Reusable capability components (reviews, diffs, canvas)
-├── workbenches/              # Ring 1: Specialized Vertical Workbenches
-│   ├── assistant/            # Personal copilot, drafts, outbox pattern approvals
-│   ├── coding/               # Software engineering, worktree branching, patch verification
-│   ├── research/             # Scientific research, paper citations, literature graph
-│   └── quant/                # Quantitative trading, backtesting, portfolio risk analysis
-├── sdk/                      # Developer SDK & IPC Wire Protocols
-│   ├── protocol/             # JSON-RPC wire envelopes, event streams, schema types
-│   └── client-rust/          # Asynchronous Rust client library for Custos daemon
-├── apps/                     # Ring 2: Application Entrypoints
-│   ├── daemon/               # Headless custosd background daemon, LocalApiDispatcher
-│   ├── cli/                  # Command-line interface utility (custos)
-│   └── desktop/native/       # Native desktop application host
-├── ui/desktop/               # TypeScript, React 19, Tailwind CSS, Vite frontend
-├── tests/                    # Comprehensive Integration, Contract & E2E Suites
-│   ├── testkit/              # Deterministic test fixtures, mock servers, assertions
-│   ├── contract/             # Wire contract schemas & migration resilience tests
-│   └── e2e/                  # End-to-end task decomposition & canary topologies
-└── xtask/                    # Engineering workflow automation & automated quality gates
+ platform/ # Ring 0: Foundational Platform Subsystems
+ domain/ # Pure mathematical types, state machines, zero I/O (INV-01)
+ core/ # Abstract contracts, ports, TaskService, supervisor traits
+ storage/ # SQLite WAL persistence, partition engine, migrations
+ ai/ # ModelPort router, provider adapters, local inference engine
+ runtime/ # TaskRuntime, DAG coordinators, OI engine, FastPathFilter
+ adapters/ # Sandbox, PTY terminal, MCP federation hub, Git worktrees
+ components/ # Reusable capability components (reviews, diffs, canvas)
+ workbenches/ # Ring 1: Specialized Vertical Workbenches
+ assistant/ # Personal copilot, drafts, outbox pattern approvals
+ coding/ # Software engineering, worktree branching, patch verification
+ research/ # Scientific research, paper citations, literature graph
+ quant/ # Quantitative trading, backtesting, portfolio risk analysis
+ sdk/ # Developer SDK & IPC Wire Protocols
+ protocol/ # JSON-RPC wire envelopes, event streams, schema types
+ client-rust/ # Asynchronous Rust client library for Custos daemon
+ apps/ # Ring 2: Application Entrypoints
+ daemon/ # Headless custosd background daemon, LocalApiDispatcher
+ cli/ # Command-line interface utility (custos)
+ desktop/native/ # Native desktop application host
+ ui/desktop/ # TypeScript, React 19, Tailwind CSS, Vite frontend
+ tests/ # Comprehensive Integration, Contract & E2E Suites
+ testkit/ # Deterministic test fixtures, mock servers, assertions
+ contract/ # Wire contract schemas & migration resilience tests
+ e2e/ # End-to-end task decomposition & canary topologies
+ xtask/ # Engineering workflow automation & automated quality gates
 ```
 
 ---

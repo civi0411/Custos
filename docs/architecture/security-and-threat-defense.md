@@ -1,7 +1,7 @@
 # Security Architecture & Threat Defense
 
-> **Classification:** Core Architectural Pillar  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md) (Part 8).  
+> **Classification:** Core Architectural Pillar 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md) (Part 8). 
 > **Architecture Hub:** See [Custos Architecture Overview](README.md).
 
 Autonomous AI agents possess read access to repositories, process execution rights, and network communication channels. Consequently, they represent an expanded attack surface. Custos treats security not as an external wrapper, but as an intrinsic invariant enforced across the type system, the execution runtime, and the persistence engine.
@@ -30,16 +30,16 @@ Any information ingested from outside the trusted computing base is tainted:
 
 ```text
 External Git Repo / Web Scraping / Email / MCP Tool Output
-                            │
-                            ▼
-              Tagged as [Taint::Untrusted]
-                            │
-            ┌───────────────┴───────────────┐
-            ▼                               ▼
-    Admissible for:                 STRICTLY FORBIDDEN for:
-  • AST symbol search             • Promoting to operational policy
-  • Lexical code analysis         • Expanding TaskScope
-  • Extraction evidence           • Bypassing human approval gates
+ 
+ 
+ Tagged as [Taint::Untrusted]
+ 
+ 
+ 
+ Admissible for: STRICTLY FORBIDDEN for:
+ • AST symbol search • Promoting to operational policy
+ • Lexical code analysis • Expanding TaskScope
+ • Extraction evidence • Bypassing human approval gates
 ```
 
 ### Type System Enforcement
@@ -47,14 +47,14 @@ In the Rust codebase, untrusted data is wrapped in a dedicated type:
 
 ```rust
 pub struct Tainted<T> {
-    data: T,
-    source_origin: String,
-    taint_level: TaintLevel,
+ data: T,
+ source_origin: String,
+ taint_level: TaintLevel,
 }
 
 pub enum TaintLevel {
-    TrustedLocal,
-    UntrustedExternal,
+ TrustedLocal,
+ UntrustedExternal,
 }
 ```
 The Rust compiler prevents `Tainted<T>` from being passed into functions that alter task scope or mint execution permits without an explicit sanitization and human confirmation barrier.
@@ -67,11 +67,11 @@ Custos enforces a four-layered defense-in-depth model for every physical side ef
 
 ```mermaid
 graph TD
-    Intent["ActionIntent Proposed by Worker"] --> L1["Layer 1: Scope & Policy Filter"]
-    L1 --> L2["Layer 2: Parameter Hash & Permit Minting"]
-    L2 --> L3["Layer 3: OS Process Sandboxing (Seatbelt / Bubblewrap)"]
-    L3 --> L4["Layer 4: Ephemeral Git Worktree Isolation"]
-    L4 --> Effect["Physical File Modification Committed"]
+ Intent["ActionIntent Proposed by Worker"] --> L1["Layer 1: Scope & Policy Filter"]
+ L1 --> L2["Layer 2: Parameter Hash & Permit Minting"]
+ L2 --> L3["Layer 3: OS Process Sandboxing (Seatbelt / Bubblewrap)"]
+ L3 --> L4["Layer 4: Ephemeral Git Worktree Isolation"]
+ L4 --> Effect["Physical File Modification Committed"]
 ```
 
 1. **Layer 1 (Policy):** Verifies that the requested file path lies within the authorized whitelist (`TaskScope`).

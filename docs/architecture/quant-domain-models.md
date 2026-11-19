@@ -1,34 +1,34 @@
 # Quantitative Domain Models & Financial Governance
 
-> **Status:** Canonical SSOT  
-> **Layer:** Layer 0 (`custos-domain`) — Pure Zero-I/O Invariant  
-> **Crates:** `custos-domain`, `custos-packs`, `custos-daemon`
+> **Status:** Canonical SSOT 
+> **Layer:** Ring 0 (`platform/contracts`) & Ring 3 (`workbenches/quant`) 
+> **Crates:** `custos-contracts`, `custos-workbench-quant`, `custos-engine`, `custos-daemon`
 
 ---
 
 ## 1. Architectural Role & Boundary Invariants
 
-The Quantitative Trading Workbench introduces financial primitives into Custos without violating the inviolable **Layer 0 Zero-I/O Invariant**. All structs in `custos-domain::quant` are:
+The Quantitative Trading Workbench introduces financial primitives into Custos without violating the inviolable **Ring 0 Zero-I/O Invariant**. All structs in `custos_contracts` and `workbenches/quant` are:
 1. **Pure & Deterministic:** No socket, disk, or clock-mutating dependencies.
 2. **Memory-Safe:** Bounded vectors, float validations, and explicit error domains via `DomainError`.
-3. **Cross-Workbench Compatible:** Seamlessly bridges with `custos-domain::session::assistant::OutboxActionItem` and `custos-domain::authority::ExecutionPermit`.
+3. **Cross-Workbench Compatible:** Seamlessly bridges with `custos_contracts::authority::OutboxActionItem` and `custos_contracts::authority::ExecutionPermit`.
 
 ```
 +-----------------------------------------------------------------------------------+
-|                              CUSTOS WORKSPACE                                      |
-|                                                                                   |
-|  [Coding Workbench]       [Research Workbench]      [Assistant / Copilot]         |
-|         │                          │                         ▲                    |
-|         │                          │                         │ OutboxActionItem   |
-|         ▼                          ▼                         │                    |
-|  ┌───────────────────────────────────────────────────────────┴─────────────────┐  |
-|  │                        QUANTITATIVE WORKBENCH                                │  |
-|  │                                                                             │  |
-|  │  1. AlphaStudioPane    ──> AlphaFactor (IC, IR, lookahead_clean)            │  |
-|  │  2. TearsheetPane      ──> BacktestTearsheet (Sharpe, DSR, Calmar)          │  |
-|  │  3. RiskAuditPane      ──> RiskPermitConfig (VaR 95%, Drawdown, Leverage)  │  |
-|  │  4. ExecutionPane      ──> OrderTicket (TWAP/VWAP, Circuit Breakers)        │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
+| CUSTOS WORKSPACE |
+| |
+| [Coding Workbench] [Research Workbench] [Assistant / Copilot] |
+| |
+| OutboxActionItem |
+| |
+| |
+| QUANTITATIVE WORKBENCH |
+| |
+| 1. AlphaStudioPane > AlphaFactor (IC, IR, lookahead_clean) |
+| 2. TearsheetPane > BacktestTearsheet (Sharpe, DSR, Calmar) |
+| 3. RiskAuditPane > RiskPermitConfig (VaR 95%, Drawdown, Leverage) |
+| 4. ExecutionPane > OrderTicket (TWAP/VWAP, Circuit Breakers) |
+| |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -36,7 +36,7 @@ The Quantitative Trading Workbench introduces financial primitives into Custos w
 
 ## 2. Core Entities
 
-### 2.1 `AlphaFactor` (`custos_domain::quant::AlphaFactor`)
+### 2.1 `AlphaFactor` (`custos_contracts` / `workbenches/quant`)
 Models statistical signals and predictive indicators with lookahead bias tracking:
 - `id`: Unique identifier (`factor_<nanoid>`).
 - `name`: Human-readable identifier (e.g. `momentum_reversal_5d`).
@@ -47,7 +47,7 @@ Models statistical signals and predictive indicators with lookahead bias trackin
 - `lookahead_clean`: Boolean gate asserted by AST inspection or independent verifiers.
 - `is_viable()`: Checks $|IC| \ge 0.02$, $IR \ge 0.5$, and `lookahead_clean == true`.
 
-### 2.2 `BacktestTearsheet` (`custos_domain::quant::BacktestTearsheet`)
+### 2.2 `BacktestTearsheet` (`custos_contracts` / `workbenches/quant`)
 Captures vectorized backtest performance, risk-adjusted returns, and distribution profiles:
 - `strategy_id`: Strategy or factor identifier.
 - `annualized_sharpe`: Classic annualized Sharpe Ratio.
@@ -58,7 +58,7 @@ Captures vectorized backtest performance, risk-adjusted returns, and distributio
 - `monthly_returns`: Vector of `MonthlyReturn { year, month, return_pct }`.
 - `is_passing_hurdle(min_sharpe, max_dd_limit)`: Deterministic qualification gate.
 
-### 2.3 `RiskPermitConfig` (`custos_domain::quant::RiskPermitConfig`)
+### 2.3 `RiskPermitConfig` (`custos_contracts` / `workbenches/quant`)
 Enforces hard quantitative boundaries and circuit breakers:
 - `max_position_pct`: Maximum single-instrument portfolio weight (e.g. 10%).
 - `max_leverage`: Gross leverage ceiling (e.g. 1.5x).
@@ -69,7 +69,7 @@ Enforces hard quantitative boundaries and circuit breakers:
 - `audit_tearsheet(&self, tearsheet)`: Returns `Result<(), RiskBreach>`.
 - `validate_order_weight(&self, target_weight)`: Detects position size violations before submission.
 
-### 2.4 `OrderTicket` (`custos_domain::quant::OrderTicket`)
+### 2.4 `OrderTicket` (`custos_contracts` / `workbenches/quant`)
 Models individual trade instructions with algorithmic routing and governance:
 - `symbol`: Ticker or contract identifier (e.g. `NVDA`, `BTC-USDT`).
 - `direction`: `Buy`, `Sell`, `SellShort`, `BuyToCover`.

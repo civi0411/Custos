@@ -1,7 +1,7 @@
 # Runtime Composition Architecture Baseline (`apps/daemon/src/runtime.rs`)
 
-> **Classification:** Normative Runtime Composition Specification  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
+> **Classification:** Normative Runtime Composition Specification 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md). 
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
 This document specifies the exact dependency injection graph, lifecycle phases, and service composition of the Custos Daemon runtime (`apps/daemon/src/runtime.rs` and `apps/daemon/src/bootstrap/`). 
@@ -15,24 +15,24 @@ Custos strictly enforces the **Single Composition Root** architectural pattern: 
 The daemon startup decomposes into five strictly ordered, verifiable bootstrap phases:
 
 ```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                      DAEMON BOOTSTRAP LIFECYCLE                        │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 1: Storage Crash Recovery & Reconciliation                       │
-│          reconcile_storage_on_startup() (Gate 3, INV-02)               │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 2: Background Sweepers & Reconcilers                             │
-│          spawn_background_sweepers() (OAuth & Inflight Reconcilers)    │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 3: Kernel & Isolation Services                                   │
-│          init_kernel_services() (TrustedKernel, Sandbox, Supervision)  │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 4: Workbenches, Packs & Governed Harness Setup                   │
-│          init_workbenches_and_harness() (Inventory, MCP Hub, Runner)   │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 5: Coordinators, TaskRuntime & LocalApiDispatcher                │
-│          init_coordinators_and_api() (T5LeadWorker, 197 RPC Routes)    │
-└────────────────────────────────────────────────────────────────────────┘
+
+ DAEMON BOOTSTRAP LIFECYCLE 
+
+ Phase 1: Storage Crash Recovery & Reconciliation 
+ reconcile_storage_on_startup() (Gate 3, INV-02) 
+
+ Phase 2: Background Sweepers & Reconcilers 
+ spawn_background_sweepers() (OAuth & Inflight Reconcilers) 
+
+ Phase 3: Kernel & Isolation Services 
+ init_kernel_services() (TrustedKernel, Sandbox, Supervision) 
+
+ Phase 4: Workbenches, Packs & Governed Harness Setup 
+ init_workbenches_and_harness() (Inventory, MCP Hub, Runner) 
+
+ Phase 5: Coordinators, TaskRuntime & LocalApiDispatcher 
+ init_coordinators_and_api() (T5LeadWorker, 197 RPC Routes) 
+
 ```
 
 ### Phase 1: Storage Crash Recovery & Reconciliation (`bootstrap/storage.rs`)
@@ -92,40 +92,40 @@ The daemon startup decomposes into five strictly ordered, verifiable bootstrap p
 
 ```mermaid
 graph TD
-    Store[SqliteTaskStore (WAL)] --> Kernel[TrustedKernel]
-    Store --> TaskSvc[TaskService]
-    Store --> SessMgr[SessionManager]
-    Store --> Resolver[DaemonCredentialResolver]
-    Credentials[ProviderCredentials] --> Resolver
-    Resolver --> Router[RouterModelProvider]
-    Router --> Model[Arc<dyn ModelPort>]
+ Store[SqliteTaskStore (WAL)] --> Kernel[TrustedKernel]
+ Store --> TaskSvc[TaskService]
+ Store --> SessMgr[SessionManager]
+ Store --> Resolver[DaemonCredentialResolver]
+ Credentials[ProviderCredentials] --> Resolver
+ Resolver --> Router[RouterModelProvider]
+ Router --> Model[Arc<dyn ModelPort>]
 
-    DevAdapter[SovereignDeveloperAdapter] --> Sandbox[Arc<dyn SandboxPort>]
-    Supervision[SupervisionCoordinator] --> Runner[SupervisedAgentRunner]
-    Model --> Governed[GovernedAgentRuntime]
-    Sandbox --> Governed
-    Runner --> Governed
-    Governed --> HarnessReg[HarnessRegistry]
+ DevAdapter[SovereignDeveloperAdapter] --> Sandbox[Arc<dyn SandboxPort>]
+ Supervision[SupervisionCoordinator] --> Runner[SupervisedAgentRunner]
+ Model --> Governed[GovernedAgentRuntime]
+ Sandbox --> Governed
+ Runner --> Governed
+ Governed --> HarnessReg[HarnessRegistry]
 
-    Kernel --> TaskRuntime[TaskRuntime (T5LeadWorker + FastPath)]
-    Model --> TaskRuntime
-    Sandbox --> TaskRuntime
-    Store --> TaskRuntime
-    SessMgr --> TaskRuntime
-    Supervision --> TaskRuntime
-    WsCoord[WorkspaceCoordinator] --> TaskRuntime
-    Admission[WorkloadAdmissionCoordinator] --> TaskRuntime
+ Kernel --> TaskRuntime[TaskRuntime (T5LeadWorker + FastPath)]
+ Model --> TaskRuntime
+ Sandbox --> TaskRuntime
+ Store --> TaskRuntime
+ SessMgr --> TaskRuntime
+ Supervision --> TaskRuntime
+ WsCoord[WorkspaceCoordinator] --> TaskRuntime
+ Admission[WorkloadAdmissionCoordinator] --> TaskRuntime
 
-    TaskSvc --> Bridge[BridgeService]
-    SessMgr --> Bridge
+ TaskSvc --> Bridge[BridgeService]
+ SessMgr --> Bridge
 
-    TaskSvc --> Dispatcher[LocalApiDispatcher (197 RPC Routes)]
-    SessMgr --> Dispatcher
-    Bridge --> Dispatcher
-    TaskRuntime --> Dispatcher
-    WsCoord --> Dispatcher
-    HarnessReg --> Dispatcher
-    Admission --> Dispatcher
+ TaskSvc --> Dispatcher[LocalApiDispatcher (197 RPC Routes)]
+ SessMgr --> Dispatcher
+ Bridge --> Dispatcher
+ TaskRuntime --> Dispatcher
+ WsCoord --> Dispatcher
+ HarnessReg --> Dispatcher
+ Admission --> Dispatcher
 ```
 
 ---

@@ -1,7 +1,7 @@
 # Training Studio, Remote Targets & Checkpoint Continuity (F10)
 
 > SADE Master Specification — Phase 9 / F10 Architectural Blueprint
-> Governs: `custos-domain`, `custos-core`, `custos-adapters`, `custos-persistence`, and Golden Acceptance Test `G11`.
+> Governs: `custos-contracts`, `custos-storage`, `custos-integrations`, `custos-engine`, and Golden Acceptance Test `G11`.
 
 ---
 
@@ -21,43 +21,43 @@ Phase 9 (F10) establishes deterministic checkpoint lineage, single-writer genera
 
 ```
 [ Local SADE Daemon / Client ]
-            │
-            ▼
-┌────────────────────────────────────────────────────────┐
-│ ExperimentAttemptRepository (custos-persistence)       │
-│                                                        │
-│ 1. Atomic attempt persistence + outbox event           │
-│ 2. Idempotent Invocations (unique idempotency_key)    │
-│ 3. Generation CAS Fencing on checkpoint promotion      │
-│ 4. reconcile_attempts_on_startup() -> Uncertain        │
-└────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌────────────────────────────────────────────────────────┐
-│ Pre-Resume Gate (custos-domain)                        │
-│                                                        │
-│ TrainingCheckpointManifest::validate_for_state_resume()│
-│ - Require commit_status: CommittedProtected            │
-│ - Require resumability_level: TrainingStateResume      │
-│ - Require complete file bundle:                        │
-│     * model/adapter safetensors                        │
-│     * optimizer.pt, scheduler.pt                       │
-│     * rng_state.pth, trainer_state.json                │
-│ - Reject path traversal (..) & digest mismatches       │
-└────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌────────────────────────────────────────────────────────┐
-│ Remote Target Dispatch & Handoff                       │
-│                                                        │
-│ Target A (RunPod, Gen 1) ──► Checkpoint 1 (Gen 1)       │
-│                                      │                 │
-│                                      ▼ Lineage Handoff  │
-│ Target B (SSH / Vast, Gen 2) ──► Checkpoint 2 (Gen 2)  │
-│                                                        │
-│ Stale Target A attempts Gen 1 promotion                │
-│ ──► REJECTED: PromotionOutcome::StaleGeneration(2)    │
-└────────────────────────────────────────────────────────┘
+ 
+ 
+
+ ExperimentAttemptRepository (custos-storage) 
+ 
+ 1. Atomic attempt persistence + outbox event 
+ 2. Idempotent Invocations (unique idempotency_key) 
+ 3. Generation CAS Fencing on checkpoint promotion 
+ 4. reconcile_attempts_on_startup() -> Uncertain 
+
+ 
+ 
+
+ Pre-Resume Gate (custos-contracts) 
+ 
+ TrainingCheckpointManifest::validate_for_state_resume()
+ - Require commit_status: CommittedProtected 
+ - Require resumability_level: TrainingStateResume 
+ - Require complete file bundle: 
+ * model/adapter safetensors 
+ * optimizer.pt, scheduler.pt 
+ * rng_state.pth, trainer_state.json 
+ - Reject path traversal (..) & digest mismatches 
+
+ 
+ 
+
+ Remote Target Dispatch & Handoff 
+ 
+ Target A (RunPod, Gen 1) Checkpoint 1 (Gen 1) 
+ 
+ Lineage Handoff 
+ Target B (SSH / Vast, Gen 2) Checkpoint 2 (Gen 2) 
+ 
+ Stale Target A attempts Gen 1 promotion 
+ REJECTED: PromotionOutcome::StaleGeneration(2) 
+
 ```
 
 ---
@@ -78,16 +78,16 @@ Phase 9 (F10) establishes deterministic checkpoint lineage, single-writer genera
 ### 3.3 Generation CAS Fencing & Zombie Writer Defense
 - Checkpoint promotions are serialized in the `checkpoint_promotions` table with primary key `(experiment_id, generation)`.
 - When Attempt 2 promotes a checkpoint at `generation: 2`, any delayed or rogue request from Attempt 1 (`generation: 1`) is rejected with:
-  ```rust
-  PromotionOutcome::StaleGeneration { actual_generation: 2 }
-  ```
+ ```rust
+ PromotionOutcome::StaleGeneration { actual_generation: 2 }
+ ```
 - This guarantees single-writer semantics and prevents split-brain checkpoint corruption across distributed environments.
 
 ### 3.4 Pre-Resume Validation (Fail-Closed Gate)
 - Calling `validate_for_state_resume()` verifies that:
-  - `commit_status == CheckpointCommitStatus::CommittedProtected` (uncommitted `LocalStaged` or `Observed` checkpoints are blocked).
-  - All essential Trainer state files are present and inventoried with valid 64-character hex digests.
-  - No file paths contain directory traversal sequences (`..`), colons, or backslashes.
+ - `commit_status == CheckpointCommitStatus::CommittedProtected` (uncommitted `LocalStaged` or `Observed` checkpoints are blocked).
+ - All essential Trainer state files are present and inventoried with valid 64-character hex digests.
+ - No file paths contain directory traversal sequences (`..`), colons, or backslashes.
 
 ### 3.5 Idempotent Remote Invocations
 - Remote compute operations are recorded via `record_invocation()`.

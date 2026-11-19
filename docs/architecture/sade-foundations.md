@@ -76,17 +76,14 @@ Environment assurances come from concrete provision/probe receipts. Worktree cre
 
 | Root | Current source owner | Responsibility |
 |---|---|---|
-| Platform domain | `platform/domain` | Pure types and invariants |
-| Trusted policy | `platform/core` | Kernel, authority, evidence and ports |
-| Orchestration | `platform/runtime` | Agent/context/OI/session/workflow/environment lifetime |
-| Inference | `platform/ai` | Model contracts, catalog/pricing, cloud/local engines |
-| External mechanisms | `platform/adapters` | Harnesses, host drivers, connectors and OS boundaries |
-| Durable data | `platform/storage` | SQLite/CAS, repositories, migrations and recovery |
-| Contributions | `platform/components` | Catalog, resolution, activation and version compatibility |
-| Specialist work | `workbenches/{assistant,coding,research,quant}` | Domain models/services/recipes/skills/verifiers and UI contributions |
-| Product host | `apps/{daemon,desktop,cli}` | Composition, typed use cases, wire transport and native entrypoints |
+| Platform contracts | `platform/contracts` (`custos-contracts`) | Pure types, domain entities, ports, and invariants (Ring 0) |
+| Durable storage | `platform/storage` (`custos-storage`) | SQLite WAL, single-writer pool, CAS, repositories, and recovery |
+| Platform integrations | `platform/integrations` (`custos-integrations`) | Model codecs, local inference, harnesses, connectors, and OS sandboxes |
+| Platform engine | `platform/engine` (`custos-engine`) | Governed agent loop, S1/S2 OI, verifiers, and pack registry |
+| Specialist work | `workbenches/{assistant,coding,research,quant}` | Domain models, services, recipes, skills, verifiers, and UI contributions |
+| Product host | `apps/{daemon,desktop,cli}` | Composition, typed use cases, wire transport, and native entrypoints |
 | Public contracts | `sdk/protocol`, client SDKs | Versioned wire/client and worker contracts |
-| Desktop renderer | Current `ui/desktop`, target `apps/desktop/ui` | Shared shell and contribution hosting |
+| Desktop renderer | `apps/desktop/ui` | Shared shell and contribution hosting |
 
 Topic-specific detail lives inside these owners. Shared capability placement follows scope, lifecycle, policy and dependency requirements. Consumer count is a reuse signal. Physical SQL repositories belong in storage where they implement host-owned persistence contracts, while orchestration, parsing and domain math retain their respective owners.
 

@@ -1,7 +1,7 @@
 # GPU Workload Components & Resource Admission (GPU-A / GPU-B)
 
-> SADE Master Specification — Phase 12 / GPU Workload Components Blueprint  
-> Governs: `custos-domain`, `custos-core`, `custos-runtime`, and Golden Acceptance Test `tests/e2e/tests/gpu_workload_admission_golden_test.rs`.
+> SADE Master Specification — Phase 12 / GPU Workload Components Blueprint 
+> Governs: `custos-contracts`, `custos-integrations`, `custos-engine`, and Golden Acceptance Test `tests/e2e/tests/gpu_workload_admission_golden_test.rs`.
 
 ---
 
@@ -16,37 +16,32 @@ Without a sovereign resource arbiter:
 4. **Silent Cloud Fallback Violations:** When local GPUs are saturated, naive systems silently route confidential tensors or training data to third-party cloud APIs without user consent.
 
 Phase 12 (GPU-A / GPU-B) establishes sovereign compute admission, mutual exclusion, and clean lifecycle teardown:
-> **GPU Admission Invariant:**  
+> **GPU Admission Invariant:** 
 > *"Two workloads claim the same managed exclusive device; one is rejected or queued — NO dual launch on exclusive accelerators."*
 
 ---
 
 ## 2. Core Entities & Layer Boundaries
 
-Following the inviolable **Layer 0 Zero-I/O Invariant**, all domain representations in `custos-domain` remain 100% pure, deterministic, and free of runtime/I/O dependencies:
+Following the inviolable **Ring 0 Zero-I/O Invariant**, all domain representations in `custos-contracts` remain 100% pure, deterministic, and free of runtime/I/O dependencies:
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│ Layer 0: Pure Domain (`custos-domain`)                                 │
-│  - ComputeDeviceRef: Logical descriptor (CPU, CUDA, MPS, ROCm)         │
-│  - ComputeWorkloadKind: NotebookKernel, TrainingRun, EvalRun, Infer    │
-│  - WorkloadLease: Sovereign lease (lease_id, device_id, owner_id)      │
-│  - WorkloadAdmissionRequest & WorkloadAdmissionVerdict                │
-└────────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ Layer 1: Core Contracts (`custos-core`)                                │
-│  - WorkloadAdmissionPort: discover_devices(), admit_workload(),         │
-│    release_lease(), list_active_leases()                               │
-└────────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ Layer 2: Runtime Arbitration (`custos-runtime`)                        │
-│  - WorkloadAdmissionCoordinator: In-memory slot & queue arbitration    │
-│  - PythonKernelCoordinator: Integrated device binding & probe          │
-└────────────────────────────────────────────────────────────────────────┘
+
+ Ring 0: Pure Domain (`custos-contracts`) 
+ - ComputeDeviceRef: Logical descriptor (CPU, CUDA, MPS, ROCm) 
+ - ComputeWorkloadKind: NotebookKernel, TrainingRun, EvalRun, Infer 
+ - WorkloadLease: Sovereign lease (lease_id, device_id, owner_id) 
+ - WorkloadAdmissionRequest & WorkloadAdmissionVerdict 
+ - WorkloadAdmissionPort: discover_devices(), admit_workload(), 
+ release_lease(), list_active_leases() 
+
+ 
+ 
+
+ Ring 1 & 2: Platform Engine & Integrations 
+ - WorkloadAdmissionCoordinator: In-memory slot & queue arbitration 
+ - PythonKernelCoordinator: Integrated device binding & probe 
+
 ```
 
 ---
@@ -54,25 +49,25 @@ Following the inviolable **Layer 0 Zero-I/O Invariant**, all domain representati
 ## 3. Mutual Exclusion & Anti-Dual-Launch Arbitration
 
 ```
-                        [ Workload Admission Request ]
-                                      │
-                                      ▼
-                      [ Resolve Target Device ID ]
-                                      │
-                                      ▼
-                      [ Device Currently Free? ]
-                             /                 \
-                           YES                  NO
-                           /                     \
-      [ Require Exclusive? ]             [ Device Exclusively Held? ]
-            /          \                          /              \
-          YES           NO                      YES               NO
-          /               \                     /                  \
-[ Admit Exclusive ] [ Admit Shared ]     [ Queue / Reject ]  [ Request Exclusive? ]
-                                        (Anti-Dual-Launch)       /             \
-                                                               YES              NO
-                                                               /                 \
-                                                    [ Queue Request ]     [ Admit Shared ]
+ [ Workload Admission Request ]
+ 
+ 
+ [ Resolve Target Device ID ]
+ 
+ 
+ [ Device Currently Free? ]
+ / \
+ YES NO
+ / \
+ [ Require Exclusive? ] [ Device Exclusively Held? ]
+ / \ / \
+ YES NO YES NO
+ / \ / \
+[ Admit Exclusive ] [ Admit Shared ] [ Queue / Reject ] [ Request Exclusive? ]
+ (Anti-Dual-Launch) / \
+ YES NO
+ / \
+ [ Queue Request ] [ Admit Shared ]
 ```
 
 ### Contention Rules:
