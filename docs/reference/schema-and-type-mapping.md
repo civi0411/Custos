@@ -12,15 +12,15 @@ This document specifies the exact mapping between external JSON wire schemas, in
 
 | Schema Specification | JSON Schema Title | Rust Type | Defining Package | Alignment Status |
 |---|---|---|---|---|
-| `envelope.schema.json` | `ProtocolEnvelope` | `ProtocolEnvelope` | `platform/domain` / `sdk/protocol` | **Aligned** (RFC 3339 timestamp, UUIDs) |
-| `error.schema.json` | `ProtocolError` | `DomainError` / `ProtocolError` | `platform/domain` (`custos-domain`) | **Aligned** (Error taxonomy mapping) |
-| `provider-request.schema.json` | `ProviderRequest` | `ProviderRequest` | `platform/ai` (`custos-provider`) | **Identical** (1:1 field compatibility) |
-| `provider-event.schema.json` | `ProviderEvent` | `ProviderEvent` | `platform/ai` (`custos-provider`) | **Identical** (Streaming event taxonomy) |
-| `judgment-request.schema.json` | `JudgmentRequest` | `JudgmentRequest` | `platform/core` (`custos-core`) | **Identical** (Criteria, candidate, context) |
-| `judgment-result.schema.json` | `JudgmentResult` | `JudgmentResult` | `platform/core` (`custos-core`) | **Identical** (Score, confidence, rationale) |
-| `capability-request.schema.json`| `CapabilityRequest`| `CapabilityRequest` | `platform/core` (`custos-core`) | **Identical** (Permit ID, action, arguments) |
-| `execution-receipt.schema.json` | `ExecutionReceipt` | `ExecutionReceipt` | `platform/domain` (`custos-domain`) | **Identical** (Output digest, duration, status) |
-| `continuation-packet.schema.json`| `ContinuationPacket`| `ContinuationPacket`| `platform/domain` (`custos-domain`) | **Identical** (SHA-256 integrity hash) |
+| `envelope.schema.json` | `ProtocolEnvelope` | `ProtocolEnvelope` | `platform/contracts` / `sdk/protocol` | **Aligned** (RFC 3339 timestamp, UUIDs) |
+| `error.schema.json` | `ProtocolError` | `DomainError` / `ProtocolError` | `platform/contracts` (`custos-contracts`) | **Aligned** (Error taxonomy mapping) |
+| `provider-request.schema.json` | `ProviderRequest` | `ProviderRequest` | `platform/contracts` / `platform/integrations` | **Identical** (1:1 field compatibility) |
+| `provider-event.schema.json` | `ProviderEvent` | `ProviderEvent` | `platform/contracts` / `platform/integrations` | **Identical** (Streaming event taxonomy) |
+| `judgment-request.schema.json` | `JudgmentRequest` | `JudgmentRequest` | `platform/contracts` (`custos-contracts`) | **Identical** (Criteria, candidate, context) |
+| `judgment-result.schema.json` | `JudgmentResult` | `JudgmentResult` | `platform/contracts` (`custos-contracts`) | **Identical** (Score, confidence, rationale) |
+| `capability-request.schema.json`| `CapabilityRequest`| `CapabilityRequest` | `platform/contracts` (`custos-contracts`) | **Identical** (Permit ID, action, arguments) |
+| `execution-receipt.schema.json` | `ExecutionReceipt` | `ExecutionReceipt` | `platform/contracts` (`custos-contracts`) | **Identical** (Output digest, duration, status) |
+| `continuation-packet.schema.json`| `ContinuationPacket`| `ContinuationPacket`| `platform/contracts` (`custos-contracts`) | **Identical** (SHA-256 integrity hash) |
 
 ---
 
@@ -28,9 +28,9 @@ This document specifies the exact mapping between external JSON wire schemas, in
 
 | Schema Specification | JSON Schema Title | Rust Type | Defining Package | Scope |
 |---|---|---|---|---|
-| `pack-manifest.schema.json` | `PackManifest` | `DomainPackManifest` | `platform/components` (`custos-packs`) | Pack metadata, tools, and workflows |
-| `workflow.schema.json` | `WorkflowDefinition`| `WorkflowPlan`, `WorkflowStep` | `platform/domain` (`custos-domain`) | Directed acyclic graph execution nodes |
-| `verifier-profile.schema.json` | `VerifierProfile` | `EvidenceKind`, `ContractEvidence` | `platform/domain` (`custos-domain`) | Acceptance criteria verifier rules |
+| `pack-manifest.schema.json` | `PackManifest` | `DomainPackManifest` | `platform/engine` (`custos-engine`) | Pack metadata, tools, and workflows |
+| `workflow.schema.json` | `WorkflowDefinition`| `WorkflowPlan`, `WorkflowStep` | `platform/contracts` (`custos-contracts`) | Directed acyclic graph execution nodes |
+| `verifier-profile.schema.json` | `VerifierProfile` | `EvidenceKind`, `ContractEvidence` | `platform/contracts` (`custos-contracts`) | Acceptance criteria verifier rules |
 
 ---
 
@@ -54,7 +54,7 @@ Every protocol error emitted across Unix Domain Sockets, HTTP, or SSE strictly c
 
 ## 4. SQLite Relational Schema Mapping
 
-The persistence layer in `platform/storage` (`custos-persistence`) manages durable state using SQLite in WAL mode. Core relational tables map to domain aggregates as follows:
+The persistence layer in `platform/storage` (`custos-storage`) manages durable state using SQLite in WAL mode. Core relational tables map to domain aggregates as follows:
 
 | Table Name | Primary Key | Key Columns | Mapped Aggregate / Entity |
 |---|---|---|---|
@@ -73,7 +73,7 @@ The persistence layer in `platform/storage` (`custos-persistence`) manages durab
 
 Schema-to-type alignment is automatically verified during continuous integration:
 ```bash
-cargo test --package custos-domain --test schema_compat
+cargo test --package custos-contracts --test schema_compat
 ```
 The test suite ensures that:
 1. Every JSON Schema specification file exists in the canonical repository schema directory.

@@ -1,7 +1,7 @@
 # Governed Agent Loop, Budget & Gateway Ownership (F08)
 
-> SADE Master Specification — Phase 7 / F08 Architectural Blueprint  
-> Governs: `custos-domain`, `custos-core`, `custos-runtime`, `custos-adapters`, `custos-daemon`, `custos-persistence`, and Golden Acceptance Test `G07`.
+> SADE Master Specification — Phase 7 / F08 Architectural Blueprint 
+> Governs: `custos-contracts`, `custos-storage`, `custos-integrations`, `custos-engine`, `custos-daemon`, and Golden Acceptance Test `G07`.
 
 ---
 
@@ -22,55 +22,55 @@ Phase 7 (F08) and the SuperAgent Refactoring implement the governed multi-turn a
 
 ```
 [ Model API / Provider / CLI Agent ]
-                  │ (turn / tool calls)
-                  ▼
-┌────────────────────────────────────────────────────────┐
-│ SupervisedAgentRunner (custos-runtime::agent::runner)  │
-│                                                        │
-│ 1. Decorates AgentDriver / AgentRuntimePort            │
-│ 2. Emits hierarchical StepSpan telemetry               │
-│ 3. Records execution to SupervisionTraceSink           │
-│ 4. Notifies SupervisedObserver of state anomalies      │
-└────────────────────────────────────────────────────────┘
-                  │
-                  ▼
-┌────────────────────────────────────────────────────────┐
-│ GovernedAgentRuntime (custos-runtime)                  │
-│                                                        │
-│ 1. Intercept into ActionIntent (Assurance::Mediated)   │
-│ 2. Check cancellation flag before & during turn        │
-│ 3. Bound iterations (max_iterations, default 10)       │
-│ 4. Bound tool outputs (LimitedWriter, default 64 KiB)  │
-└────────────────────────────────────────────────────────┘
-                  │ (authorize / execute)
-                  ▼
-┌────────────────────────────────────────────────────────┐
-│ DaemonGovernedToolExecutor (custos-daemon)             │
-│                                                        │
-│ Phase 1: authorize()                                   │
-│  - Parameter safety: reject ".." traversal             │
-│  - Gate 2 Policy: reject Critical-risk tools           │
-│  - Capability verification: explicit active grant      │
-│                                                        │
-│ Phase 2: execute()                                     │
-│  - request_permit() via TrustedKernel                  │
-│  - consume_permit() [INV-04]                           │
-│  - record_effect() [InFlight] in OutboxRepository      │
-│  - enqueue() [Dispatching] in OutboxPort               │
-│  - SovereignDeveloperAdapter / McpFederationHub        │
-│  - update_effect_status() & mark_receipted()           │
-│  - Atomic fallback: mark Uncertain if settlement fails │
-└────────────────────────────────────────────────────────┘
-                  │
-                  ▼
-┌────────────────────────────────────────────────────────┐
-│ TaskRuntime Orchestration (custos-runtime)             │
-│                                                        │
-│ Line 392 Invariant:                                    │
-│ if intent.lifecycle_state == ActionLifecycleState::Receipt {
-│     continue; // Bypass re-dispatch! Single effect!    │
-│ }                                                      │
-└────────────────────────────────────────────────────────┘
+ (turn / tool calls)
+ 
+
+ SupervisedAgentRunner (custos-engine::execution) 
+ 
+ 1. Decorates AgentDriver / AgentRuntimePort 
+ 2. Emits hierarchical StepSpan telemetry 
+ 3. Records execution to SupervisionTraceSink 
+ 4. Notifies SupervisedObserver of state anomalies 
+
+ 
+ 
+
+ GovernedAgentRuntime (custos-engine) 
+ 
+ 1. Intercept into ActionIntent (Assurance::Mediated) 
+ 2. Check cancellation flag before & during turn 
+ 3. Bound iterations (max_iterations, default 10) 
+ 4. Bound tool outputs (LimitedWriter, default 64 KiB) 
+
+ (authorize / execute)
+ 
+
+ DaemonGovernedToolExecutor (custos-daemon) 
+ 
+ Phase 1: authorize() 
+ - Parameter safety: reject ".." traversal 
+ - Gate 2 Policy: reject Critical-risk tools 
+ - Capability verification: explicit active grant 
+ 
+ Phase 2: execute() 
+ - request_permit() via TrustedKernel 
+ - consume_permit() [INV-04] 
+ - record_effect() [InFlight] in OutboxRepository 
+ - enqueue() [Dispatching] in OutboxPort 
+ - SovereignDeveloperAdapter / McpFederationHub 
+ - update_effect_status() & mark_receipted() 
+ - Atomic fallback: mark Uncertain if settlement fails 
+
+ 
+ 
+
+ TaskRuntime Orchestration (custos-engine) 
+ 
+ Line 392 Invariant: 
+ if intent.lifecycle_state == ActionLifecycleState::Receipt {
+ continue; // Bypass re-dispatch! Single effect! 
+ } 
+
 ```
 
 ---
@@ -85,23 +85,23 @@ Phase 7 (F08) and the SuperAgent Refactoring implement the governed multi-turn a
 - **Pre-execution Durable Ledger:** Before executing physical side-effects on disk, `DaemonGovernedToolExecutor` atomically records an `InFlight` attempt in `OutboxRepository` and enqueues a `Dispatching` entry in `OutboxPort`.
 - **Receipt Marking:** Upon successful execution via `SovereignDeveloperAdapter`, the receipt is settled and the returned `ActionIntent` is assigned `ActionLifecycleState::Receipt`.
 - **Downstream Re-dispatch Prevention:** `TaskRuntime::execute_node` explicitly inspects each intent:
-  ```rust
-  if intent.lifecycle_state == custos_domain::ActionLifecycleState::Receipt {
-      continue;
-  }
-  ```
-  This guarantees that already-executed tool calls are never re-evaluated or double-dispatched by downstream orchestration. Exactly one physical effect occurs on disk, and exactly one receipted entry is stored in the outbox.
+ ```rust
+ if intent.lifecycle_state == custos_contracts::ActionLifecycleState::Receipt {
+ continue;
+ }
+ ```
+ This guarantees that already-executed tool calls are never re-evaluated or double-dispatched by downstream orchestration. Exactly one physical effect occurs on disk, and exactly one receipted entry is stored in the outbox.
 
 ### 3.3 Loop Convergence & Budget Limits
 - **Bounded Iterations:** Governed agent turns are constrained by `max_iterations` (default 10).
 - **Status: Limited:** If `max_iterations` is exhausted without the model completing cleanly (i.e. returning empty tool calls), the turn terminates and unconditionally returns:
-  ```rust
-  DomainError::BudgetExceeded(format!(
-      "Agent loop iteration limit of {} exceeded without completion (status: limited)",
-      self.max_iterations
-  ))
-  ```
-  Unfinished loops are never reported as successful operations.
+ ```rust
+ DomainError::BudgetExceeded(format!(
+ "Agent loop iteration limit of {} exceeded without completion (status: limited)",
+ self.max_iterations
+ ))
+ ```
+ Unfinished loops are never reported as successful operations.
 
 ### 3.4 Cancellation Responsiveness & Zero Memory Leaks
 - When `cancel_run(&run_id)` is invoked, `GovernedAgentRuntime` detects the cancellation token before or during the loop and breaks immediately.
@@ -113,7 +113,7 @@ Phase 7 (F08) and the SuperAgent Refactoring implement the governed multi-turn a
 ## 4. Supervised Agent Runner & Zombie Process Elimination
 
 ### 4.1 SupervisedAgentRunner Decorator
-Implemented in `platform/runtime/src/agent/runner.rs` (265 lines):
+Implemented in `platform/engine/src/execution/runner.rs`:
 - Wraps any implementation of `AgentDriver` / `AgentRuntimePort`.
 - Automatically measures turn duration, token usage, and status transitions.
 - Records hierarchical `StepSpan` spans and publishes them to `SupervisionTraceSink` for real-time observability.
@@ -121,32 +121,32 @@ Implemented in `platform/runtime/src/agent/runner.rs` (265 lines):
 - Enforces transparent supervision without modifying the inner agent driver logic.
 
 ### 4.2 ProcessDropGuard & Zombie Elimination
-Implemented in `platform/adapters/src/harnesses/stream/process.rs`:
+Implemented in `platform/integrations/src/harnesses/stream/process.rs`:
 - External CLI agents (e.g. Claude Code, Aider, Codex) run as OS subprocesses.
 - To prevent orphaned processes when tasks are aborted or run objects are dropped:
-  ```rust
-  #[cfg(unix)]
-  {
-      command.process_group(0); // Spawns in isolated process group
-  }
-  ```
+ ```rust
+ #[cfg(unix)]
+ {
+ command.process_group(0); // Spawns in isolated process group
+ }
+ ```
 - The inner process handle implements `Drop`:
-  ```rust
-  #[cfg(unix)]
-  if let Some(pid) = self.pid {
-      unsafe {
-          libc::kill(-(pid as i32), libc::SIGKILL); // Kill whole process group!
-      }
-  }
-  ```
+ ```rust
+ #[cfg(unix)]
+ if let Some(pid) = self.pid {
+ unsafe {
+ libc::kill(-(pid as i32), libc::SIGKILL); // Kill whole process group!
+ }
+ }
+ ```
 - This guarantees that background compiler runs, dev servers, or agent loops started by child processes are cleanly and immediately terminated.
 
 ### 4.3 Canonical Naming & Zero-Mock Policy
-- **Typed Interface:** Legacy untyped "harness" terminology is superseded by the `AgentDriver` trait in `platform/core/src/contracts/agent.rs` and `CliAgentAdapter` in `platform/adapters/src/harnesses/adapter.rs`.
+- **Typed Interface:** Legacy untyped "harness" terminology is superseded by the `AgentDriver` trait in `platform/contracts/src/execution/` and `CliAgentAdapter` in `platform/integrations/src/harnesses/adapter.rs`.
 - **Zero-Mock Policy:** Production code contains zero mock implementations. All test harnesses, double adapters, and state stubs are strictly isolated behind:
-  ```rust
-  #[cfg(any(test, feature = "test-support"))]
-  ```
+ ```rust
+ #[cfg(any(test, feature = "test-support"))]
+ ```
 
 ---
 
@@ -169,13 +169,14 @@ Golden Acceptance Test G07 (`tests/e2e/tests/governed_loop_golden_test.rs`) vali
 
 ```bash
 # Run Golden Acceptance Test G07
-cargo test -p custos-tests-e2e --test governed_loop_golden_test
+cargo test --package tests-e2e --test governed_loop_golden_test
 
 # Verify Process Drop Guard & Adapter Tests
-cargo test -p custos-adapters --lib harnesses
+cargo test -p custos-integrations --lib harnesses
 
 # Workspace Quality Gates
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo xtask gate
+cargo xtask check-boundaries
+```
 ```

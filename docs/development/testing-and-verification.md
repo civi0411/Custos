@@ -1,7 +1,7 @@
 # Testing Architecture, Acceptance Gates & Verification Standards
 
-> **Classification:** Normative Quality Assurance Specification  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
+> **Classification:** Normative Quality Assurance Specification 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md). 
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
 Custos enforces a rigorous, multi-tiered testing discipline designed to guarantee the correctness, durability, and safety of an autonomous runtime that interacts with and modifies production codebases. Every line of code merged into the monorepo must withstand an exhaustive battery of deterministic tests, chaos injection, invariant verifications, and compile-time gates.
@@ -11,13 +11,13 @@ Custos enforces a rigorous, multi-tiered testing discipline designed to guarante
 ## 1. The Five-Tier Testing Pyramid
 
 ```text
-              ▲
-             / \     [ Tier 1: Live Provider Canaries ] (~2% of suites)
-            /   \    [ Tier 2: E2E Repo Fixture Tests ] (~8% of suites)
-           /     \   [ Tier 3: Chaos & Crash Matrix   ] (~15% of suites)
-          /       \  [ Tier 4: Contract & Integration ] (~25% of suites)
-         /         \ [ Tier 5: Pure Unit & Property   ] (~50% of suites)
-        ─────────────
+ 
+ / \ [ Tier 1: Live Provider Canaries ] (~2% of suites)
+ / \ [ Tier 2: E2E Repo Fixture Tests ] (~8% of suites)
+ / \ [ Tier 3: Chaos & Crash Matrix ] (~15% of suites)
+ / \ [ Tier 4: Contract & Integration ] (~25% of suites)
+ / \ [ Tier 5: Pure Unit & Property ] (~50% of suites)
+ 
 ```
 
 1. **Pure Unit & Property Tests:** Fast, in-memory validation of domain entities, task state machine transitions, path normalization invariants, and budget accounting algorithms using `proptest`.

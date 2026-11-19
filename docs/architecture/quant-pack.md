@@ -1,7 +1,7 @@
 # Quant Finance Domain Pack Specification
 
-> **Scope**: `workbenches/quant/src/`  
-> **Classification**: Architecture Reference  
+> **Scope**: `workbenches/quant/src/` 
+> **Classification**: Architecture Reference 
 > **Status**: Canonical Specification (Phase 3 / F08)
 
 ---
@@ -11,12 +11,12 @@
 The Quant Finance Domain Pack (`QuantPack`) provides specialized roles, jobs, and verification gates for algorithmic trading and quantitative finance workflows.
 
 ```
-       [Alpha Scout] ──► [Backtest Runner] ──► [Risk Supervisor] ──► [Execution Broker]
-             │                    │                      │                     │
-      alpha_discover        backtest_full           risk_audit           execution_plan
-             │                    │                      │                     │
-       LookaheadBias        DeflatedSharpe         DeflatedSharpe       User Acceptance
-          Checker              Verifier               Verifier              Oracle
+ [Alpha Scout] [Backtest Runner] [Risk Supervisor] [Execution Broker]
+ 
+ alpha_discover backtest_full risk_audit execution_plan
+ 
+ LookaheadBias DeflatedSharpe DeflatedSharpe User Acceptance
+ Checker Verifier Verifier Oracle
 ```
 
 ---
@@ -35,14 +35,14 @@ The Quant Finance Domain Pack (`QuantPack`) provides specialized roles, jobs, an
 ## 3. Workbench Jobs & Verification Gates
 
 1. **`quant__alpha_discover`**:
-   - Primary role: `alpha_scout` (Topology: `T1SingleWorker`).
-   - Verifier: `LookaheadBiasChecker` — checks evidence metadata to guarantee no future data leakage.
+ - Primary role: `alpha_scout` (Topology: `T1SingleWorker`).
+ - Verifier: `LookaheadBiasChecker` — checks evidence metadata to guarantee no future data leakage.
 2. **`quant__backtest_full`**:
-   - Primary role: `backtest_runner` (Topology: `T2StagedPipeline`).
-   - Verifier: `DeflatedSharpeVerifier` — requires strictly positive Sharpe ratio and validates performance metrics.
+ - Primary role: `backtest_runner` (Topology: `T2StagedPipeline`).
+ - Verifier: `DeflatedSharpeVerifier` — requires strictly positive Sharpe ratio and validates performance metrics.
 3. **`quant__risk_audit`**:
-   - Primary role: `risk_supervisor` (Topology: `T0Direct`).
-   - Verifier: `DeflatedSharpeVerifier` — performs DSR statistical power testing.
+ - Primary role: `risk_supervisor` (Topology: `T0Direct`).
+ - Verifier: `DeflatedSharpeVerifier` — performs DSR statistical power testing.
 4. **`quant__execution_plan`**:
-   - Primary role: `exec_broker` (Topology: `T1SingleWorker`).
-   - Verifier: `user_acceptance_oracle` — requires explicit human approval via outbox before any simulated or live order routing.
+ - Primary role: `exec_broker` (Topology: `T1SingleWorker`).
+ - Verifier: `user_acceptance_oracle` — requires explicit human approval via outbox before any simulated or live order routing.

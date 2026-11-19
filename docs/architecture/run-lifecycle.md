@@ -1,7 +1,7 @@
 # Run Lifecycle & Honest Recovery Specification
 
-> **Scope**: `platform/domain/src/task/run/`, `platform/storage/src/repositories/run/`, `apps/daemon/src/runtime.rs`  
-> **Classification**: Architecture Reference  
+> **Scope**: `platform/domain/src/task/run/`, `platform/storage/src/repositories/run/`, `apps/daemon/src/runtime.rs` 
+> **Classification**: Architecture Reference 
 > **Status**: Canonical Specification (Phase 1 / F04)
 
 ---
@@ -11,15 +11,15 @@
 Execution runs for Tasks and WorkerRuns follow a state machine:
 
 ```
-        Pending
-           │
-           ▼
-        Active ───────► Suspended
-           │                 │
-           ├───► Uncertain   │
-           │        │        │
-           ▼        ▼        ▼
-       Completed / Failed / Cancelled (Terminal)
+ Pending
+ 
+ 
+ Active Suspended
+ 
+ Uncertain 
+ 
+ 
+ Completed / Failed / Cancelled (Terminal)
 ```
 
 ### The `Uncertain` Status

@@ -51,7 +51,7 @@ Các framework tác tử AI thông thường (multi-agent frameworks, wrappers, 
 - **Cơ chế kiến trúc & Bất biến:**
   - Hệ thống vận hành bằng 4 máy trạng thái hữu hạn (FSM) trực giao: `Session FSM`, `Task FSM`, `Run FSM`, và `Outbox FSM`.
   - Cơ chế kiểm soát phiên bản lạc quan `state_version` (CAS) trên từng bản ghi thực thi. Writer cũ bị khóa (fenced) ngay khi có thế hệ mới khởi tạo.
-  - Phân định ranh giới sở hữu kiểu dữ liệu miền (Domain Ownership): `platform/domain` (`custos-domain`) giữ sự thuần khiết Zero-I/O tuyệt đối (0 async, 0 tokio, 0 sql, 0 fs).
+  - Phân định ranh giới sở hữu kiểu dữ liệu miền (Domain Ownership): `platform/contracts` (`custos-contracts`) giữ sự thuần khiết Zero-I/O tuyệt đối (0 async, 0 tokio, 0 sql, 0 fs).
 - **Tài liệu quy chuẩn:** [`architecture/kernel-and-task-lifecycle.md`](../architecture/kernel-and-task-lifecycle.md), [`architecture/run-lifecycle.md`](../architecture/run-lifecycle.md), [`architecture/domain-ownership.md`](../architecture/domain-ownership.md), [`architecture/workspace-binding-rules.md`](../architecture/workspace-binding-rules.md).
 
 ---

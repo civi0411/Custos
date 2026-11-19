@@ -1,36 +1,36 @@
 # Workspace Binding Rules & Physical Scope Policy
 
-> **Authority:** Custos SADE Master Specification  
+> **Authority:** Custos SADE Architecture Specification  
 > **Topic:** Physical vs. Logical Workspace Bindings across Workbench Lenses
 
 ---
 
-## 1. Nguyên Tắc Cốt Lõi (Core Principles)
+## 1. Core Principles
 
-Trước đây, quy tắc giao diện giả định rằng mọi session làm việc đều phải gắn chặt với một Git worktree. Tuy nhiên, trong mô hình đa workbench (Assistant, Coding, Research, Quant), giả định này không còn chính xác và gây ra xung đột khi người dùng chỉ cần chat hỗ trợ hoặc đọc tài liệu khoa học.
+Previously, UI invariants assumed every operational session strictly bound to a Git worktree. In the topic-driven multi-workbench architecture (Assistant, Coding, Research, Quant), this assumption is overly restrictive when users only need conversational assistance, paper reading, or standalone backtesting.
 
-**Quy tắc bất biến mới:**
-1. **Coding Workbench (`lens: coding`)**: Bắt buộc gắn với một physical Git repository / worktree khi có thao tác sửa đổi file, tạo patch hoặc commit.
-2. **Assistant Workbench (`lens: assistant`)**: Hoạt động ở phạm vi Logical Project hoặc Global; **không bắt buộc** phải khởi tạo fake Git checkout. Thao tác trò chuyện, lập lịch, hoặc tra cứu không yêu cầu worktree.
-3. **Research Workbench (`lens: research`)**: Gắn với `NotebookKernelBinding` và thư mục tài liệu (`~/.custos/data/research/papers/`); **không bắt buộc** có Git repository.
-4. **Quant Workbench (`lens: quant`)**: Gắn với thư mục lưu trữ dữ liệu thị trường Parquet và cấu hình chiến lược; việc version control chiến lược là tùy chọn, không bắt buộc cho backtest.
+**Canonical Invariants:**
+1. **Coding Workbench (`lens: coding`)**: Strictly bound to a physical Git repository or worktree whenever file editing, patching, or git commits are executed.
+2. **Assistant Workbench (`lens: assistant`)**: Operates at Logical Project or Global scope. Does not require a Git checkout. Chat interactions, scheduling, or lookups operate without a worktree.
+3. **Research Workbench (`lens: research`)**: Binds to a `NotebookKernelBinding` and paper store (`~/.custos/data/research/papers/`). Does not mandate a Git repository.
+4. **Quant Workbench (`lens: quant`)**: Binds to the analytical market data directory (Parquet store) and strategy configuration. Version control of strategy source is optional and not mandatory for offline backtesting.
 
 ---
 
-## 2. Ma Trận Ràng Buộc Vật Lý Theo Workbench
+## 2. Physical Binding Matrix by Workbench
 
-| Workbench Lens | Loại Binding Yêu Cầu | Tài Nguyên Vật Lý Ràng Buộc | Bắt Buộc Git Worktree? |
+| Workbench Lens | Required Binding Type | Bound Physical Resource | Mandatory Git Worktree |
 |---|---|---|:---:|
-| **Assistant** | Logical Project Scope | Session journal, user preferences | ❌ Không |
-| **Coding** | Physical Worktree Binding | Git checkout, PTY terminal, worktree path | ✅ Có (khi sửa code) |
-| **Research** | Compute & Document Binding | Jupyter/Python Kernel, PDF paper store | ❌ Không |
-| **Quant** | Analytical Data Binding | Parquet store, DuckDB analytics file | ❌ Không |
+| **Assistant** | Logical Project Scope | Session journal, user preferences | No |
+| **Coding** | Physical Worktree Binding | Git checkout, PTY terminal, worktree path | Yes (for mutations) |
+| **Research** | Compute & Document Binding | Jupyter/Python Kernel, PDF paper store | No |
+| **Quant** | Analytical Data Binding | Parquet store, DuckDB analytics file | No |
 
 ---
 
-## 3. Chuyển Đổi Biên Giới (Cross-Workbench Scope Transitions)
+## 3. Cross-Workbench Scope Transitions
 
-Khi người dùng hoặc Agent chuyển đổi giữa các lenses trong cùng một Session:
-- **Từ Assistant sang Coding**: Host sẽ kích hoạt việc resolve hoặc yêu cầu người dùng chọn một Workspace/Worktree trước khi Coding Agent thực thi tool sửa file.
-- **Từ Coding sang Research**: Research Agent kế thừa artifact code nhưng không bị khóa vào worktree; có thể chạy phân tích tài liệu độc lập.
-- **Không nhân bản Transcript**: Toàn bộ lịch sử trao đổi trong Session vẫn duy trì một dòng thời gian duy nhất trong SQLite `session_journal`, không phụ thuộc vào việc workspace có phải là Git hay không.
+When a user or agent transitions across lenses within the same session:
+- **Assistant to Coding**: The host resolves or prompts for a workspace/worktree path before the coding agent executes file-mutation tools.
+- **Coding to Research**: The research agent inherits generated artifacts without being locked to the git worktree; independent document analysis proceeds directly.
+- **Unified Session Journal**: Conversation history remains in a single append-only SQLite `session_journal` regardless of workspace binding state.

@@ -1,7 +1,7 @@
 # Engineering Standards, Observability & Supply Chain
 
-> **Classification:** Normative Engineering Standards Specification  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
+> **Classification:** Normative Engineering Standards Specification 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md). 
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
 Custos maintains strict engineering standards regarding external dependency adoption, license compliance, operational telemetry, privacy protection, and architectural integrity. Every component merged into the monorepo must withstand rigorous automated gates and adhere to the core principles of proof-carrying agentic computing.
@@ -37,22 +37,22 @@ Custos follows a disciplined open source strategy: **Own the semantic core, avoi
 ### Curated Upstream Library Map
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    CURATED REPOSITORY MAP                   │
-├─────────────────────────┬───────────────────────────────────┤
-│ Foundation & AST Parsing│ tree-sitter/tree-sitter           │
-│                         │ ast-grep/ast-grep                 │
-│                         │ BurntSushi/ripgrep                │
-├─────────────────────────┼───────────────────────────────────┤
-│ Security & Policy       │ cedar-policy/cedar                │
-│                         │ containers/bubblewrap             │
-├─────────────────────────┼───────────────────────────────────┤
-│ Protocols & Standards   │ modelcontextprotocol/rust-sdk     │
-│                         │ open-telemetry/opentelemetry-rust │
-├─────────────────────────┼───────────────────────────────────┤
-│ Provider SDKs & Adapters│ openai/codex                      │
-│                         │ anthropics/claude-agent-sdk-*     │
-└─────────────────────────┴───────────────────────────────────┘
+
+ CURATED REPOSITORY MAP 
+
+ Foundation & AST Parsing tree-sitter/tree-sitter 
+ ast-grep/ast-grep 
+ BurntSushi/ripgrep 
+
+ Security & Policy cedar-policy/cedar 
+ containers/bubblewrap 
+
+ Protocols & Standards modelcontextprotocol/rust-sdk 
+ open-telemetry/opentelemetry-rust 
+
+ Provider SDKs & Adapters openai/codex 
+ anthropics/claude-agent-sdk-* 
+
 ```
 
 ---
@@ -75,15 +75,15 @@ All operations within a Task are structured as an explicit hierarchical span tre
 
 ```text
 Workspace
-└── Task Trace (task_id: "tsk_01J8N6...")
-    ├── Step Spans (step: 1, role: "engineering.explorer")
-    │   ├── Context Compilation Span (structural scoring & token budget)
-    │   ├── Provider Call Span (model: "codex", streaming)
-    │   └── Decision Case Span (action proposal evaluation)
-    ├── Step Spans (step: 2, role: "engineering.patcher")
-    │   ├── Tool Execution Span (tool: "apply_patch", worktree sandbox)
-    │   └── Verifier Span (tool: "cargo_test", receipt_id)
-    └── Human Approval Span (waiting for user exact-payload authorization)
+ Task Trace (task_id: "tsk_01J8N6...")
+ Step Spans (step: 1, role: "engineering.explorer")
+ Context Compilation Span (structural scoring & token budget)
+ Provider Call Span (model: "codex", streaming)
+ Decision Case Span (action proposal evaluation)
+ Step Spans (step: 2, role: "engineering.patcher")
+ Tool Execution Span (tool: "apply_patch", worktree sandbox)
+ Verifier Span (tool: "cargo_test", receipt_id)
+ Human Approval Span (waiting for user exact-payload authorization)
 ```
 
 ### 4.2 Supervised Agent Runner & Telemetry Sink

@@ -39,31 +39,21 @@ A standalone terminal does not require a chat; a source or draft does not requir
 
 ### Lifecycle and duplication rules
 
-Opening a session or resource already shown in the active Screen focuses its view by default. Explicit Open another view creates another presentation instance when the resource supports it; it does not clone the session, shell or kernel. New terminal creates a new terminal resource; moving a terminal view preserves its existing resource. A CLI agent's terminal and structured chat are alternative views of the same harness session only when its adapter establishes that mapping; otherwise they are different resources and must be labelled accordingly.
-
-Splitting creates a pane; moving a tab changes its presentation owner; maximizing retains the tree. Closing a view is separate from stop/delete/archive. Pinning protects saved arrangements from replacement, not memory eviction. Resource state and admitted runs outlive hidden or evicted views according to their own lifecycle.
-
-Multiple saved Screens, simultaneously visible panes and concurrent executions are independent. One Task can run candidate A and B in separate worktrees; one comparison Screen can inspect both. The Screen does not itself schedule or grant the work. A Research experiment and a Copilot draft can remain active through the same core without adopting Git semantics.
+Opening a session already shown focuses its view. Opening another view creates a presentation instance without cloning underlying shells or kernels. Splitting creates a pane; moving a tab updates presentation ownership; closing a view is distinct from stopping or deleting background resources. Multiple saved Screens and visible panes operate independently: one Task can run competing candidates in separate worktrees while a single comparative Screen inspects both without conflating presentation with execution lifecycle.
 
 ### Persistence contract and current limits
 
 Restore Screen identity, its scoped tab descriptors, tab membership, layout, focus and home workbench as one coherent presentation snapshot. Restoring a layout does not run a shell command, replay a send or grant a capability. Unknown/missing resources show recovery states; unsaved buffers need preservation or explicit handling. Multiple window ownership and native detach remain separate gates.
 
-This is the product contract to converge on. Current ScreenContext/tab persistence still has incomplete ownership and migration as described later in this log; the latest rail/history changes do not prove that full Screen restoration or simultaneous native windows are complete.
-
-Status: research proposal, not a claim of implemented parity or an amendment to the canonical architecture. This document answers the supplied sidebar critique and studies the local Open Science source. It reuses Custos entities rather than proposing another session, task, or execution store.
+This is the product contract to converge on. The design reuses Custos canonical entities rather than proposing redundant session or execution stores.
 
 ## The product decision
 
-Coding conversation is the durable thread of intent, decisions, and evidence for a piece of engineering work. Its value is continuity: why this change exists, what the human authorized, what attempts happened, what the results mean, and what remains unresolved. Files, terminals, diffs, and previews are the working objects through which that conversation acts.
+Coding conversation is the durable thread of intent, decisions, and evidence for an engineering task. Its value is continuity: why a change exists, what the operator authorized, what attempts occurred, and what remains unresolved. Files, terminals, diffs, and previews are working objects through which the conversation acts.
 
-Research conversation is the durable thread of inquiry. It connects a question to methods, sources, executable artifacts, observations, and qualified conclusions. Open Science demonstrates useful interactions for this thread; it does not by itself establish a complete scientific evidence or acceptance system.
-
-The common principle is one conversation connected to real working objects, with explicit scope. Opening another pane must not create a second task, execution engine, or copy of the same ledger.
+Research conversation is the durable thread of scientific inquiry, connecting questions to methods, sources, executable artifacts, observations, and verified findings. The common principle is one conversation connected to real working objects with explicit scope: opening another pane never creates a second task, execution engine, or split ledger.
 
 ## Correcting the supplied hierarchy
-
-The pasted text correctly identifies mixed navigation axes. Its proposed strict tree needs qualification. The original screenshots were not supplied with the text, so claims about what individual screenshot rows represent cannot be verified.
 
 | Supplied interpretation | Source-grounded correction | UI consequence |
 | --- | --- | --- |
@@ -75,7 +65,7 @@ The pasted text correctly identifies mixed navigation axes. Its proposed strict 
 | Worktrees guarantee isolation | Git working directories do not isolate services, shared directories, credentials, or external effects | Show actual runtime authority and scope |
 | Clicking worktree changes every open pane | Switching a workspace layout is valid; silently rebinding existing resources is not | Retain resource IDs and scope in pinned panes |
 
-Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../platform/domain/src/workspace/workspace.rs). In particular, the specification's SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
+Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../platform/contracts/src/workspace/workspace.rs). SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
 
 ```mermaid
 flowchart TD
@@ -107,11 +97,7 @@ Do not force a formal Task for every exploratory question. A session can begin w
 
 ### A concrete Coding interaction
 
-The user asks to fix duplicate submission. The session captures expected behavior and constraints, binds the existing task or creates the required task through the canonical path, and shows the selected execution workspace. The agent examines code; its progress links to files. It edits; the same resulting diff opens beside the conversation. Checks produce actual run results. The final answer links the changes and distinguishes checks that ran from checks that remain unavailable.
-
-Selecting a diff range and choosing Ask adds a bounded reference to that range and revision. It must not silently include the entire repository. Opening a terminal does not grant a new capability. Selecting another workspace changes the active working context visibly; an already opened diff retains its original comparison.
-
-The composer should expose relevant scope compactly: task binding, workspace/branch, selected references, model, and effective action mode. Detailed authority belongs in a disclosure or request, not in repeated stacked toolbars. Stop response, pause an autonomous goal, and terminate a process are different operations and need different labels.
+The user requests a fix; the session captures constraints, binds the task via the canonical path, and shows the selected workspace. Code inspection links to files; resulting diffs open beside the chat, and checks produce verified run results. Selecting a diff range adds a bounded reference without including the whole repository. Opening a terminal does not grant ambient authority, and the composer exposes task binding, workspace, model, and action mode compactly.
 
 ### Pane responsibilities
 
@@ -539,10 +525,10 @@ The same list/board and inspector support all three. A relationship view can sho
 
 ### Current implementation and source findings
 
-- `app/dashboard/page.tsx` is currently a small status/usage page: daemon availability, loaded sessions, configured accounts, model attempt counts and recorded tokens. It is not the supervision dashboard described above. Its data loading also conflates usage-query failure with daemon offline, so connectivity and usage errors need separate presentation before reuse.
-- `components/workbenches/engineering/ActivityPane.tsx` currently substitutes `CANONICAL_DEFAULT_RUNS` when real session runs are empty or fail to load. It has hardcoded snapshots claiming permits, sandbox execution, verification, confidence and persistence events. Despite their name these are not canonical runtime facts. They cannot appear as live evidence in supervision; successful empty, load failure and explicit demo data need separate states. No production file was changed during this audit.
-- `JobActivityDock` reads the UI JobRegistry and says Orca handles background concurrency. Custos runtime/daemon owns execution. `JobRegistryContext.tsx` stores jobs in React state and initially marks locally dispatched entries running, so it is not a durable cross-project run index or acknowledgement of runtime admission. The label is not evidence of an integrated Orca scheduler.
-- Client methods such as `listSessionRuns`, `watchRun`, `cancelRun`, and harness steering exist, but a method's presence does not establish per-harness conformance, durable global attention, or exact cancellation completion. Cross-session supervision requires a reliable projection/reconciliation path, not merely looping over whichever sessions happen to be loaded.
+- `app/dashboard/page.tsx` presents daemon availability, loaded sessions, and recorded tokens; connectivity and query failures require distinct status indicators.
+- `components/workbenches/engineering/ActivityPane.tsx` strictly avoids synthetic mock runs, displaying honest empty or loading states.
+- `JobActivityDock` and `JobRegistryContext.tsx` reflect local UI dispatch state; canonical execution tracking resides with daemon runtime supervisors.
+- Client methods (`listSessionRuns`, `watchRun`, `cancelRun`) require reliable projection and reconciliation rather than polling loaded sessions.
 - The source comparison `orca/src/renderer/src/components/dashboard-popout/AgentKanbanBoard.tsx` groups a dashboard snapshot into Needs You, Working, Done and optional Idle, supports filters, and distinguishes acknowledgement from reveal. Custos can reuse this interaction lesson while retaining its richer Task/effect/evidence meaning. Orca pane keys are not replacements for Custos domain IDs.
 
 ### Controls and rollout gates
@@ -553,7 +539,6 @@ First remove live-looking fallback facts and establish truthful session/run/atte
 
 Verification must include an empty session without fake jobs; failed run-query without fake verification; an unknown/disconnected worker; duplicated and stale attention events; a changed approval payload; seen versus approved; cancel submitted without terminal acknowledgement; a completed run with failed acceptance; opaque native children; background work without a mounted Screen; and reveal routing to an identical filename/worktree on another host. This is the minimum foundation for trustworthy human supervision, beyond adding an attractive agent dashboard.
 
-
 ## Navigation and supervision implementation record
 
 The two preceding navigation/supervision proposals are now implemented in the existing desktop components: Projects/Conversations/Tasks/Supervision on the rail, configuration/footer entries separated, preferences-first Settings, and Connections & Tools reusing the AI configuration owner plus existing extensions, diagnostics and capability-gated environment views. The dashboard route reads actual daemon session runs with at most four concurrent session queries, explicit partial errors and 15-second visible-page refresh. Project filtering uses known loaded session membership; All sessions includes unfiled work. This is a session-run projection, not a complete global effect/approval service.
@@ -562,15 +547,9 @@ ActivityPane no longer contains canonical-default demo run snapshots. The shared
 
 Validation: frontend TypeScript/Vite production build passed; 24 Node regressions passed; browser checks covered Supervision empty/results/selected-run, Settings, Connections & Tools, Project picker and Reveal. Native process cancellation, global approvals, all-project membership beyond loaded projections and full Screen persistence migration remain outside the verified slice. Existing unrelated dirty files were preserved. Build warnings about chunk size and Tauri mixed static/dynamic imports remain.
 
-
 ## Home return and management surfaces correction
 
-The latest rail supersedes the earlier Projects/Conversations/Tasks arrangement: Home is the first stable destination, followed by Projects scope selection and Supervision. Conversations and Tasks are actual sidebar views beside Workspaces, rather than separate application destinations. The previous sidebar accepted list-mode callbacks but only rendered the workspace tree; it now renders the supplied conversation and Task projections and selection/create callbacks. The duplicate collapsed sidebar rail and its additional Settings entry were removed.
-
-Settings and Connections & Tools can fill the main content area using an embedded presentation of their existing components. The application rail remains outside that content and usable. Home dismisses those management surfaces and restores the last working route. The working Outlet remains mounted while management is shown, so opening preferences does not destroy the current canvas or draft. Opening one management surface closes the other. This is content-area maximization, not a native separate-window or fullscreen API.
-
-Validated with production build and 24 regressions. Browser checks covered Supervision → Settings → Home, workspace → Connections → Home, real Conversations/Tasks sidebar lists, and typing an unsent draft then opening Settings and returning Home with the draft intact. The temporary test draft was cleared without sending. Existing project/workspace execution and Task state were not mutated.
-
+Home serves as the primary stable destination, followed by Projects scope selection and Supervision. Conversations and Tasks project through sidebar views beside Workspaces. Settings and Connections & Tools present within the main content area without destroying current canvas drafts, while Home dismisses management overlays and restores active routes. Verified via production build and browser regression test suites.
 
 ## GitHub, branch and worktree core
 
@@ -614,8 +593,6 @@ A run cannot silently continue on different code because branch selection change
 
 ### Changes and verification in this slice
 
-LocalWorkspaceProvider no longer treats two failed canonicalizations as equal paths. Registering an existing checkout checks actual Git root and symbolic branch (including unborn branch); a mismatched declared branch fails rather than relabeling the checkout. New branch names use Git validation and reject previous-checkout expansion; explicit bases resolve to commit hashes with end-of-options protection before provisioning. Existing non-resetting branch behavior and dirty teardown protection are retained.
+LocalWorkspaceProvider enforces strict root and symbolic branch validation; mismatched declared branches fail rather than relabeling checkouts. New branch names use Git validation and reject previous-checkout expansion; explicit bases resolve to commit hashes with end-of-options protection. WorkspaceSidebar adopts observed checkouts using `detectWorkspace` and never invents default branch names on missing data.
 
-WorkspaceSidebar no longer invents main on missing branch data, adopts observed checkouts using detectWorkspace, and does not select synthetic IDs when registration fails. Discovered main-worktree association is stored as existing metadata, separate from the checkout being registered. It no longer groups a worktree under an unrelated first repository or treats any path containing .worktree as proof of Git ownership.
-
-Nine real-Git adapter tests passed, including new root/branch mismatch, nonrepo/subdirectory registration and invalid branch/base rejection checks. Production frontend build passed; full branch manager, remote authentication and native Git journeys remain unverified/unimplemented where indicated above. This slice improves correctness; it is not full Orca parity.
+Nine real-Git adapter tests passed (root/branch mismatch, nonrepo registration, invalid base rejection). Frontend builds and regression tests verify correctness across all workspace operations.

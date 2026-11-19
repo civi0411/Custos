@@ -29,20 +29,19 @@ The root `capabilities/` scaffold has been removed. Six compute/A2A Rust files t
 
 | Stable ID | Current compiled implementation | Boundary and limitations |
 |---|---|---|
-| `workspace` | `platform/adapters/src/workspace/` | Folder/Git access and worktree provisioning; caller scope still required |
-| `terminal` | `platform/adapters/src/terminal/` | PTY driver; terminal lifetime is separate from visible tab |
-| `notebook` | `platform/adapters/src/notebook/` | Python driver; resource enforcement must be verified per driver/OS |
-| `compute` | `platform/adapters/src/compute/` | Colab/Kaggle/rented-target adapters and checkpoint store; metadata is not proof of cloud execution |
-| `documents` | `platform/adapters/src/documents/` | Scoped, bounded UTF-8 source acquisition; no PDF/OCR implementation implied |
-| `local-inference` | `platform/adapters/src/local_inference/` | Local inference implementation; native build feature and runtime readiness are distinct |
-| `mcp` | `platform/adapters/src/mcp/` | Tool discovery/transport; discovery metadata is not authority |
-| `remote-agents` | `platform/adapters/src/a2a/` | Remote delegation transport; no automatic grant transfer |
+| `workspace` | `platform/integrations/src/filesystem/` | Folder/Git access and worktree provisioning; caller scope still required |
+| `terminal` | `platform/integrations/src/terminal/` | PTY driver; terminal lifetime is separate from visible tab |
+| `notebook` | `platform/integrations/src/notebook/` | Python driver; resource enforcement must be verified per driver/OS |
+| `compute` | `platform/integrations/src/compute/` | Colab/Kaggle/rented-target adapters and checkpoint store; metadata is not proof of cloud execution |
+| `documents` | `platform/integrations/src/filesystem/` | Scoped, bounded UTF-8 source acquisition; no PDF/OCR implementation implied |
+| `local-inference` | `platform/integrations/src/models/local/` | Local inference implementation; native build feature and runtime readiness are distinct |
+| `mcp` | `platform/integrations/src/protocols/mcp/` | Tool discovery/transport; discovery metadata is not authority |
+| `remote-agents` | `platform/integrations/src/protocols/a2a/` | Remote delegation transport; no automatic grant transfer |
+| `credentials` | `platform/integrations/src/credentials/` | Secure token, key, and API credential management |
 
 Each `manifest.json` here is a **source descriptor**, consumed by developer checks. It is not an authenticated installable package or proof of runtime readiness. `xtask validate-packs` checks that descriptors have exported modules, unique IDs and satisfy workbench manifest references. It does not execute drivers or attest all Cargo feature combinations.
 
-`documents::SourceFetchAdapter` replaces the old generic `tools::source_fetch` path. `compute::checkpoint::verify_local_checkpoint_files` owns local checkpoint integrity checks. MCP builtins remain under MCP; no general-purpose adapters `tools` bucket or forwarding facade is retained.
-
-Current `platform/components` still contains specialist pack implementation and `platform/domain` still has specialist types. Workbench `backend/src` copies are not automatically authoritative merely because they exist. Resolve their compilation/callers before later extraction. UI remains in `ui/desktop`; the native shell is in `apps/desktop/native`. This cleanup does not claim these migrations are finished.
+Specialist pack implementations are housed inside `workbenches/*` (`coding`, `research`, `assistant`, `quant`), while shared components and engine verification reside in `platform/engine/src/components/` and contracts in `platform/contracts`. UI remains in `apps/desktop/ui`; the native shell is in `apps/desktop/native`.
 
 ## 3. Separate state, capability and authority
 

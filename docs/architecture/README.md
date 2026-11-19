@@ -1,8 +1,8 @@
 # CUSTOS ARCHITECTURE INDEX — 10 THEMATIC PILLARS
 
-> **Classification:** Normative Architecture Blueprint Suite  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
-> **Repository Root Index:** See [Custos Documentation Overview](../README.md).  
+> **Classification:** Normative Architecture Blueprint Suite 
+> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md). 
+> **Repository Root Index:** See [Custos Documentation Overview](../README.md). 
 > **Physical Codebase Map:** See [Monorepo Deep File Catalog](../development/codebase-architecture.md).
 
 The `docs/architecture/` suite contains 40 authoritative technical specifications defining the architecture of the Custos Supervised Agent Development Environment (SADE). Every subsystem, invariant, mathematical formulation, and operational protocol is organized strictly across **10 Master Architectural Themes**.
@@ -12,14 +12,14 @@ The `docs/architecture/` suite contains 40 authoritative technical specification
 ## Thematic Architecture Navigation Matrix
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                          THE 10 MASTER ARCHITECTURAL THEMES                             │
-├──────────────────────────────┬──────────────────────────────┬───────────────────────────┤
-│ Theme 1: SADE & Agent Lake   │ Theme 2: Kernel & State FSMs │ Theme 3: Authority Gateway│
-│ Theme 4: Governed Agent Loop │ Theme 5: Evidence & Gate     │ Theme 6: Measured OI      │
-│ Theme 7: Storage & Partition │ Theme 8: Compute Relay & GPU │ Theme 9: 4 Workbenches    │
-│ Theme 10: Protocols & UI     │                              │                           │
-└──────────────────────────────┴──────────────────────────────┴───────────────────────────┘
+
+ THE 10 MASTER ARCHITECTURAL THEMES 
+
+ Theme 1: SADE & Agent Lake Theme 2: Kernel & State FSMs Theme 3: Authority Gateway
+ Theme 4: Governed Agent Loop Theme 5: Evidence & Gate Theme 6: Measured OI 
+ Theme 7: Storage & Partition Theme 8: Compute Relay & GPU Theme 9: 4 Workbenches 
+ Theme 10: Protocols & UI 
+
 ```
 
 ---
@@ -47,7 +47,7 @@ The Task is the primary, first-class citizen in Custos. While sessions, models, 
 |---|---|---|
 | **[`kernel-and-task-lifecycle.md`](kernel-and-task-lifecycle.md)** | Task state machine, deterministic state transitions (`Draft` $\rightarrow$ `Admitted` $\rightarrow$ `Active` $\rightarrow$ `Verifying` $\rightarrow$ `Completed`), revisions, and ContinuationPackets. | Transitions mandate explicit `ActorId` and valid cryptographic signatures. |
 | **[`run-lifecycle.md`](run-lifecycle.md)** | Execution lifecycle of `Run` and `WorkerRun`, optimistic concurrency via `state_version` (CAS), and handling of the `Uncertain` status. | Connection drop transitions attempt to `Uncertain`; blind retries are blocked. |
-| **[`domain-ownership.md`](domain-ownership.md)** | Domain type ownership ledger, enforcing Zero-Kernel Leakage and strict Ring 0 purity in `platform/domain`. | `custos-domain` has 0 I/O dependencies (no async, no tokio, no sql, no fs). |
+| **[`domain-ownership.md`](domain-ownership.md)** | Domain type ownership ledger, enforcing Zero-Kernel Leakage and strict Ring 0 purity in `platform/contracts`. | `custos-contracts` has 0 I/O dependencies (no async, no tokio, no sql, no fs). |
 | **[`workspace-binding-rules.md`](workspace-binding-rules.md)** | Rules for binding tasks to workspace directories, Git checkouts, and isolated worktrees. | Multi-agent concurrency operates strictly in isolated Git worktrees. |
 
 ---

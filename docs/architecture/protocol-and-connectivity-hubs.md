@@ -155,7 +155,7 @@ $$\begin{aligned}
 
 ## 5. Unified Integration Registry (Replacing "Six Hubs")
 
-Custos replaces scattered "hub" abstractions with a single **Integration Registry** in `custos-runtime`.
+Custos replaces scattered "hub" abstractions with a single **Integration Registry** in `platform/engine` and `platform/integrations`.
 
 ### Unified Binding Lifecycle
 All external connections transition through an explicit state machine:
@@ -178,11 +178,11 @@ Settings must provide four distinct management tabs instead of a single ambiguou
 | **Local API Protocol & Envelopes** | `integrated` | `custos-protocol`, `custos-sdk`, `custos-daemon` | `sdk/protocol` owns `ApiRequest`/`ApiResponse`/method constants/`ApiTransport` and shared wire DTOs; `custos-sdk` owns client transport without backend coupling; upgrade toward `CommandEnvelope` + `EventEnvelope`. |
 | **Daemon Listener Security** | `defect` | `custos-daemon/src/main.rs` | Currently binds HTTP `127.0.0.1:3000` without auth. Transition to Unix socket default; HTTP opt-in with Bearer token. |
 | **Credential Storage & Auth** | `integrated` | `custos-daemon/src/auth/` | Unified `auth` module composing `credential_store`, `resolver`, and `oauth_callback`; status metadata sanitized so plaintext tokens are never exposed over RPC. |
-| **ModelPort & Multimodal Turn** | `coded-unwired` | `custos-provider/src/port.rs` | Default `execute_turn` strips images/tools into `flat_prompt`. Remove flattening; preserve multimodal context. |
-| **Connection Fallback & Economics** | `coded-unwired` | `custos-adapters/src/providers/fallback.rs` | Has `FallbackRouter` and `(connection, model)` lock idea from 9Router, but unwired to daemon. Wire with typed errors. |
-| **MCP Client & Authority** | `coded-unwired` | `custos-adapters/src/mcp/` | `client.rs` returns mock strings. Replace with real 2026-07-28 stdio/HTTP client + `ExecutionPermit` enforcement. |
-| **Coding Harnesses (ACP/Native)** | `coded-unwired` | `custos-adapters/src/harness/` | Claude Code CLI adapter exists; ACP is candidate. Enforce worktree isolation and realistic assurance tags. |
-| **A2A Remote Protocol** | `prototype` | `custos-adapters/src/a2a/` | Structs exist; `roaming/a2a.rs` uses simulated dispatch. Defer live networking until a remote job exists. |
+| **ModelPort & Multimodal Turn** | `integrated` | `platform/contracts/src/inference/` & `platform/integrations/src/models/` | Multimodal turn representation; image and tool structured payloads preserved. |
+| **Connection Fallback & Economics** | `integrated` | `platform/integrations/src/models/` | `FallbackRouter` and `(connection, model)` lock ideas wired with typed errors. |
+| **MCP Client & Authority** | `integrated` | `platform/integrations/src/protocols/mcp/` | 2026-07-28 stdio/HTTP client + `ExecutionPermit` enforcement. |
+| **Coding Harnesses (ACP/Native)** | `integrated` | `platform/integrations/src/harnesses/` | Claude Code CLI, Codex, and OpenCode adapters; worktree isolation and assurance tags. |
+| **A2A Remote Protocol** | `prototype` | `platform/integrations/src/protocols/a2a/` | A2A Agent Card definitions and wire serializers. |
 
 ---
 

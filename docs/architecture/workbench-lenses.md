@@ -1,7 +1,7 @@
 # Workbench Lenses Specification
 
-> **Scope**: `platform/domain/src/session/session.rs`, `platform/components/src/`, `workbenches/`  
-> **Classification**: Architecture Reference  
+> **Scope**: `platform/domain/src/session/session.rs`, `platform/components/src/`, `workbenches/` 
+> **Classification**: Architecture Reference 
 > **Status**: Canonical Specification (Phase 3 / F07)
 
 ---
@@ -11,12 +11,12 @@
 Custos organizes all agent interactions into four specialized lenses:
 
 ```
-                          WorkbenchLens
-                               │
-         ┌─────────────┬───────┴───────┬─────────────┐
-         ▼             ▼               ▼             ▼
-      Coding       Research        Assistant       Quant
-   (Engineering)  (Deep Science)   (Copilot)     (Finance)
+ WorkbenchLens
+ 
+ 
+ 
+ Coding Research Assistant Quant
+ (Engineering) (Deep Science) (Copilot) (Finance)
 ```
 
 | Lens | Identity / ID | Domain Pack | Primary Roles | Primary Output |

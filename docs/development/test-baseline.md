@@ -35,13 +35,10 @@ The test suites are distributed across the 3 concentric architectural rings:
 ### Ring 0: Platform Core Packages
 | Package | Physical Path | Primary Test Focus | Suite Type |
 |---|---|---|---|
-| `custos-domain` | `platform/domain` | Pure entity state machines, ID generators, error types | Unit & Property (`proptest`) |
-| `custos-core` | `platform/core` | TaskService, Two-phase authority, supervisor contracts | Unit & Invariant |
-| `custos-persistence` | `platform/storage` | SQLite WAL operations, outbox staging, crash recovery | Contract & Integration |
-| `custos-provider` | `platform/ai` | Model router, prompt cache affinity, local inference | Unit & Mock Provider |
-| `custos-runtime` | `platform/runtime` | TaskRuntime, DAG coordinators, T5LeadWorker, FastPathFilter | Unit & State Transition |
-| `custos-adapters` | `platform/adapters` | ProcessDropGuard, worktree isolation, PTY terminal, MCP Hub | System & OS Integration |
-| `custos-packs` | `platform/components` | Pack manifest parsing, verifier registry, role discovery | Unit & Schema |
+| `custos-contracts` | `platform/contracts` | Pure entity state machines, ID generators, error types, port interfaces | Unit & Invariant (`tests/contract`) |
+| `custos-storage` | `platform/storage` | SQLite WAL operations, outbox staging, crash recovery | Contract & Integration |
+| `custos-integrations`| `platform/integrations`| Model router, local inference, ProcessDropGuard, PTY terminal, MCP Hub | System & OS Integration |
+| `custos-engine` | `platform/engine` | Governed loop, DAG coordinators, T5LeadWorker, FastPathFilter, verifiers | Unit & State Transition |
 
 ### Ring 1: Specialized Workbenches
 | Package | Physical Path | Primary Test Focus | Suite Type |
@@ -53,6 +50,12 @@ The test suites are distributed across the 3 concentric architectural rings:
 
 ### Ring 2: Protocol, SDK & Applications
 | Package | Physical Path | Primary Test Focus | Suite Type |
+|---|---|---|---|
+| `custos-protocol` | `sdk/protocol` | Wire protocol serialization, schema round-trip | Schema & Unit |
+| `custos-sdk` | `sdk/client-rust` | Local API client methods, reconnect loops | Unit & Mock API |
+| `custos-daemon` | `apps/daemon` | Bootstrap orchestration, Local API endpoints, workbench dispatch | Integration & System |
+| `custos-app-cli` | `apps/cli` | Command-line parsing, output formatting, terminal UX | Integration & Smoke |
+| `custos-desktop` | `apps/desktop/native` | Tauri v2 host bindings, webview configuration | Native Platform Smoke |
 |---|---|---|---|
 | `custos-protocol` | `sdk/protocol` | Wire schema serialization, JSON-RPC 2.0 envelopes | Contract & Roundtrip |
 | `custos-sdk` | `sdk/client-rust` | Asynchronous IPC client, streaming event parser | Integration |
@@ -78,15 +81,15 @@ Every one of the 10 Master Thematic Pillars is directly covered and verified by 
 | Theme | Thematic Pillar | Verifying Test Suite | Key Invariant Checked |
 |---|---|---|---|
 | **Theme 1** | SADE Vision & Agent Lake | `tests/e2e/`, `apps/daemon/src/api/tests/` | Multi-lens session state continuity |
-| **Theme 2** | Task Kernel & State Machine | `platform/domain`, `platform/core`, `tests/contract` | Pure FSM transitions, atomic commits (INV-01, INV-02) |
-| **Theme 3** | Authority & Capability Gateway | `platform/core`, `apps/daemon/src/api/tests/shared_capabilities.rs` | Zero ambient authority, single-use permits (INV-05, INV-10) |
-| **Theme 4** | Governed Loop & Process Lifecycle | `platform/runtime/src/agent/runner.rs`, `platform/adapters` | `ProcessDropGuard` SIGKILL to `-pid` (INV-12) |
-| **Theme 5** | Evidence Engine & Completion Gate | `platform/components`, `workbenches/research` | Verifier-isolated receipts, anti-tampering (INV-06, INV-07) |
-| **Theme 6** | Measured OI & Economic Optimization | `platform/runtime/src/oi/`, `tests/e2e/tests/oi_topologies_slice.rs` | T1–T5 execution topologies, Pareto selector |
+| **Theme 2** | Task Kernel & State Machine | `platform/contracts`, `platform/engine`, `tests/contract` | Pure FSM transitions, atomic commits (INV-01, INV-02) |
+| **Theme 3** | Authority & Capability Gateway | `platform/contracts`, `platform/engine`, `apps/daemon/src/api/tests/` | Zero ambient authority, single-use permits (INV-05, INV-10) |
+| **Theme 4** | Governed Loop & Process Lifecycle | `platform/engine/src/execution/`, `platform/integrations/src/sandbox/` | `ProcessDropGuard` SIGKILL to `-pid` (INV-12) |
+| **Theme 5** | Evidence Engine & Completion Gate | `platform/engine/src/evidence/`, `workbenches/research` | Verifier-isolated receipts, anti-tampering (INV-06, INV-07) |
+| **Theme 6** | Measured OI & Economic Optimization | `platform/engine/src/orchestration/`, `tests/e2e/tests/oi_topologies_slice.rs` | T1–T5 execution topologies, Pareto selector |
 | **Theme 7** | Storage Architecture & SQLite WAL | `platform/storage`, `tests/contract` | WAL crash recovery, batch rollback (INV-02, INV-13) |
-| **Theme 8** | Heterogeneous Compute & GPU Admission| `platform/runtime/src/compute/`, `apps/daemon/src/api/tests/` | WorkloadAdmissionCoordinator VRAM feasibility |
+| **Theme 8** | Heterogeneous Compute & GPU Admission| `platform/integrations/src/compute/`, `apps/daemon/src/api/tests/` | WorkloadAdmissionCoordinator VRAM feasibility |
 | **Theme 9** | Vertical Specialist Workbenches | `workbenches/*/`, `apps/daemon/src/api/tests/workspaces/`, `quant/` | Workbench isolation, zero kernel-workbench leaks |
-| **Theme 10**| Desktop UI & Operational Parity | `ui/desktop/scripts/canvas-smoke.mjs` (51 tests) | Strict zero-mock in UI, 3-tier hierarchy |
+| **Theme 10**| Desktop UI & Operational Parity | `tests/desktop/canvas-smoke.mjs` (43+ tests) | Strict zero-mock in UI, 3-tier hierarchy |
 
 ---
 
@@ -96,21 +99,21 @@ Every one of the 10 Master Thematic Pillars is directly covered and verified by 
 # Ensure Cargo and Node are on PATH
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:$PATH"
 
-# 1. Run all 5 gates in sequence
-cargo xtask gate
+# 1. Run all gates in sequence
+cargo xtask check-boundaries
 
-# 2. Run pure unit and contract tests (use --lib --tests to avoid Darwin dyld hangs)
-cargo test -p custos-testkit -p custos-tests-contract --lib --tests --offline
+# 2. Run pure unit and contract tests
+cargo test --package tests-testkit --package tests-contract --lib --tests --offline
 
-# 3. Run individual crate tests
-cargo test -p custos-domain --lib --offline
-cargo test -p custos-core --lib --offline
-cargo test -p custos-persistence --lib --offline
-cargo test -p custos-runtime --lib --offline
+# 3. Run individual platform crate tests
+cargo test -p custos-contracts --lib --offline
+cargo test -p custos-storage --lib --offline
+cargo test -p custos-integrations --lib --offline
+cargo test -p custos-engine --lib --offline
 
 # 4. Run Desktop UI canvas smoke invariants
-node ui/desktop/scripts/canvas-smoke.mjs
+node tests/desktop/canvas-smoke.mjs
 
 # 5. Run end-to-end topology slice
-cargo test -p custos-tests-e2e --test oi_topologies_slice --offline
+cargo test -p tests-e2e --test oi_topologies_slice --offline
 ```

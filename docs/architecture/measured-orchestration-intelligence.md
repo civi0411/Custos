@@ -1,7 +1,7 @@
 # Measured Orchestration Intelligence & S1 vs. Pinned Baseline Optimization (F11)
 
-> SADE Master Specification — Phase 10 / F11 Architectural Blueprint  
-> Governs: `custos-domain`, `custos-core`, `custos-runtime`, and Golden Acceptance Tests `G12` & `oi_topologies_slice.rs`.
+> SADE Master Specification — Phase 10 / F11 Architectural Blueprint 
+> Governs: `custos-contracts`, `custos-engine`, and Golden Acceptance Tests `G12` & `oi_topologies_slice.rs`.
 
 ---
 
@@ -15,51 +15,51 @@ In naive multi-agent frameworks, complex orchestration graphs and small-model ro
 5. **Phantom Candidates & Zero Uncertainty:** Planners suggest absent or unconfigured executors, and represent unknown factors as `0` rather than explicit uncertainty ranges.
 
 Phase 10 (F11) and the SuperAgent OI Refactoring transform Orchestration Intelligence (OI) and S1/S2 deliberation from scaffold into an honest, measured optimization substrate anchored by Golden Acceptance Test `G12` and the `oi_topologies_slice` suite:
-> *"OI/S1 so pinned baseline, failures/human/recovery included | Không claim cheaper/quality-preserved nếu chưa đạt margin"*
+> *"OI/S1 evaluated against pinned baseline, failures/human/recovery included | No claim of cheaper/quality-preserved without proven statistical margin"*
 
 ---
 
 ## 2. Core Architecture & Components
 
 ```
-                    [ DecisionSnapshot ]
-                             │
-            ┌────────────────┴────────────────┐
-            ▼                                 ▼
-   CandidateBuilder                     HardFilters
-(Prunes Absent Executors)          (Rejects Unavailable /
-            │                        Pinned Mismatch)
-            ▼                                 │
-     [ FastPathFilter ]                       ▼
-(0-Token Ingress <1ms)               Admissibility Gate
-            │                                 │
-            ▼                                 ▼
-        Estimator                  [ Pareto Multi-Objective ]
-(Real Model Pricing Catalog +             Selector
- Cache Affinity + Uncertainty)     (U = w_q*Q - w_c*C - w_t*T)
-            │                                 │
-            └────────────────┬────────────────┘
-                             ▼
-                 [ Execution Topologies ]
-    T0 Direct Pinned | T1 Pass-Through | T2 Dual-Judge
-  T3 Speculative Verif | T4 Hierarchical | T5 Lead-Worker DAG
-                             │
-            ├────────────────┴────────────────┐
-            ▼                                 ▼
-   [ S1 Fast Judge ]                    [ Replanner ]
-- Calibrated Confidence (>= 0.75)    - Isolates Failed Subgraph
-- Clean Evidence -> Fast Pass        - Preserves Settled Nodes
-- Ambiguous / Partial -> Abstain     - Preserves Committed Authority
-- Uncompressed Evidence Preserved    - INV-03: Blocks Uncertain Retry
-            │                                 │
-            └────────────────┬────────────────┘
-                             ▼
-                  [ OptimizationEvaluator ]
-                  - Pinned Baseline vs. Candidate Runs
-                  - Total Economic Cost = API + Retries + Human Time
-                  - Quality Non-Inferiority Margin Check
-                  - Cost Reduction Margin Check
-                  - Inconclusive on Small Sample Sizes (< 3)
+ [ DecisionSnapshot ]
+ 
+ 
+ 
+ CandidateBuilder HardFilters
+(Prunes Absent Executors) (Rejects Unavailable /
+ Pinned Mismatch)
+ 
+ [ FastPathFilter ] 
+(0-Token Ingress <1ms) Admissibility Gate
+ 
+ 
+ Estimator [ Pareto Multi-Objective ]
+(Real Model Pricing Catalog + Selector
+ Cache Affinity + Uncertainty) (U = w_q*Q - w_c*C - w_t*T)
+ 
+ 
+ 
+ [ Execution Topologies ]
+ T0 Direct Pinned | T1 Pass-Through | T2 Dual-Judge
+ T3 Speculative Verif | T4 Hierarchical | T5 Lead-Worker DAG
+ 
+ 
+ 
+ [ S1 Fast Judge ] [ Replanner ]
+- Calibrated Confidence (>= 0.75) - Isolates Failed Subgraph
+- Clean Evidence -> Fast Pass - Preserves Settled Nodes
+- Ambiguous / Partial -> Abstain - Preserves Committed Authority
+- Uncompressed Evidence Preserved - INV-03: Blocks Uncertain Retry
+ 
+ 
+ 
+ [ OptimizationEvaluator ]
+ - Pinned Baseline vs. Candidate Runs
+ - Total Economic Cost = API + Retries + Human Time
+ - Quality Non-Inferiority Margin Check
+ - Cost Reduction Margin Check
+ - Inconclusive on Small Sample Sizes (< 3)
 ```
 
 ---
@@ -102,7 +102,7 @@ A run requiring 5 minutes of human debugging at $60/hr incurs $5.00 of labor cos
 ## 4. Multi-Objective Pareto Selector & Real Model Pricing
 
 ### 4.1 Pareto Multi-Objective Optimization
-The updated Selector (`platform/runtime/src/oi/selector.rs`) moves beyond naive first-admissible selection by implementing a multi-objective utility scoring function:
+The updated Selector (`platform/engine/src/orchestration/selector.rs`) moves beyond naive first-admissible selection by implementing a multi-objective utility scoring function:
 $$U = w_q \cdot Q - w_c \cdot \left(\frac{C}{C_{\text{baseline}}}\right) - w_t \cdot \left(\frac{T}{T_{\text{baseline}}}\right)$$
 Where:
 - $Q \in [0.0, 1.0]$: Estimated task outcome quality.
@@ -111,7 +111,7 @@ Where:
 - $w_q = 0.50, w_c = 0.30, w_t = 0.20$: Default Pareto weight vector ensuring quality dominates economics while penalizing latency bloat.
 
 ### 4.2 Real Model Pricing Catalog
-`platform/runtime/src/oi/estimator.rs` embeds standard cloud model pricing to calculate dollar cost per run:
+`platform/engine/src/orchestration/estimator.rs` embeds standard cloud model pricing to calculate dollar cost per run:
 - **Claude 3.5 Sonnet:** \$3.00 / MTok input, \$15.00 / MTok output.
 - **Claude 3.5 Haiku:** \$0.80 / MTok input, \$4.00 / MTok output.
 - **GPT-4o:** \$2.50 / MTok input, \$10.00 / MTok output.
@@ -143,7 +143,7 @@ Custos classifies execution topologies into a cohesive continuum:
 | **T6 Dynamic Replan** | `T6DynamicReplan` | Adaptive runtime DAG replanning with settled node isolation | Long-running workflows with partial failures |
 
 ### Topology T5: Lead-Worker DAG Coordinator Deep-Dive
-Implemented in `platform/runtime/src/oi/topologies/t5_lead_worker.rs` (271 lines):
+Implemented in `platform/engine/src/orchestration/topologies/t5_lead_worker.rs`:
 1. **Decomposition:** Lead worker receives high-level task and emits a structured `LeadDecomposition` containing $N$ independent sub-tasks and their explicit dependencies.
 2. **Kahn's Topological Sort:** Sub-tasks are ordered using Kahn's algorithm. If a cyclic dependency is detected, execution fails immediately with `DomainError::Validation("Cyclic dependency detected in Lead-Worker DAG")`.
 3. **Parallel Execution:** Independent DAG tiers run in parallel across isolated worktree workspaces.
@@ -153,7 +153,7 @@ Implemented in `platform/runtime/src/oi/topologies/t5_lead_worker.rs` (271 lines
 
 ## 6. 0-Token FastPathFilter
 
-Implemented in `platform/runtime/src/agent/fast_path.rs`:
+Implemented in `platform/engine/src/orchestration/fast_path.rs`:
 - High-frequency deterministic requests (e.g. `help`, `ping`, `version`, `clear`, `workbenches`, `git status`, `git diff`, `git log`) bypass LLM inference entirely.
 - Executes via high-performance regex matching in **< 1ms** with **\$0.00** API cost.
 - Prevents token expenditure on trivial system commands and provides instantaneous terminal responsiveness.

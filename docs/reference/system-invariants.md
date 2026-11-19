@@ -52,17 +52,17 @@ graph TD
 
 | Invariant | Static / Compile-Time Mechanism | Runtime Enforcement Point | Automated Test Fixture |
 |---|---|---|---|
-| **INV-01** | `ActorId` required field on `TaskEvent` & commands | `custos-persistence` transactional hook | `tests/contract/tests/actor_attribution.rs` |
-| **INV-02** | Immutable contract struct fields; missing mutator methods | `custos-core::AuthorityEngine::reconcile_scope()` | `platform/core` authority boundary & contract tests (`tests/contract/`) |
-| **INV-03** | Private constructor on `ExecutionPermit`; signed cryptographic token | `custos-runtime::CapabilityGateway::execute()` | `tests/contract/tests/permit_verification.rs` |
-| **INV-04** | Rust type system taint wrapper `Tainted<T>` | `custos-core::TaintTrackingEngine::verify_clean()` | `platform/core` taint policy tests & `tests/testkit/` |
-| **INV-05** | Typed `EvidenceRecord` enum with CAS digest link | `custos-core::CompletionGate::evaluate_criteria()` | `tests/contract/tests/completion_gate.rs` |
+| **INV-01** | `ActorId` required field on `TaskEvent` & commands | `custos-storage` transactional hook | `tests/contract/tests/actor_attribution.rs` |
+| **INV-02** | Immutable contract struct fields; missing mutator methods | `custos-engine::authority::AuthorityEngine::reconcile_scope()` | `platform/contracts` authority boundary & contract tests (`tests/contract/`) |
+| **INV-03** | Private constructor on `ExecutionPermit`; signed cryptographic token | `custos-engine::execution::CapabilityGateway::execute()` | `tests/contract/tests/permit_verification.rs` |
+| **INV-04** | Rust type system taint wrapper `Tainted<T>` | `custos-engine::authority::TaintTrackingEngine::verify_clean()` | `platform/contracts` taint policy tests & `tests/testkit/` |
+| **INV-05** | Typed `EvidenceRecord` enum with CAS digest link | `custos-engine::evidence::CompletionGate::evaluate_criteria()` | `tests/contract/tests/completion_gate.rs` |
 | **INV-06** | Enum variants `TaskStatus::Uncertain`, `EvidenceStatus::Unknown` | State machine transition validator | `tests/contract/tests/crash_recovery.rs` |
-| **INV-07** | Outbox pattern implementation in `custos-persistence` (`platform/storage`) | Crash recovery daemon reconciliation pass | `platform/runtime/src/workflow/worker_executor/tests/outbox.rs` |
+| **INV-07** | Outbox pattern implementation in `custos-storage` (`platform/storage`) | Crash recovery daemon reconciliation pass | `platform/engine/src/orchestration/workflow/worker_executor/tests/outbox.rs` |
 | **INV-08** | Diminishment invariant check in `IBCT::create_child()` | `A2AHub::validate_delegation()` | `tests/contract/tests/delegation_diminishment.rs` |
-| **INV-09** | Exhaustive enum `InferenceTransport` on `ModelAttempt` | `custos-provider::ModelHub::dispatch()` | `tests/contract/tests/model_transport_audit.rs` |
+| **INV-09** | Exhaustive enum `InferenceTransport` on `ModelAttempt` | `custos-integrations::models::ModelHub::dispatch()` | `tests/contract/tests/model_transport_audit.rs` |
 | **INV-10** | T1 single-worker topology test suite | OI Engine routing fallback check | `tests/eval/tests/single_model_baseline.rs` |
-| **INV-11** | Conditional compilation `#[cfg(any(test, feature = "test-support"))]` | `cargo xtask check-boundaries` AST linter | `platform/adapters/src/harnesses/adapter.rs` & `check-boundaries` |
-| **INV-12** | `process_group(0)` & `ProcessDropGuard` with `libc::kill` | Process drop destructor hook | `platform/adapters/src/harnesses/stream/process.rs` unit tests |
+| **INV-11** | Conditional compilation `#[cfg(any(test, feature = "test-support"))]` | `cargo xtask check-boundaries` AST linter | `platform/integrations/src/harnesses/adapter.rs` & `check-boundaries` |
+| **INV-12** | `process_group(0)` & `ProcessDropGuard` with `libc::kill` | Process drop destructor hook | `platform/integrations/src/harnesses/stream/process.rs` unit tests |
 | **INV-13** | Compensating transaction loop in `create_task_batch` | Handoff coordinator error handler | `apps/daemon/src/application/research/reviews/handoff.rs` tests |
 | **INV-14** | `attach_partition` & `detach_partition` identifier validation | SQLite ATTACH/DETACH execution guard | `platform/storage/src/connection.rs` unit tests |

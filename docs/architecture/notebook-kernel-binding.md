@@ -1,7 +1,7 @@
 # Notebook Document, Scoped Kernel Binding and Migration (F06)
 
 > SADE Master Specification — Phase 5 / F06 Architectural Blueprint
-> Governs: `custos-domain`, `custos-core`, `custos-persistence`, `custos-runtime`, `custos-daemon`, `custos-sdk`, and `ui/desktop`.
+> Governs: `custos-contracts`, `custos-storage`, `custos-integrations`, `custos-engine`, `custos-daemon`, `custos-sdk`, and `apps/desktop/ui`.
 
 ---
 
@@ -16,7 +16,7 @@ F06 resolves these deficiencies with strict document-level identity, scoped kern
 
 ---
 
-## 2. Domain Entities (`custos-domain`)
+## 2. Domain Entities (`custos-contracts`)
 
 ### 2.1 `NotebookDocument` & `NotebookKernelBinding`
 
@@ -70,7 +70,7 @@ impl NotebookCell {
 
 ---
 
-## 3. Storage Contracts & Persistence Layer (`custos-core` & `custos-persistence`)
+## 3. Storage Contracts & Persistence Layer (`custos-contracts` & `custos-storage`)
 
 ### 3.1 Migration 0041: Schema Evolution
 
@@ -98,7 +98,7 @@ ALTER TABLE notebook_kernel_sessions ADD COLUMN kernel_id TEXT;
 
 ---
 
-## 4. Runtime & Daemon Coordination (`custos-runtime` & `custos-daemon`)
+## 4. Runtime & Daemon Coordination (`custos-engine` & `custos-daemon`)
 
 1. **Kernel Keying:** `PythonKernelCoordinator::kernel_key(session_id, notebook_id)` yields `{session_id}::{notebook_id}` when `notebook_id` is present, or falls back to `session_id`.
 2. **Idempotency Cache:** `ActiveKernel` tracks `recent_requests: HashMap<String, ExecuteCellResult>` keyed by `execution_request_id`. Duplicate executions are returned immediately from memory.

@@ -1,7 +1,7 @@
 # Three-Vertical Acceptance, Desktop & Cross-Pack Acceptance (F09)
 
 > SADE Master Specification — Phase 8 / F09 Architectural Blueprint
-> Governs: `custos-domain`, `custos-core`, `custos-adapters`, `custos-daemon`, `custos-persistence`, and Golden Acceptance Tests `G08`, `G09`, `G10`.
+> Governs: `custos-contracts`, `custos-storage`, `custos-integrations`, `custos-engine`, `custos-daemon`, and Golden Acceptance Tests `G08`, `G09`, `G10`.
 
 ---
 
@@ -19,22 +19,22 @@ Phase 8 (F09) delivers the end-to-end acceptance suite proving that all three ve
 ## 2. Core Architecture & Verification Matrix
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        UNIFIED CONVERSATIONAL JOURNAL                  │
-│                                                                        │
-│  [ Assistant Lens ]       [ Coding Lens ]        [ Research Lens ]     │
-│  - Drafts & Outbox        - Worktrees & Git      - Notebooks & Cells   │
-│  - MCP / Webhook Calls    - Sandbox & Diff       - Synthesis & Claims  │
-└────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                      SOVEREIGN GOVERNANCE & GATES                      │
-│                                                                        │
-│  Gate 1: Parameter & Path Traversal Containment (sandbox / chroot)     │
-│  Gate 2: Capability Grants, Permits & Payload Lock Verification        │
-│  Gate 3: Outbox Transactional CAS Fencing & Crash Reconciliation       │
-└────────────────────────────────────────────────────────────────────────┘
+
+ UNIFIED CONVERSATIONAL JOURNAL 
+ 
+ [ Assistant Lens ] [ Coding Lens ] [ Research Lens ] 
+ - Drafts & Outbox - Worktrees & Git - Notebooks & Cells 
+ - MCP / Webhook Calls - Sandbox & Diff - Synthesis & Claims 
+
+ 
+ 
+
+ SOVEREIGN GOVERNANCE & GATES 
+ 
+ Gate 1: Parameter & Path Traversal Containment (sandbox / chroot) 
+ Gate 2: Capability Grants, Permits & Payload Lock Verification 
+ Gate 3: Outbox Transactional CAS Fencing & Crash Reconciliation 
+
 ```
 
 ---
@@ -57,7 +57,7 @@ Phase 8 (F09) delivers the end-to-end acceptance suite proving that all three ve
 
 ### 3.3 Assistant Vertical: Outbox, Timeout Reconciliation & CAS Fencing (G10)
 - **Fail-Closed Outbox Lifecycle:**
-  $$\text{Draft} \xrightarrow{\text{Approve}} \text{Locked} \xrightarrow{\text{Enqueue}} \text{Pending} \xrightarrow{\text{Approve}} \text{Approved} \xrightarrow{\text{CAS}} \text{Dispatching} \xrightarrow{\text{Execute}} \text{Receipted}$$
+ $$\text{Draft} \xrightarrow{\text{Approve}} \text{Locked} \xrightarrow{\text{Enqueue}} \text{Pending} \xrightarrow{\text{Approve}} \text{Approved} \xrightarrow{\text{CAS}} \text{Dispatching} \xrightarrow{\text{Execute}} \text{Receipted}$$
 - **Timeout & Uncertain Handling (Gate 3):** Dropped connections or outbound call timeouts transition outbox entries immediately to `Uncertain`.
 - **Startup Crash Reconciliation:** On daemon restart, `OutboxRepository::reconcile_on_startup()` recovers all in-flight effect attempts and dispatching outbox entries to `Uncertain`.
 - **Zero Blind Retries:** `ActionLifecycleState::Uncertain.allows_blind_retry() == false`. Uncertain entries cannot be blindly retried or re-dispatched, preventing duplicate outbound messages and quota exhaustion.

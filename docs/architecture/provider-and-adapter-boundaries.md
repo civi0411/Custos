@@ -1,23 +1,24 @@
 # Provider and adapter boundaries
 
-This document defines the implementation boundary between `custos-provider` and
-`custos-adapters`. It is a convergence contract for the current codebase, not a
-claim that every listed integration is production-ready.
+This document defines the implementation boundary for model providers and external
+capability adapters within `platform/integrations` (`custos-integrations`) and their
+contracts in `platform/contracts` (`custos-contracts`). It is a convergence contract
+for the current codebase, not a claim that every listed integration is production-ready.
 
 ## 1. Canonical ownership
 
 | Concern | Canonical owner | Rule |
 |---|---|---|
-| One model inference attempt | `custos-provider` | `ModelPort` and structured turn values describe input, streamed output, usage and attribution. |
-| Rich conversation representation | `custos-provider` | Preserve text, images, reasoning, tool requests and tool results without flattening them into a prompt string. |
-| Model metadata and cost calculation | `custos-provider` | Metadata is versioned and source-labelled. A bundled catalog is a baseline, not live availability or billing truth. |
-| Vendor wire conversion | `custos-provider` while pure | Pure encode/decode may remain here. HTTP, credential and filesystem access do not belong here. |
-| Provider connection and transport | `custos-adapters/src/providers` | Own endpoints, authentication, HTTP/WebSocket clients, retries and provider-specific streaming. |
-| Local inference | `custos-adapters/src/local_inference` | Implements the same model-attempt contract as a remote provider; it does not own an agent loop. |
-| Native agent harness | `custos-adapters/src/harness` | Codex, Claude Code, Goose and OpenCode retain their own loop and report honest mediation capabilities through `AgentRuntimePort`. |
-| MCP and A2A wire protocols | `custos-adapters/src/mcp`, `a2a`, `roaming` | Translate untrusted external protocol data. They do not grant authority or complete Tasks. |
-| File, process, sandbox and worktree effects | `custos-adapters/src/sandbox`, `workspace.rs` | Execute only after the trusted layer has created the required permit or dispatch claim. |
-| Routing policy | `custos-runtime` and `custos-core` | User pin, privacy, budget and capability constraints are filtered before an adapter is selected. |
+| One model inference attempt | `custos-contracts` & `custos-integrations` | `ModelPort` and structured turn values describe input, streamed output, usage and attribution. |
+| Rich conversation representation | `custos-contracts` | Preserve text, images, reasoning, tool requests and tool results without flattening them into a prompt string. |
+| Model metadata and cost calculation | `custos-integrations` | Metadata is versioned and source-labelled. A bundled catalog is a baseline, not live availability or billing truth. |
+| Vendor wire conversion | `custos-integrations/src/models` | Pure encode/decode lives here. HTTP, credential and filesystem access stay cleanly separated. |
+| Provider connection and transport | `custos-integrations/src/models` | Own endpoints, authentication, HTTP/WebSocket clients, retries and provider-specific streaming. |
+| Local inference | `custos-integrations/src/models/local` | Implements the same model-attempt contract as a remote provider; it does not own an agent loop. |
+| Native agent harness | `custos-integrations/src/harnesses` | Codex, Claude Code, Goose and OpenCode retain their own loop and report honest mediation capabilities through `AgentRuntimePort`. |
+| MCP and A2A wire protocols | `custos-integrations/src/protocols` | Translate untrusted external protocol data. They do not grant authority or complete Tasks. |
+| File, process, sandbox and worktree effects | `custos-integrations/src/sandbox`, `filesystem` | Execute only after the trusted layer has created the required permit or dispatch claim. |
+| Routing policy | `custos-engine` | User pin, privacy, budget and capability constraints are filtered before an adapter is selected. |
 | Concrete composition | `custos-daemon` | The daemon is the only production composition root. |
 
 ## 2. Current interface convergence
@@ -87,14 +88,14 @@ endpoint is a connection, not a file artifact; a loopback address is not proof
 of offline inference. A model file discovered on disk is not an agent or a
 loaded model instance.
 
-`custos-domain/provider_config.rs` owns pure folder, artifact and hardware
-values; `custos-provider` owns structured model-attempt semantics;
-`custos-adapters/local_inference` owns native inspection, load and generation;
-`custos-adapters/providers` owns application API connections; `custos-runtime`
-applies routing constraints; `custos-persistence` owns registered sources and
+`platform/contracts` owns pure folder, artifact and hardware
+values; `custos-contracts` & `custos-integrations` own structured model-attempt semantics;
+`custos-integrations/src/models/local` owns native inspection, load and generation;
+`custos-integrations/src/models` owns application API connections; `custos-engine`
+applies routing constraints; `custos-storage` owns registered sources and
 rebuildable artifact inventory; `custos-daemon` alone composes the selected
 implementation and exposes Local API commands; Desktop is an IPC client.
-Neither `custos-packs` nor an agent harness owns local model lifecycle.
+Neither `workbenches/*` nor an agent harness owns local model lifecycle.
 
 Existing `v1.local_models.folders.list/add/remove`, `scan`, `list` and `hardware`
 are discovery operations, not load confirmation. The target Local API adds

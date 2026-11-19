@@ -14,7 +14,7 @@ To enforce absolute semantic consistency across Rust source code, IPC contracts,
 |---|---|---|---|
 | **Product Brand** | PascalCase | `Custos` | Official runtime brand name |
 | **Repository Name** | kebab-case | `custos` | Git repository root identifier |
-| **Rust Packages** | kebab-case | `custos-domain`, `custos-core`, `custos-persistence`, `custos-runtime`, etc. | Canonical Cargo workspace packages (20 packages across `platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`) |
+| **Rust Packages** | kebab-case | `custos-contracts`, `custos-storage`, `custos-integrations`, `custos-engine`, etc. | Canonical Cargo workspace packages (17 packages across `platform/`, `workbenches/`, `sdk/`, `apps/`, `tests/`, `xtask/`) |
 | **Binary Executables** | lowercase | `custosd`, `custos` | `custosd` (daemon service), `custos` (CLI utility) |
 | **Source Modules** | snake_case | `task_state`, `event_store`, `context_scoring` | Source files (`.rs`) and Rust module namespaces |
 | **Domain Entities** | PascalCase, singular | `Task`, `Contract`, `Artifact`, `Run` | Identifiable business entities with persistent lifecycle |
@@ -52,7 +52,7 @@ To enforce absolute semantic consistency across Rust source code, IPC contracts,
 
 ### 2.3 Explicit Boundary Identifiers
 - Storage interfaces must be suffixed with `Repository` or `Port` (e.g., `TaskRepository`, `EventStorePort`).
-- Adapter implementations in `custos-runtime` or `custos-persistence` must reflect their concrete backend (e.g., `SqliteTaskRepository`, `StdioMcpTransport`).
+- Adapter implementations in `custos-integrations` or `custos-storage` must reflect their concrete backend (e.g., `SqliteTaskRepository`, `StdioMcpTransport`).
 # CLI mode labels
 
 The neutral interactive prompt is `custos`. Specialized prompt labels are `custos-code`, `custos-research`, and `custos-assistant`. The slash palette uses a two-level path: `/` exposes `/mode` and actions, while `/mode` exposes `/code`, `/research`, and `/assistant`.

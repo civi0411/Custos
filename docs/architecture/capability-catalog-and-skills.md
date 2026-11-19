@@ -1,64 +1,58 @@
-# Capability catalog và tổ chức skills
+# Capability Catalog & Skill Organization Architecture
 
-**Kiến trúc đích.** Áp dụng chung Coding, Research, Assistant; không tạo crate mới. Tài liệu này phân loại nơi đặt code, không tự thay đổi các trait đang tồn tại. [codebase architecture](../development/codebase-architecture.md) cần được đọc cùng nhau.
+> **Classification:** Capability & Skill Architecture Specification  
+> **Source of Truth:** Authoritatively governed by [Custos Master Specification](../../Custos.md).  
+> **Directory Index:** See [Custos Architecture Overview](README.md).
 
-**Source ownership trên `new_rft`:** driver và source manifest nằm cạnh nhau tại `platform/adapters/src/<subject>/`; notebook/compute dùng chung không thuộc riêng Research. Bỏ scaffold capability và bản sao source không được Cargo biên dịch. `documents/source_fetch.rs` hiện chỉ đọc UTF-8 có scope/byte limit, không tự có PDF/OCR. `compute/checkpoint.rs` chỉ kiểm integrity local. Metadata không chứng minh installed/ready/authorized hoặc downloadable. Xem [codebase architecture](../development/codebase-architecture.md).
+---
 
-## 1. Phân biệt trước khi thêm tính năng
+## 1. Disambiguation of Capabilities, Skills, and Services
 
-| Khái niệm | Nội dung | Nơi chịu trách nhiệm |
+To prevent architectural ambiguity, Custos enforces strict boundaries between capabilities, skills, and services:
+
+| Concept | Definition & Semantics | Canonical Architectural Owner |
 |---|---|---|
-| Capability/tool | Một operation typed: repo query, process, PDF parse, mail send | Contract hiện hữu; I/O implementation ở adapters/persistence |
-| Skill instruction | Cách làm một job bằng capabilities, examples/references | Declarative pack; loader ở runtime |
-| Domain service | Semantics/rubric: diagnosis, claim reconciliation, identity ambiguity | `custos-packs/src/<pack>/` |
-| Shared subsystem | Index, retrieval/context, budget, lifecycle, memory | Runtime/core/persistence theo trách nhiệm |
-| Worker | Loop thực thi goal trong scope/budget | Runtime dùng ModelPort hoặc AgentRuntimePort |
-| Protocol exposure | MCP tools/resources, ACP agent, remote A2A | Adapter + daemon composition, không chứa business logic duplicate |
+| **Capability / Tool** | Typed, bounded physical operation (e.g. file query, process execution, PDF parse, email dispatch) | Declared in `platform/contracts`, executed in `platform/integrations` |
+| **Skill Instruction** | Declarative instructions guiding an agent on how to execute a specific job using capabilities | Declarative markdown manifests in `workbenches/<pack>/skills/` |
+| **Domain Service** | Domain semantics, business logic, and rubrics (e.g. claim verification, code AST diagnosis) | `workbenches/<pack>/src/services/` |
+| **Shared Subsystem** | Generic mechanisms: context compilation, token budgeting, process lifecycle, memory CAS | `platform/engine` & `platform/storage` |
+| **Worker Loop** | Reasoning and execution loop pursuing a Task within allocated budget | `platform/engine/src/execution/` |
+| **Protocol Exposure** | Protocol surfaces: MCP Tools/Resources, ACP Agent, Remote A2A | `platform/integrations/src/protocols/` & `apps/daemon` |
 
-Không dùng từ “skill” để gom mọi thứ. Một file `SKILL.md` không cấp grant; một MCP tool không nhất thiết là agent; một local worker không cần A2A. [Agent Skills specification](https://agentskills.io/specification) mô tả package instructions/resources theo progressive disclosure. [MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) mô tả bề mặt invocation; tool annotations không được tin như policy security.
+> [!IMPORTANT]
+> A `SKILL.md` instruction file provides guidance; it never grants execution authority. An MCP tool declaration exposes an interface; it does not authorize side-effects. All mutations mandate signed `ExecutionPermit` tokens issued by the kernel.
 
-## 2. Coding dùng capabilities hiện hữu, không có Repo Intelligence riêng
+---
 
-`repo_explain` là job Engineering đọc/giải thích code qua capabilities file/search/Git đã có. Bỏ subsystem scanner/graph/query/coordinator chuyên biệt cùng query/snapshot types chỉ phục vụ nó; không dựng index, graph database, MCP server hoặc agent thay thế.
+## 2. Cross-Workbench Capability Matrix
 
-`custos-domain/src/repo/span.rs` giữ locator `SourceSpan` cho artifact chẩn đoán; Engineering giữ recipe/rubric; runtime giữ context compiler chung; adapters giữ concrete capabilities; core giữ scope/authority hiện hữu. Các capability đọc/tìm file, cây thư mục, diff và worktree không bị gỡ. Repo Intelligence/Nexus development subsystem đã được gỡ; không giữ một MCP server/indexer thay thế.
-
-## 3. Mở rộng cả ba miền
-
-| Tính năng | Shared foundation | Pack semantics | Concrete edge |
+| Feature | Shared Platform Foundation | Domain Pack Semantics | Concrete Adapter Edge |
 |---|---|---|---|
-| Repo explain/impact | Source snapshot + query + context | Engineering anchors/rubric | Git/parser/fs |
-| PDF claim extraction | Source/CAS/locators + context | Research claims/support/coverage | PDF/OCR/browser |
-| Dataset audit | Artifact versions + bounded compute | Research leakage/split/license checks | Dataset readers/process |
-| Draft/schedule | Personal source/time primitives | Assistant identity/intent/consent | Contacts/calendar |
-| Send notification | Effect attempt/reconcile | Assistant exact draft/recipient | Mail/message connector |
-| Context/cache optimization | Context compiler, attempt usage, privacy-scoped cache | Pack source coverage obligation | Provider cache support |
+| **Code Explanation / Impact** | Source snapshot + AST query + context compiler | `workbenches/coding` rubric | Git worktree, parser, filesystem |
+| **Scientific Claim Extraction** | Source CAS hashes + passage locators | `workbenches/research` claims | Document parser, headless browser |
+| **Dataset & Bias Audit** | Artifact revisions + compute admission | `workbenches/quant` / `research` | Dataset readers, PBO verifier |
+| **Draft & Calendar Scheduling** | Personal facts + time primitives | `workbenches/assistant` intent | Contacts, CalDAV / local calendar |
+| **Notification Dispatch** | Effect attempt + two-phase outbox reconciliation | `workbenches/assistant` drafts | Mail / message connectors |
+| **Context & Cache Optimization** | Context compiler, prompt cache affinity (0.1x) | Domain source coverage | Provider KV cache |
 
-Cost optimization dùng chung trong runtime và budget policy/core; pack cung cấp task features/criteria. Không làm ba “cheap agent” độc lập, không tự đổi pinned model, không cache approval hay replay effect. Native harness usage không quan sát đủ thì báo estimated/unknown và assurance tương ứng.
+---
 
-## 4. Một catalog logic, không một folder chứa hết code
+## 3. Dual Execution Pathways
 
-Catalog nối skill/task kind → capability requirements → context recipe → worker support → verifier profile → UI artifact views. Dùng pack manifest/registry hiện hữu làm entry point; không dựng database/registry thứ hai nếu không cần.
+1. **ModelPort Pathway (Custos-Governed Worker):**
+   - The worker loads task metadata -> selects necessary skills -> compiles context -> invokes capabilities via Two-Phase Authority mediation -> validates typed outputs against criteria verifiers.
+   - Declarative capabilities are sandboxed; un-permitted actions fail closed.
 
-Thông tin cần quản lý: stable namespaced ID, version/schema, input/output, read/write/effect class, source/privacy requirements, timeout/cancel/retry, budget estimate, provenance obligations, supported execution paths, assurance limits, verifier và fixtures. Đây là checklist cho manifest/contract audit, không yêu cầu thêm một schema song song ngay lập tức.
+2. **AgentRuntimePort Pathway (Native Autonomous Harness):**
+   - Conducts capability handshake -> provisions isolated Git worktree -> provides scoped context -> intercepts tool calls or exposes mediated MCP tools -> collects artifacts and verifies outcomes via Custos verifiers.
+   - External CLI tools operating outside mediation report explicit assurance tags (`custos-mediated`, `provider-governed`, `observe-only`).
 
-Namespacing ví dụ `engineering.repo_explain`, `research.paper_read`, `assistant.draft_message`; transport adapter map tên khi protocol cần, không đổi semantic ID ngầm. Capability registry quyết định availability; authority quyết định allowed; model ranking không được gộp hai câu hỏi đó.
+---
 
-## 5. Dùng với hai đường thực thi
+## 4. Workflow for Adding New Skills
 
-**ModelPort:** Custos worker load metadata → chọn skill khi cần → compile sources → invoke capabilities qua authority/runtime → validate typed outputs → verifier. Chỉ load instruction/reference phù hợp token budget; capability declarations không có nghĩa tự cấp phép.
-
-**AgentRuntimePort:** handshake profile → cung cấp scope/context/recipe theo cơ chế harness hỗ trợ → offer mediated tools/MCP subset nếu interception thật → nhận artifact/events → verify ở Custos. Harness không hỗ trợ skill injection/context reuse thì ghi limitation, không giả compatible. Native tools ngoài gateway có assurance khác.
-
-**Remote agent:** A2A chỉ khi có remote delegation, identity/auth/egress và task/artifact lifecycle phù hợp; không đổi mọi local subprocess thành A2A. [A2A core concepts](https://a2a-protocol.org/latest/topics/key-concepts/) cung cấp vocabulary remote agents/tasks/artifacts, không thay Task authority của Custos.
-
-## 6. Quy trình thêm skill mới
-
-1. Định nghĩa job/input/output/criterion; kiểm skill/capability đã có trước.
-2. Xác định instruction, domain service, shared subsystem hay I/O adapter. Chọn owner theo bảng, không theo ngôn ngữ code.
-3. Extend manifest/registry, contract hiện hữu; chỉ thêm module khi trách nhiệm thật chưa có.
-4. Kiểm availability, scope/privacy, effect policy và profile cả model/native-agent paths.
-5. Viết success/error/stale/cancel/unknown fixtures; verifier độc lập với output tự nhận.
-6. Nối artifact view và docs/catalog; thêm golden contract tests nếu payload đổi.
-
-Python giữ parser/OCR/ML dependency cần thiết; Rust giữ policy/lifecycle/hot path. Không ép port toàn bộ Python sang Rust hoặc bỏ folder đang dùng trước conformance tests.
+1. **Define Contract:** Specify task kind, input/output schemas, and deterministic acceptance criteria.
+2. **Assign Ownership:** Determine whether the logic represents an instruction, domain service, shared engine feature, or I/O integration adapter.
+3. **Register Manifest:** Add the skill descriptor to the appropriate workbench manifest in `workbenches/<pack>/`.
+4. **Implement Verifiers:** Provide independent verifiers validating outcomes without trusting self-reported model claims.
+5. **Verify Quality Gates:** Ensure compliance via `cargo xtask check-boundaries` and integration test suites.
