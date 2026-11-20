@@ -10,6 +10,5 @@ if ($ScriptArgs -contains "--web" -or $ScriptArgs -contains "web") {
     Start-Process "http://localhost:1420/"
     npm run dev
 } else {
-    $cliScript = Join-Path $PSScriptRoot "packages\custos-npm-package\repl\custos-cli.js"
-    & node $cliScript @ScriptArgs
+    cargo run -p custos-app-cli -- @ScriptArgs
 }
