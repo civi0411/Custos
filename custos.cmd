@@ -1,13 +1,12 @@
 @echo off
 setlocal
 set "ROOT_DIR=%~dp0"
-set "CLI_SCRIPT=%ROOT_DIR%packages\custos-npm-package\repl\custos-cli.js"
 
 if "%1"=="--web" goto :run_desktop
 if "%1"=="web" goto :run_desktop
 
-:: Default: Run Custos CLI directly in current terminal
-node "%CLI_SCRIPT%" %*
+:: Default: Run Custos native CLI directly in current terminal
+cargo run -p custos-app-cli -- %*
 goto :eof
 
 :run_desktop

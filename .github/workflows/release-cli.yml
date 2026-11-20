@@ -90,12 +90,6 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
@@ -103,11 +97,3 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to NPM Registry
-        if: env.NODE_AUTH_TOKEN != ''
-        run: |
-          cd packages/custos-npm-package
-          npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

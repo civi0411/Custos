@@ -108,7 +108,6 @@ First-party UI code sharing the host renderer is trusted code. React error bound
 - `tests/desktop/browser-native-smoke.mjs`: native browser interaction check; requires a launched debug-enabled desktop.
 - `xtask/scripts/workbench-control-audit.cjs`: static source inventory of sibling upstream checkouts; never a production agent tool.
 - `xtask/scripts/check_{deps,layering,naming}.sh`: architecture checks rooted in the current Cargo layout. Missing source roots/search errors must fail.
-- 
-The retired Repo Intelligence Python subsystem and obsolete fixed-crate migration/Goose installer scripts are not part of Custos. Keep actual distribution clients in `packages/`, examples in `examples/` and user configuration in `config/`; delete by responsibility and callers, not by folder size.
+The retired Repo Intelligence Python subsystem and obsolete fixed-crate migration/Goose installer scripts are not part of Custos. Distribution clients are housed directly under `apps/` (`cli`, `desktop`, `daemon`), examples in `examples/` and user configuration in `config/`; delete by responsibility and callers, not by folder size.
 
 Run `cargo run -p xtask --offline -- validate-packs`, targeted contract/adapter tests, workspace check, desktop build and desktop smoke tests. Native/cloud/GPU behavior requires additional live acceptance tests and is not certified by this cleanup.

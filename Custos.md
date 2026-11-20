@@ -2979,7 +2979,7 @@ Khi Người dùng và Agent thống nhất bất kỳ thay đổi nào về ki�
 
 ### Dọn các root hỗ trợ theo consumers hiện hữu
 
-SDK Rust và xtask là các Cargo workspace packages đang được ứng dụng và CI sử dụng. Giữ `sdk/client-rust` cho Local API/profile/ACP types, giữ `xtask` cho build/architecture/package commands và giữ `packages/custos-npm-package` cho workflow phát hành NPM.
+SDK Rust và xtask là các Cargo workspace packages đang được ứng dụng và CI sử dụng. Giữ `sdk/client-rust` cho Local API/profile/ACP types, giữ `xtask` cho build/architecture/package commands; CLI native thuần Rust (`apps/cli`) thay thế hoàn toàn wrapper `packages/` cũ.
 
 Chuyển các schema tham chiếu từ root `schemas` về `tests/contract/fixtures/schemas` và sửa contract tests theo location đó. Các fixtures này chỉ được kiểm tồn tại/parse trong test hiện tại, mức runtime validation phải được mô tả theo implementation thật.
 
