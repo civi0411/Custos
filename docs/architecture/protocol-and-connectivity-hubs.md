@@ -2,7 +2,7 @@
 
 **Document Version:** 2.0.0  
 **Status:** Canonical Foundation  
-**Decision Reference:** [Custos.md, Part 7](../../Custos.md); [Master Engineering Blueprint](../../../.gemini/antigravity-ide/brain/b9e1d82e-23f2-4ad5-b000-998796c5c0d6/custos-sade-master-engineering-blueprint.md)
+**Decision Reference:** [Custos.md, Part 7](../../Custos.md); [Codebase Architecture Blueprint](../development/codebase-architecture.md)
 
 ---
 

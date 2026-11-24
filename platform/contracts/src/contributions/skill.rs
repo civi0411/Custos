@@ -251,7 +251,7 @@ pub trait Skill: Send + Sync {
     async fn run(&self, ctx: &SkillContext) -> Result<SkillOutput, SkillError>;
 }
 
-/// Pure registration port implemented by runtime skill registries (`custos-runtime`).
+/// Pure registration port implemented by runtime skill registries (`custos-engine`).
 pub trait SkillSink: Send + Sync {
     /// Register a concrete skill instance.
     fn register(&mut self, skill: Arc<dyn Skill>);

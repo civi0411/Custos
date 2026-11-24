@@ -65,7 +65,7 @@ Research conversation is the durable thread of scientific inquiry, connecting qu
 | Worktrees guarantee isolation | Git working directories do not isolate services, shared directories, credentials, or external effects | Show actual runtime authority and scope |
 | Clicking worktree changes every open pane | Switching a workspace layout is valid; silently rebinding existing resources is not | Retain resource IDs and scope in pinned panes |
 
-Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../platform/contracts/src/workspace/workspace.rs). SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
+Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../platform/contracts/src/resources/workspace.rs). SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
 
 ```mermaid
 flowchart TD
@@ -553,7 +553,7 @@ Home serves as the primary stable destination, followed by Projects scope select
 
 ## GitHub, branch and worktree core
 
-The complete implementation target is now consolidated in [Workspace/UI §13](../architecture/agent-workspace-and-ui.md#13-unified-git-and-worktree-product-design), with delivery and acceptance in [plan §22](../../plan.md#22-unified-git-and-worktree-delivery). This section records source comparison and current gaps; do not implement another parallel Git design from these earlier notes.
+The complete implementation target is now consolidated in [Workspace/UI §13](../architecture/agent-workspace-and-ui.md#13-unified-git-and-worktree-product-design), with delivery and acceptance in [Master Specification §13](../../Custos.md). This section records source comparison and current gaps; do not implement another parallel Git design from these earlier notes.
 
 ### Separate three identities
 

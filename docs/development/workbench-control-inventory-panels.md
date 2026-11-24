@@ -92,5 +92,5 @@ Orca defines 4 shell controllers with 13 top-level window declarations; Open Sci
 ## 3. Architectural Invariants for Custos Component Realization
 
 1. **Zero-Mock Rendering:** No UI component may render static placeholder data or mock success states. Unconnected or in-flight features must display honest `Unconnected`, `Admitting`, or `Degraded` states.
-2. **Graphite JetBlack Tokens:** All realized components strictly consume design tokens defined in `packages/ui-tokens` and `.agents/rules/desktop_ui_architecture_standards.md`.
+2. **Graphite JetBlack Tokens:** All realized components strictly consume design tokens defined in `apps/desktop/ui/src/styles/` and `.agents/rules/desktop_ui_architecture_standards.md`.
 3. **Decoupled Presentation Identifiers:** Presentation tabs (`CanvasGroup` / `TabId`) are strictly separate from physical domain identities (`TaskId`, `SessionId`, `WorktreeId`). Closing a presentation tab never terminates background jobs or unmounts worktrees.

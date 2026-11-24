@@ -5,7 +5,7 @@
 //!
 //! Rather than executing tools in an unconstrained wild loop, candidate tool calls
 //! are intercepted and transformed into `ActionIntent`s that require cryptographic
-//! `ExecutionPermit`s from the Security Kernel (`custos-core`).
+//! `ExecutionPermit`s from the Security Kernel (`custos-contracts`).
 
 use custos_contracts::inference::ModelPort;
 use std::collections::{HashMap, HashSet};

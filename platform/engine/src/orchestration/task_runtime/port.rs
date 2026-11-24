@@ -393,7 +393,7 @@ impl WorkflowPort for TaskRuntime {
             run.task_id.clone(),
             run.current_span_num,
             run.current_span_num + 1,
-            "custos-runtime".into(),
+            "custos-engine".into(),
             "default".into(),
             format!("Checkpoint for run {run_id}"),
             serde_json::json!({

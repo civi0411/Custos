@@ -1,4 +1,4 @@
 //! Agent Harness capability profiles, mediation assurances, and execution wire DTOs
-//! (re-exported from `custos-domain`).
+//! (re-exported from `custos-contracts`).
 
 pub use custos_domain::environment::harness::*;
