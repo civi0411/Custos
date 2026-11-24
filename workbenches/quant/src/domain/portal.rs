@@ -5,6 +5,7 @@
 
 use super::engine::OhlcvBar;
 use custos_domain::DomainError;
+use fin_primitives::signals::batch_f64::{self, AtrSeed};
 use serde::{Deserialize, Serialize};
 
 /// Standard market bar timeframes with deterministic duration semantics.
@@ -166,32 +167,16 @@ impl<'a> NativeDataPortal<'a> {
         if period == 0 {
             return None;
         }
-        let window = self.history_window(reference_ts, period + 1);
+        let window = self.slice_point_in_time(reference_ts);
         if window.len() <= period {
             return None;
         }
 
-        let mut gains = 0.0;
-        let mut losses = 0.0;
-
-        for w in window.windows(2) {
-            let change = w[1].close - w[0].close;
-            if change > 0.0 {
-                gains += change;
-            } else {
-                losses += change.abs();
-            }
-        }
-
-        let avg_gain = gains / period as f64;
-        let avg_loss = losses / period as f64;
-
-        if avg_loss == 0.0 {
-            return Some(100.0);
-        }
-
-        let rs = avg_gain / avg_loss;
-        Some(100.0 - (100.0 / (1.0 + rs)))
+        let closes: Vec<f64> = window.iter().map(|b| b.close).collect();
+        batch_f64::rsi(&closes, period)
+            .last()
+            .copied()
+            .filter(|v| v.is_finite())
     }
 
     /// Calculate Bollinger Bands on the visible closed slice.
@@ -268,21 +253,18 @@ impl<'a> NativeDataPortal<'a> {
         if period == 0 {
             return None;
         }
-        let window = self.history_window(reference_ts, period + 1);
+        let window = self.slice_point_in_time(reference_ts);
         if window.len() <= period {
             return None;
         }
 
-        let mut tr_sum = 0.0;
-        for i in 1..window.len() {
-            let high_low = window[i].high - window[i].low;
-            let high_prev_close = (window[i].high - window[i - 1].close).abs();
-            let low_prev_close = (window[i].low - window[i - 1].close).abs();
-            let true_range = high_low.max(high_prev_close).max(low_prev_close);
-            tr_sum += true_range;
-        }
-
-        Some(tr_sum / period as f64)
+        let high: Vec<f64> = window.iter().map(|b| b.high).collect();
+        let low: Vec<f64> = window.iter().map(|b| b.low).collect();
+        let close: Vec<f64> = window.iter().map(|b| b.close).collect();
+        batch_f64::atr(&high, &low, &close, period, AtrSeed::TaLib)
+            .last()
+            .copied()
+            .filter(|v| v.is_finite())
     }
 
     /// Calculate Volume Weighted Average Price (VWAP) on visible closed slice.

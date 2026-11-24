@@ -441,7 +441,30 @@ mod tests {
         // ATR & VWAP test
         let atr = portal.calculate_atr(18000, 3).expect("atr calculated");
         assert!(atr > 0.0);
+        // Wilder ATR(3): seed mean(3.5, 5.0, 3.5) = 4.0, then (4.0 * 2 + 6.0) / 3
+        assert!((atr - 14.0 / 3.0).abs() < 1e-9);
         let vwap = portal.calculate_vwap(18000, 5).expect("vwap calculated");
         assert!(vwap > 90.0 && vwap < 120.0);
+    }
+
+    #[test]
+    fn test_native_data_portal_rsi_matches_wilder_reference() {
+        // Wilder RSI(14) on the StockCharts series, as TA-Lib computes it unrounded:
+        // 70.464 at bar 14, 66.250 at bar 15 (a plain 14-change window gives 70.02 there).
+        let closes = [
+            44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08, 45.89, 46.03,
+            45.61, 46.28, 46.28, 46.00,
+        ];
+        let bars: Vec<OhlcvBar> = closes
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| OhlcvBar::new(i as i64 * 3600, c, c, c, c, 1.0))
+            .collect();
+        let portal = NativeDataPortal::new(&bars, BarTimeframe::Hour1).expect("valid sorted bars");
+
+        let rsi_14 = portal.calculate_rsi(15 * 3600, 14).expect("rsi at bar 14");
+        assert!((rsi_14 - 70.464135).abs() < 1e-6, "got {rsi_14}");
+        let rsi_15 = portal.calculate_rsi(16 * 3600, 14).expect("rsi at bar 15");
+        assert!((rsi_15 - 66.249619).abs() < 1e-6, "got {rsi_15}");
     }
 }
