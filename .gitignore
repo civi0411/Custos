@@ -631,7 +631,6 @@ android/**/bin/
 android/**/gen/
 android/**/out/
 android/**/build/
-!packages/**/bin/**
 !ui/**/bin/**
 !bin/**
 

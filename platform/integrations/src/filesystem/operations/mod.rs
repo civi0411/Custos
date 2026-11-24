@@ -1,7 +1,7 @@
 //! Host OS Operations Skills
 //!
 //! Physical workspace, HTTP, process, and lexical search skills executing against
-//! the host operating system. Implements the `Skill` contract defined in `custos-core`.
+//! the host operating system. Implements the `Skill` contract defined in `custos-contracts`.
 
 pub mod fs;
 pub mod http;

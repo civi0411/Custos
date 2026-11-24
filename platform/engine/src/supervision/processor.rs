@@ -348,7 +348,7 @@ fn default_run_record(run_id: &str, started_at_ms: i64) -> SupervisionRunRecord 
     SupervisionRunRecord {
         run_id: run_id.to_string(),
         workbench_id: None,
-        agent: "custos-runtime".into(),
+        agent: "custos-engine".into(),
         status: SupervisionRunStatus::Running,
         started_at_ms,
         ended_at_ms: None,
