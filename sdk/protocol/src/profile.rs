@@ -155,4 +155,3 @@ mod tests {
         assert_eq!(resolver.read_port(), None);
     }
 }
-

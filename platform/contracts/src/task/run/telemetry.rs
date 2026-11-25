@@ -122,7 +122,10 @@ pub trait SupervisionQueryPort: Send + Sync {
         &self,
         filter: SupervisionRunFilter,
     ) -> Result<Vec<SupervisionRunRecord>, DomainError>;
-    async fn get_run_waterfall(&self, run_id: &str) -> Result<Option<RunWaterfallView>, DomainError>;
+    async fn get_run_waterfall(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<RunWaterfallView>, DomainError>;
     async fn list_logs(
         &self,
         filter: SupervisionLogFilter,
@@ -138,4 +141,3 @@ pub trait SupervisionQueryPort: Send + Sync {
     ) -> Result<Vec<ErrorGroupSummary>, DomainError>;
     async fn list_profiles(&self) -> Result<Vec<SupervisionProfile>, DomainError>;
 }
-

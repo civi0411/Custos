@@ -162,25 +162,41 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
     // Extract authority (host + optional port) up to next '/', '?', or '#'
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("").trim();
 
-    if authority.is_empty() {
+    if authority.is_empty() || authority.contains('@') {
         return Err(DomainError::Validation(
-            "URL must contain a valid hostname.".to_string(),
+            "URL must contain a valid hostname without userinfo.".to_string(),
         ));
     }
 
-    let (host, maybe_port) = if let Some((h, p)) = authority.rsplit_once(':') {
-        (h.trim(), p.trim().parse::<u16>().ok())
+    let (raw_host, maybe_port) = if authority.starts_with('[') {
+        if let Some((bracketed, port_part)) = authority.rsplit_once("]:") {
+            let port = port_part.trim().parse::<u16>().map_err(|_| {
+                DomainError::Validation("URL contains an invalid port.".to_string())
+            })?;
+            (format!("{bracketed}]"), Some(port))
+        } else if authority.ends_with(']') {
+            (authority.to_string(), None)
+        } else {
+            return Err(DomainError::Validation(
+                "Malformed IPv6 host in URL.".to_string(),
+            ));
+        }
+    } else if let Some((h, p)) = authority.rsplit_once(':') {
+        let port = p
+            .trim()
+            .parse::<u16>()
+            .map_err(|_| DomainError::Validation("URL contains an invalid port.".to_string()))?;
+        (h.trim().to_string(), Some(port))
     } else {
-        (authority, None)
+        (authority.to_string(), None)
     };
 
-    if host.is_empty() {
+    let lower = raw_host.trim_end_matches('.').to_lowercase();
+    if lower.is_empty() {
         return Err(DomainError::Validation(
             "URL must contain a valid hostname.".to_string(),
         ));
     }
-
-    let lower = host.to_lowercase();
 
     // Permit scoped loopback development servers and SSH port forward targets (ports 1024..=65535)
     let is_loopback = lower == "localhost" || lower == "127.0.0.1" || lower == "[::1]";
@@ -189,27 +205,79 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
         return Ok(());
     }
 
-    let private_ipv4 = lower == "0.0.0.0"
-        || lower.starts_with("127.")
-        || lower.starts_with("10.")
-        || lower.starts_with("192.168.")
-        || lower.starts_with("169.254.")
-        || lower
-            .strip_prefix("172.")
-            .and_then(|tail| tail.split('.').next())
-            .and_then(|octet| octet.parse::<u8>().ok())
-            .is_some_and(|octet| (16..=31).contains(&octet));
+    let ip_candidate = lower.trim_start_matches('[').trim_end_matches(']');
+    let ipv4_octets: Option<[u8; 4]> = {
+        let parts: Vec<&str> = ip_candidate.split('.').collect();
+        if parts.len() == 4 {
+            let mut out = [0u8; 4];
+            let mut ok = true;
+            for (i, p) in parts.iter().enumerate() {
+                if let Ok(v) = p.parse::<u8>() {
+                    out[i] = v;
+                } else {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                Some(out)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    if let Some([a, b, _, _]) = ipv4_octets {
+        let blocked = a == 0
+            || a == 127
+            || a == 10
+            || (a == 192 && b == 168)
+            || (a == 169 && b == 254)
+            || (a == 172 && (16..=31).contains(&b))
+            || a >= 224;
+        if blocked {
+            return Err(DomainError::Validation(format!(
+                "Access to local or private destination '{}' is rejected by the browser contract.",
+                lower
+            )));
+        }
+    }
+
+    // Reject numeric/short IPv4 aliases (e.g. 127.1, 2130706433, 0x7f000001)
+    let is_numeric_host = lower.starts_with("0x")
+        || lower.chars().all(|c| c.is_ascii_digit())
+        || (lower.contains('.')
+            && lower
+                .split('.')
+                .all(|seg| !seg.is_empty() && seg.chars().all(|c| c.is_ascii_digit())));
+    if is_numeric_host && ipv4_octets.is_none() {
+        return Err(DomainError::Validation(format!(
+            "Numeric or ambiguous IPv4 host '{}' is rejected by the browser contract.",
+            lower
+        )));
+    }
+
+    let private_ipv6 = lower.starts_with('[')
+        && (ip_candidate == "::1"
+            || ip_candidate == "::"
+            || ip_candidate.starts_with("fc")
+            || ip_candidate.starts_with("fd")
+            || ip_candidate.starts_with("fe80:")
+            || ip_candidate.starts_with("::ffff:127.")
+            || ip_candidate.starts_with("::ffff:10.")
+            || ip_candidate.starts_with("::ffff:192.168.")
+            || ip_candidate.starts_with("::ffff:169.254.")
+            || ip_candidate.starts_with("::ffff:0."));
+
     let private_name = lower == "localhost"
         || lower.ends_with(".localhost")
         || lower.ends_with(".local")
         || lower == "metadata.google.internal"
         || lower == "metadata";
-    let private_ipv6 = lower == "[::1]"
-        || lower.starts_with("[fc")
-        || lower.starts_with("[fd")
-        || lower.starts_with("[fe80:");
 
-    if private_ipv4 || private_name || private_ipv6 {
+    if private_ipv6 || private_name {
         return Err(DomainError::Validation(format!(
             "Access to local or private destination '{}' is rejected by the browser contract.",
             lower

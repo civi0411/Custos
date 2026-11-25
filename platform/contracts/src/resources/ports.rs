@@ -1,15 +1,12 @@
 //! Resources (Workspace, Files, Git, Cas, Checkpoint, Compute, Terminal, Notebook) SPI Trait Ports
 
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use crate::conversation::ports::SessionStore;
 use crate::identity::error::DomainError;
-use crate::resources::workspace::WorkspaceId;
 use crate::resources::artifact::ArtifactRef;
 use crate::resources::compute::{
-    CloudPodLease,
-    OptionalConsumerPlacement, TrainingCheckpointManifest,
-    TrainingStepTelemetry,
+    CloudPodLease, OptionalConsumerPlacement, TrainingCheckpointManifest, TrainingStepTelemetry,
 };
+use crate::resources::workspace::WorkspaceId;
 use crate::resources::workspace::{
     DirtyManifest, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus,
 };
@@ -17,12 +14,13 @@ use crate::resources::workspace_files::{
     WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff, WorkspaceFileTree,
     WriteWorkspaceFileParams,
 };
+use crate::task::oi::{DecisionRecord, ReplanRecord};
 use crate::task::ports::{RunPort, TaskStore, WorkflowRevisionPort};
 use crate::task::run::{
     RunStepSpan, StepError, SupervisionFinding, SupervisionLogEntry, SupervisionRunRecord,
 };
-use crate::task::oi::{DecisionRecord, ReplanRecord};
-use crate::conversation::ports::SessionStore;
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // 1. Workspace Repository & Provider Ports
@@ -223,7 +221,9 @@ pub trait SupervisionStorePort: Send + Sync {
         filter: &crate::task::run::SupervisionFindingFilter,
     ) -> Result<Vec<SupervisionFinding>, DomainError>;
 
-    async fn count_overview_stats(&self) -> Result<(usize, usize, usize, usize, usize), DomainError>;
+    async fn count_overview_stats(
+        &self,
+    ) -> Result<(usize, usize, usize, usize, usize), DomainError>;
 
     async fn prune_before(
         &self,
@@ -291,7 +291,11 @@ pub trait CheckpointStorePort: Send + Sync {
         expected_digest: &str,
     ) -> Result<(), DomainError>;
     async fn get_blob(&self, prefix: &str, name: &str) -> Result<Option<Vec<u8>>, DomainError>;
-    async fn head_blob(&self, prefix: &str, name: &str) -> Result<Option<BlobMetadata>, DomainError>;
+    async fn head_blob(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Result<Option<BlobMetadata>, DomainError>;
     async fn publish_manifest(
         &self,
         prefix: &str,
@@ -341,8 +345,10 @@ pub struct CloudPodRequest {
 
 #[async_trait]
 pub trait ComputePort: Send + Sync {
-    async fn request_cloud_pod(&self, request: &CloudPodRequest)
-        -> Result<CloudPodLease, DomainError>;
+    async fn request_cloud_pod(
+        &self,
+        request: &CloudPodRequest,
+    ) -> Result<CloudPodLease, DomainError>;
     async fn release_cloud_pod(&self, pod_id: &str) -> Result<(), DomainError>;
     async fn observe_attempt(&self, attempt_id: &str) -> Result<AttemptObservation, DomainError>;
     async fn capture_telemetry(&self, run_id: &str) -> Result<TrainingStepTelemetry, DomainError>;
@@ -385,7 +391,9 @@ impl PreflightReport {
 #[async_trait]
 pub trait WorkloadAdmissionPort: Send + Sync {
     /// Discovers all available compute devices on the local host or configured targets
-    async fn discover_devices(&self) -> Result<Vec<crate::resources::compute::ComputeDeviceRef>, DomainError>;
+    async fn discover_devices(
+        &self,
+    ) -> Result<Vec<crate::resources::compute::ComputeDeviceRef>, DomainError>;
 
     /// Requests admission for a compute workload (notebook, training, eval, inference)
     async fn admit_workload(
@@ -481,11 +489,11 @@ pub trait ExecutionTargetResolver: Send + Sync {
 // 6. Terminal PTY Port & 7. Notebook Driver Port
 // ---------------------------------------------------------------------------
 
-pub use crate::execution::terminal::{
-    TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
-};
 pub use crate::execution::notebook::{
     NotebookDriverPort, NotebookStoragePort, NotebookWorkerResponse, NotebookWorkerSession,
+};
+pub use crate::execution::terminal::{
+    TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
 };
 
 // ---------------------------------------------------------------------------
@@ -500,4 +508,3 @@ pub trait SourceAcquisitionPort: Send + Sync {
         base_path: Option<&str>,
     ) -> Result<String, DomainError>;
 }
-

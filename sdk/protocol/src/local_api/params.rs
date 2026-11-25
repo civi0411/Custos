@@ -1,4 +1,4 @@
-use custos_domain::{
+use custos_contracts::{
     TaskContract, TaskStatus, VerificationClaim, WorkspaceKind, WorkspaceLineage,
 };
 use serde::{Deserialize, Serialize};
@@ -14,11 +14,11 @@ pub enum JobOperationalStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PacksJobCatalogItem {
     pub job_id: String,
-    pub lens: custos_domain::WorkbenchLens,
+    pub lens: custos_contracts::WorkbenchLens,
     pub name: String,
     pub description: String,
     pub primary_role: String,
-    pub recommended_topology: custos_domain::oi::ExecutionTopology,
+    pub recommended_topology: custos_contracts::oi::ExecutionTopology,
     pub status: JobOperationalStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub degradation_reason: Option<String>,
@@ -292,11 +292,11 @@ pub struct ArtifactDetailResponse {
     pub latest_version: u32,
     pub latest_content_hash: String,
     pub versions: Vec<crate::research::ArtifactLineageNode>,
-    pub annotations: Vec<custos_domain::AnnotationRecord>,
+    pub annotations: Vec<custos_contracts::AnnotationRecord>,
     pub content: Option<String>,
     /// Current workspace bytes, not an archived version snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file: Option<custos_domain::WorkspaceFileContent>,
+    pub file: Option<custos_contracts::WorkspaceFileContent>,
     /// Present only when current bytes match the recorded version hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_version: Option<u32>,
@@ -311,4 +311,3 @@ pub struct SaveNoteParams {
     pub task_id: Option<String>,
     pub tags: Option<Vec<String>>,
 }
-

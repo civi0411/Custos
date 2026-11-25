@@ -123,7 +123,8 @@ impl WorkloadAdmissionRequest {
     }
 
     pub fn effective_lane(&self) -> ExecutionLane {
-        self.lane.unwrap_or_else(|| self.workload_kind.default_lane())
+        self.lane
+            .unwrap_or_else(|| self.workload_kind.default_lane())
     }
 }
 
@@ -141,4 +142,3 @@ pub enum WorkloadAdmissionVerdict {
         reason: String,
     },
 }
-

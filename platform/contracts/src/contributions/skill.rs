@@ -5,10 +5,10 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use crate::authority::RiskLevel;
 use crate::identity::error::DomainError;
 use crate::identity::ids::TaskId;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// Worker run identifier alias

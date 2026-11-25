@@ -1,16 +1,15 @@
 //! Task, Workflow, and Orchestration SPI Trait Ports
 
-use async_trait::async_trait;
-use crate::identity::error::DomainError;
-use crate::task::{
-    CancelReceipt, CandidateRaceResult, CandidateRaceSpec, ContinuationPacket,
-    LiveRunReplay, RunHandle, Span, StartRunCommand,
-    Task, TaskContract, TaskStatus,
-};
-use crate::task::events::TaskEvent;
-use crate::task::oi::{DecisionSnapshot, StrategyProposal};
 use crate::authority::{ActionIntent, Grant, Permit, RiskLevel};
 use crate::evidence::{EvidenceBundle, VerificationClaim};
+use crate::identity::error::DomainError;
+use crate::task::events::TaskEvent;
+use crate::task::oi::{DecisionSnapshot, StrategyProposal};
+use crate::task::{
+    CancelReceipt, CandidateRaceResult, CandidateRaceSpec, ContinuationPacket, LiveRunReplay,
+    RunHandle, Span, StartRunCommand, Task, TaskContract, TaskStatus,
+};
+use async_trait::async_trait;
 
 /// Primary entry point into the Task Execution Kernel (CONTRACT-LAYER-01).
 #[async_trait]
@@ -62,15 +61,9 @@ pub trait KernelPort: Send + Sync {
         claims: Vec<VerificationClaim>,
     ) -> Result<Task, DomainError>;
 
-    fn classify_effect(
-        &self,
-        tool_name: &str,
-        args: &serde_json::Value,
-    ) -> RiskLevel {
+    fn classify_effect(&self, tool_name: &str, args: &serde_json::Value) -> RiskLevel {
         match tool_name {
-            "developer__read" | "read_file" | "read" | "list_dir" | "list" | "ls" => {
-                RiskLevel::Low
-            }
+            "developer__read" | "read_file" | "read" | "list_dir" | "list" | "ls" => RiskLevel::Low,
             "developer__write" | "write_file" | "write" => RiskLevel::Medium,
             "developer__bash" | "bash" | "shell" | "exec" => {
                 let cmd = args
@@ -167,11 +160,11 @@ pub trait OiPlannerPort: Send + Sync {
     async fn plan(&self, snapshot: &DecisionSnapshot) -> Result<StrategyProposal, DomainError>;
 }
 
-use crate::task::run::{DispatchClaim, LaunchAttempt, Run, WorkerRun};
-use crate::task::workflow::WorkflowRevision;
-use crate::task::oi::placement::NodePlacement;
 use crate::authority::ports::EffectLedgerPort;
 use crate::resources::ports::{DecisionPort, ReplanPort};
+use crate::task::oi::placement::NodePlacement;
+use crate::task::run::{DispatchClaim, LaunchAttempt, Run, WorkerRun};
+use crate::task::workflow::WorkflowRevision;
 
 /// Composite Persistence Port for sovereign Runs and bounded WorkerRuns.
 #[async_trait]
@@ -181,7 +174,8 @@ pub trait RunPort: Send + Sync {
     async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError>;
     async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError>;
     async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError>;
-    async fn list_worker_runs_for_task(&self, task_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
+    async fn list_worker_runs_for_task(&self, task_id: &str)
+        -> Result<Vec<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
     async fn list_all_active_worker_runs(&self) -> Result<Vec<WorkerRun>, DomainError> {
         Ok(Vec::new())
@@ -238,4 +232,3 @@ pub trait WorkflowRevisionPort: Send + Sync {
 /// Composite Persistence Port for Workflow Revisions, Decisions, and Replanning.
 pub trait WorkflowStore: WorkflowRevisionPort + DecisionPort + ReplanPort {}
 impl<T: WorkflowRevisionPort + DecisionPort + ReplanPort + ?Sized> WorkflowStore for T {}
-

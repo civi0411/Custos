@@ -196,9 +196,15 @@ impl Action {
         Ok(())
     }
 
-    /// Computes deterministic SHA-256 digest of action parameters for Permit binding (INV-04)
+    /// Computes deterministic SHA-256 digest binding task, action, target, and parameters (INV-04)
     pub fn argument_digest(&self) -> String {
-        let serialized = crate::ids::canonical_json(&self.parameters).unwrap_or_default();
+        let bound = serde_json::json!({
+            "task_id": self.task_id.as_deref().unwrap_or(""),
+            "name": self.name,
+            "target": self.target,
+            "parameters": self.parameters,
+        });
+        let serialized = crate::ids::canonical_json(&bound).unwrap_or_default();
         format!("sha256:{}", crate::ids::digest(serialized.as_bytes()))
     }
 }

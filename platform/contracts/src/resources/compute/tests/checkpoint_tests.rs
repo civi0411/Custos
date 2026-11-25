@@ -1,4 +1,4 @@
-use crate::fleet::compute::checkpoint::*;
+use crate::resources::compute::checkpoint::*;
 
 #[test]
 fn checkpoint_admission_is_fail_closed() {
@@ -75,4 +75,3 @@ fn test_checkpoint_manifest_resumability_and_commit_stages() {
     assert_eq!(manifest.files.len(), 1);
     assert!(manifest.optimizer_state_preserved);
 }
-

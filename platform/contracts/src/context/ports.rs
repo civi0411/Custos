@@ -1,12 +1,11 @@
 //! Context & Memory Subsystem SPI Trait Ports
 
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use crate::context::memory::{
-    FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt,
-    RecallQuery,
+    FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt, RecallQuery,
 };
 use crate::contributions::skill::WorkerRunId;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
 /// Port 6 — MemoryPort (Custos.md §9.3)
 ///
@@ -32,4 +31,3 @@ pub trait MemoryPort: Send + Sync {
         worker_run_id: WorkerRunId,
     ) -> Result<ProposalReceipt, MemoryError>;
 }
-

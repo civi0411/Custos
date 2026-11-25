@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Canonical wire schemas, envelopes, and IPC contracts for Custos SADE"
 
 [dependencies]
-custos-domain = { workspace = true }
+custos-contracts = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 chrono = { workspace = true }

@@ -94,4 +94,3 @@ mod tests {
         assert_eq!(action.status, "uncertain");
     }
 }
-

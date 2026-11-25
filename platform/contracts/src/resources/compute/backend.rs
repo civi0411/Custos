@@ -236,4 +236,3 @@ impl ComputeDeviceRef {
         }
     }
 }
-

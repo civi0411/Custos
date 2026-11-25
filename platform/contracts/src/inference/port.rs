@@ -2,11 +2,11 @@
 //!
 //! Contract defining how the Custos runtime interacts with AI model providers.
 
-use async_trait::async_trait;
-use tokio::sync::mpsc;
 use crate::identity::error::DomainError;
 use crate::inference::events::ProviderEvent;
 use crate::inference::request::{ModelResponse, ProviderRequest};
+use async_trait::async_trait;
+use tokio::sync::mpsc;
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {

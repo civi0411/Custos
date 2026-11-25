@@ -72,7 +72,10 @@ impl FrozenTrainingRecipe {
         let digest = hasher.finalize();
         format!(
             "sha256:{}",
-            digest.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            digest
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
         )
     }
 }
@@ -173,4 +176,3 @@ mod tests {
         assert_eq!(spec.rubric_version, "v1.0.0");
     }
 }
-

@@ -83,4 +83,3 @@ pub trait PackageTransferPort: Send + Sync {
 
     async fn remove_version(&self, component_id: &str, version: &str) -> Result<(), PackageError>;
 }
-

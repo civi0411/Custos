@@ -11,9 +11,7 @@ pub enum EnvironmentProfile {
         worktree_path: String,
     },
     /// Assistant Workbench: logical project scope without filesystem mutation requirements
-    Assistant {
-        project_id: Option<String>,
-    },
+    Assistant { project_id: Option<String> },
     /// Research Workbench: bound to document corpus and reproducible compute kernel
     Research {
         corpus_path: String,
@@ -36,9 +34,10 @@ impl EnvironmentProfile {
     /// Invariant check: returns whether live network sockets are permitted.
     pub fn allows_live_network(&self) -> bool {
         match self {
-            Self::Quant { is_live_gateway, .. } => *is_live_gateway,
+            Self::Quant {
+                is_live_gateway, ..
+            } => *is_live_gateway,
             _ => true,
         }
     }
 }
-

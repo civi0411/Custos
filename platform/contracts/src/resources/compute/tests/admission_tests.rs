@@ -1,5 +1,5 @@
-use crate::fleet::compute::admission::*;
-use crate::fleet::compute::backend::*;
+use crate::resources::compute::admission::*;
+use crate::resources::compute::backend::*;
 
 #[test]
 fn test_compute_device_ref_and_admission_models() {
@@ -41,4 +41,3 @@ fn test_compute_device_ref_and_admission_models() {
     assert_eq!(lease.status, WorkloadLeaseStatus::Admitted);
     assert_eq!(lease.lane, crate::ExecutionLane::Batch);
 }
-

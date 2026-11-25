@@ -14,17 +14,13 @@ pub mod resources;
 pub mod task;
 
 // Bounded context aliases for workspace backward compatibility
+pub use contributions as packages;
 pub use conversation as session;
 pub use execution as environment;
-pub use execution as fleet;
-pub use identity as shared;
 pub use inference as provider;
 pub use resources as workspace;
-pub use contributions as packages;
-pub use task::continuation::ContinuationPacket as PacketContinuation;
-pub use task::pipeline;
 pub use task::oi;
-pub use task::oi as decision;
+pub use task::pipeline;
 
 // Internal module re-exports matching canonical domain layout
 pub use authority::action;
@@ -74,29 +70,29 @@ pub use identity::{
 };
 
 // --- Task, Runs, Workflows & Supervision ---
-pub use task::{
-    compute_error_signature, default_rules, evaluate_snapshot, group_step_errors,
-    CancelReceipt, Candidate, CandidateExecutionReport, CandidateRaceResult, CandidateRaceSpec,
-    ClaimStatus, ContinuationDisplayScope, ContinuationManifest, ContinuationPacket,
-    ContinuationState, ContractEvidence, CriterionSpec, DecisionRecord, DecisionSnapshot,
-    DispatchClaim, ErrorGroupSummary, EvidenceKind, ExecutionTopology, FindingKind,
-    KernelPort, LatencyBreakdown, LaunchAttempt, LaunchStatus, LiveRunEvent, LiveRunReplay,
-    LiveRunSnapshot, LogSeverity, LongRunningRule, ModelCandidateConfig, NoActivityRule,
-    NodeAttempt, NodePlacement, OiPlannerPort, PossibleLoopRule, Recipe, RecipeEnvironmentSpec,
-    RecipeInput, ReconciliationSummary, RejectionReason, RepeatedErrorRule, RepeatedToolRule,
-    ReplanBrief, ReplanRecord, ReplanTrigger, RequestedModelScope, RevisionNode, Run,
-    RunHandle, RunInspectionReport, RunMetricsSummary, RunOverviewSummary, RunPort, RunStepSpan,
-    RunStatus, RunStore, RunSummaryRow, Span, SpanState, StartRunCommand, StepError,
-    StepSpanKind, StepSpanStatus, StrategyProposal, SupervisionFinding, SupervisionLogEntry,
-    SupervisionProfile, SupervisionRule, SupervisionRunRecord, SupervisionRunStatus,
-    SupervisionSeverity, SupervisionSnapshot, Task, TaskAdvanced, TaskBlocked, TaskCancelled,
-    TaskCompleted, TaskContract, TaskContractRevision, TaskContractV1, TaskCreated, TaskEvent,
-    TaskRevision, TaskSnapshotImported, TaskStatus, TaskStore, ThresholdPolicy,
-    TransferPrivacyDecision, UsageExecutorKind, UsageMeasurement, UsageRecord, WorkerResult,
-    WorkerRun, WorkerStatus, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowPort,
-    WorkflowRevision, WorkflowRevisionPort, WorkflowStep, WorkflowStore,
-};
 pub use task::run as supervision;
+pub use task::{
+    compute_error_signature, default_rules, evaluate_snapshot, group_step_errors, CancelReceipt,
+    Candidate, CandidateExecutionReport, CandidateRaceResult, CandidateRaceSpec, ClaimStatus,
+    ContinuationDisplayScope, ContinuationManifest, ContinuationPacket, ContinuationState,
+    ContractEvidence, CriterionSpec, DecisionRecord, DecisionSnapshot, DispatchClaim,
+    ErrorGroupSummary, EvidenceKind, ExecutionTopology, FindingKind, KernelPort, LatencyBreakdown,
+    LaunchAttempt, LaunchStatus, LiveRunEvent, LiveRunReplay, LiveRunSnapshot, LogSeverity,
+    LongRunningRule, ModelCandidateConfig, NoActivityRule, NodeAttempt, NodePlacement,
+    OiPlannerPort, PossibleLoopRule, Recipe, RecipeEnvironmentSpec, RecipeInput,
+    ReconciliationSummary, RejectionReason, RepeatedErrorRule, RepeatedToolRule, ReplanBrief,
+    ReplanRecord, ReplanTrigger, RequestedModelScope, RevisionNode, Run, RunHandle,
+    RunInspectionReport, RunMetricsSummary, RunOverviewSummary, RunPort, RunStatus, RunStepSpan,
+    RunStore, RunSummaryRow, Span, SpanState, StartRunCommand, StepError, StepSpanKind,
+    StepSpanStatus, StrategyProposal, SupervisionFinding, SupervisionLogEntry, SupervisionProfile,
+    SupervisionRule, SupervisionRunRecord, SupervisionRunStatus, SupervisionSeverity,
+    SupervisionSnapshot, Task, TaskAdvanced, TaskBlocked, TaskCancelled, TaskCompleted,
+    TaskContract, TaskContractRevision, TaskContractV1, TaskCreated, TaskEvent, TaskRevision,
+    TaskSnapshotImported, TaskStatus, TaskStore, ThresholdPolicy, TransferPrivacyDecision,
+    UsageExecutorKind, UsageMeasurement, UsageRecord, WorkerResult, WorkerRun, WorkerStatus,
+    WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowPort, WorkflowRevision, WorkflowRevisionPort,
+    WorkflowStep, WorkflowStore,
+};
 
 // --- Conversation & Sessions ---
 pub use conversation::{
@@ -111,11 +107,11 @@ pub use authority::{
     Action, ActionIntent, ActionIntentV1, ActionLifecycleState, ApprovalDecision, ApprovalRequest,
     ApprovalStatus, Assurance, Budget, CapabilityDescriptor, CapabilityGroup, CapabilityManifest,
     CapabilityStatus, CommandAdmission, CommandLedgerEntry, CommandLedgerPort, CredentialLocation,
-    CredentialMetadata, CredentialOperation, CredentialVault, CredentialVaultError, CredentialsPort,
-    CredentialsVaultPort, EffectAttempt, EffectLedgerPort, EffectStatus, ExecutionPermit,
-    ExecutionReceipt, Grant, Headroom, OutboxActionItem, OutboxDeliveryState, OutboxEntry,
-    OutboxPort, OutboxStatus, Permit, PermitId, PermitV1, Receipt, ReceiptStatus, ReservationToken,
-    ResourceActionCapability, RiskClass, RiskLevel, StandingGrant,
+    CredentialMetadata, CredentialOperation, CredentialVault, CredentialVaultError,
+    CredentialsPort, CredentialsVaultPort, EffectAttempt, EffectLedgerPort, EffectStatus,
+    ExecutionPermit, ExecutionReceipt, Grant, Headroom, OutboxActionItem, OutboxDeliveryState,
+    OutboxEntry, OutboxPort, OutboxStatus, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
+    ReservationToken, ResourceActionCapability, RiskClass, RiskLevel, StandingGrant,
 };
 
 // --- Evidence & Judgment ---
@@ -123,12 +119,11 @@ pub use evidence::{
     classify, protection_status, Check, CheckGroup, CheckStatus, CriterionVerificationRecord,
     EvidenceBundle, EvidenceRecord, EvidenceRecordV1, EvidenceRequirement, EvidenceStatus,
     ExecEvent, ExecState, ExecutionArtifact, ExecutionAttempt, ExecutionRecord,
-    ExecutionRecordStatus, ExternalJobRef, Fact, FindingSeverity, Invocation,
-    InvocationOutcome, JudgmentPort, JudgmentRequest, JudgmentResult, OutcomeStatus,
-    ProgressTriplet, ProtectionPolicy, ProtectionStatus, RecordReviewParams, ResourceEvent,
-    ResourceState, ResumeVerdict, ReviewFinding, ReviewMethod, ReviewStatus,
-    ReviewTargetType, ReviewerRecord, TargetCaps, TaskOutcome, VerificationClaim,
-    VerificationReport,
+    ExecutionRecordStatus, ExternalJobRef, Fact, FindingSeverity, Invocation, InvocationOutcome,
+    JudgmentPort, JudgmentRequest, JudgmentResult, OutcomeStatus, ProgressTriplet,
+    ProtectionPolicy, ProtectionStatus, RecordReviewParams, ResourceEvent, ResourceState,
+    ResumeVerdict, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType, ReviewerRecord,
+    TargetCaps, TaskOutcome, VerificationClaim, VerificationReport,
 };
 
 // --- Context & Memory ---
@@ -142,24 +137,25 @@ pub use context::{
 // --- Resources, Workspace, Files & Compute ---
 pub use resources::{
     AcceleratorSpec, ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactLineageNode,
-    ArtifactRef, ArtifactSummary, AttemptObservation, BlobMetadata, CasPort, CheckpointCommitStatus,
-    CheckpointFileEntry, CheckpointStorePort, CloudPodLease, CloudPodRequest, CloudPodStatus,
-    CompatibilityGateEvaluation, CompatibilityVerdict, ComputeBackendKind, ComputeDeviceRef,
-    ComputePort, ComputeTelemetry, ComputeWorkloadKind, DecisionPort, DeviceKind, DirtyManifest,
-    ExecutionTargetPort, ExecutionTargetResolver, ExecutionWorkspace, FrozenTrainingRecipe,
-    HandoffConsent, HardwareAdaptationPlan, LineageGraphEdge, LineageGraphNode,
-    ModelEvaluationReport, ModelEvaluationSpec, NoteRecord, NoteVersionRecord,
-    NotebookDriverPort, NotebookStoragePort, NotebookWorkerResponse, NotebookWorkerSession,
-    OptionalConsumerPlacement, PreflightReport, PromotionOutcome, ReplanPort,
-    RepositoryGitPort, ResumabilityLevel, SourceAcquisitionPort, SourceSpan, StoragePort,
-    StoreCapabilities, SupervisionStorePort, TargetCapabilities, TerminalDriverPort,
+    ArtifactRef, ArtifactSummary, AttemptObservation, BlobMetadata, CasPort,
+    CheckpointCommitStatus, CheckpointFileEntry, CheckpointStorePort, CloudPodLease,
+    CloudPodRequest, CloudPodStatus, CompatibilityGateEvaluation, CompatibilityVerdict,
+    ComputeBackendKind, ComputeDeviceRef, ComputePort, ComputeTelemetry, ComputeWorkloadKind,
+    DecisionPort, DeviceKind, DirtyManifest, ExecutionTargetPort, ExecutionTargetResolver,
+    ExecutionWorkspace, FrozenTrainingRecipe, HandoffConsent, HardwareAdaptationPlan,
+    LineageGraphEdge, LineageGraphNode, ModelEvaluationReport, ModelEvaluationSpec, NoteRecord,
+    NoteVersionRecord, NotebookDriverPort, NotebookStoragePort, NotebookWorkerResponse,
+    NotebookWorkerSession, OptionalConsumerPlacement, PreflightReport, PromotionOutcome,
+    ReplanPort, RepositoryGitPort, ResumabilityLevel, SourceAcquisitionPort, SourceSpan,
+    StoragePort, StoreCapabilities, SupervisionStorePort, TargetCapabilities, TerminalDriverPort,
     TerminalOutputChunk, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
     TerminalSession, TerminalSessionId, TerminalSessionStatus, TrainingCheckpointManifest,
-    TrainingExecutionReceipt, TrainingStepTelemetry, WorkloadAdmissionPort, WorkloadAdmissionRequest,
-    WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus, WorkspaceDiffEntry,
-    WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff, WorkspaceFileEntry,
-    WorkspaceFileTree, WorkspaceFilesPort, WorkspaceId, WorkspaceKind, WorkspaceLineage,
-    WorkspaceProvider, WorkspaceRepository, WorkspaceStatus, WriteWorkspaceFileParams,
+    TrainingExecutionReceipt, TrainingStepTelemetry, WorkloadAdmissionPort,
+    WorkloadAdmissionRequest, WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
+    WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileEntry, WorkspaceFileTree, WorkspaceFilesPort, WorkspaceId, WorkspaceKind,
+    WorkspaceLineage, WorkspaceProvider, WorkspaceRepository, WorkspaceStatus,
+    WriteWorkspaceFileParams,
 };
 
 // --- Execution & Harnesses ---
@@ -168,13 +164,13 @@ pub use execution::{
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
     CaptureSnapshotParams, CellExecutionStatus, CommandExecutionResult, CommandRunnerPort,
     CostVisibility, CreateTabParams, EnvSnapshot, EnvironmentAssurance, EnvironmentHandle,
-    EnvironmentPort, EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecutionResult, ExecuteCellParams,
-    ExecuteCellResult, ExecutionLane, FleetExecParams, FleetExecReceipt, FleetExecResult,
-    GateReport, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity, HarnessProfile,
-    KernelStatus, LanePolicy, NavigateTabParams, NotebookCell, NotebookCellType, NotebookDocument,
-    NotebookKernelBinding, NotebookKernelState, RegisterHostParams, RemoteHostNode,
-    RemoteHostStatus, RunObserver, SandboxCommand, SandboxPort, SshAuthMethod, ToolGate,
-    ToolMediationLevel, WorktreeOwnership,
+    EnvironmentPort, EnvironmentProfile, EnvironmentSpec, EnvironmentState, ExecuteCellParams,
+    ExecuteCellResult, ExecutionLane, ExecutionResult, FleetExecParams, FleetExecReceipt,
+    FleetExecResult, GateReport, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity,
+    HarnessProfile, KernelStatus, LanePolicy, NavigateTabParams, NotebookCell, NotebookCellType,
+    NotebookDocument, NotebookKernelBinding, NotebookKernelState, RegisterHostParams,
+    RemoteHostNode, RemoteHostStatus, RunObserver, SandboxCommand, SandboxPort, SshAuthMethod,
+    ToolGate, ToolMediationLevel, WorktreeOwnership,
 };
 
 // --- Inference & Models ---
@@ -184,14 +180,14 @@ pub use inference::{
     LocalModelPreflightResponse, ModelCatalogOption, ModelCatalogResult, ModelCompatibility,
     ModelPort, ModelPricing, ModelProvider, ModelResponse, ModelTurnEvent, ModelTurnRequest,
     OAuthTokenRecord, ProbedModel, ProviderConfig, ProviderEvent, ProviderHealthStatus,
-    ProviderObservationSnapshot, ProviderRequest, TokenUsage, ToolCall,
-    ToolDefinition, ToolPort, ToolResult, TurnDelta,
+    ProviderObservationSnapshot, ProviderRequest, TokenUsage, ToolCall, ToolDefinition, ToolPort,
+    ToolResult, TurnDelta,
 };
 
 // --- Contributions, Packs & Skills ---
 pub use contributions::{
-    DomainPack, DomainPackManifest, DownloadProgress, InstalledPath, PackageDistributionEnvelope,
-    PackageError, PackageTransferPort, PackLifecycle, PackProfile, PackVerifier, Skill,
+    DomainPack, DomainPackManifest, DownloadProgress, InstalledPath, PackLifecycle, PackProfile,
+    PackVerifier, PackageDistributionEnvelope, PackageError, PackageTransferPort, Skill,
     SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, SkillSink, StagedArtifact,
     TaintLevel, VerificationContext, VerificationResult, VerifierResult, WorkbenchJob,
     WorkbenchModule, WorkerRole, WorkerRunId, WorkspaceScope, WriteTarget,
@@ -299,5 +295,3 @@ pub mod contracts {
         pub use crate::resources::workspace_files::*;
     }
 }
-
-

@@ -145,4 +145,3 @@ pub fn classify(
     }
     unsupported("No usable weights or verified state in checkpoint")
 }
-
