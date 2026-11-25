@@ -7,6 +7,6 @@ publish = false
 
 [dependencies]
 custos-contracts = { workspace = true }
-custos-integrations = { workspace = true }
+custos-integrations = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true }
 serde_json = { workspace = true }

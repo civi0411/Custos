@@ -8,36 +8,20 @@
 //! 5. Crash, Interrupt, and Kernel Reset Resource Recovery (Zero zombie leases, clean teardown).
 //! 6. Bounded Diagnostic Probe (Python accelerator environment probe with strict timeout).
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use custos_core::contracts::compute::WorkloadAdmissionPort;
+use custos_contracts::{
+    ComputeDeviceRef, ComputeWorkloadKind, DeviceKind, DomainError, WorkloadAdmissionRequest,
+    WorkloadAdmissionVerdict, WorkloadLeaseStatus,
+};
+use custos_engine::compute::WorkloadAdmissionCoordinator;
+use custos_engine::contracts::compute::WorkloadAdmissionPort;
+use custos_engine::notebook::PythonKernelCoordinator;
 use custos_workbench_research::{
     ExecuteCellParams, NotebookDriverPort, NotebookWorkerResponse, NotebookWorkerSession,
 };
-use custos_domain::{
-    ComputeDeviceRef, ComputeWorkloadKind, DeviceKind, DomainError,
-    WorkloadAdmissionRequest, WorkloadAdmissionVerdict, WorkloadLeaseStatus,
-};
-use custos_runtime::compute::WorkloadAdmissionCoordinator;
-use custos_runtime::notebook::PythonKernelCoordinator;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock Notebook Driver for Deterministic Kernel Testing

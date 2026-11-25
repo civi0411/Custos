@@ -9,35 +9,19 @@
 //! 6. Full Provenance Lineage: Multi-generation attempt chain tracked in SQLite store with parent checkpoint linkages.
 //! 7. Crash Handoff & Recovery: Crashed attempt settled honestly and continuation child dispatched seamlessly.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
 
-use custos_adapters::compute::checkpoint_store::CasCheckpointStoreAdapter;
-use custos_core::contracts::checkpoint_store::{CheckpointStorePort, PromotionOutcome};
-use custos_domain::{
+use custos_contracts::{
     AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, ExecState,
     ExecutionAttempt, ResourceState, TrainingCheckpointManifest,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::compute::relay::CheckpointRelayCoordinator;
+use custos_engine::compute::relay::CheckpointRelayCoordinator;
+use custos_engine::contracts::checkpoint_store::{CheckpointStorePort, PromotionOutcome};
+use custos_integrations::compute::checkpoint_store::CasCheckpointStoreAdapter;
+use custos_storage::SqliteTaskStore;
 
 fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();

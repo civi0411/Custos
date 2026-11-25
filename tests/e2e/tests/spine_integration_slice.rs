@@ -5,35 +5,19 @@
 //! 2. `gate3_idempotency_conflict`: Strict rejection of duplicate idempotency keys with DomainError::Conflict.
 //! 3. `crash_reconciliation_and_cancellation`: InFlight to Uncertain startup recovery and graceful run cancellation.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use async_trait::async_trait;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_core::contracts::storage::{EffectLedgerPort, OutboxPort, OutboxStatus, RunPort};
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_domain::{
+use custos_contracts::{
     new_id, ActionIntent, Assurance, ContextPack, ContractEvidence, DomainError, EffectAttempt,
     EffectStatus, EvidenceKind, RiskLevel, RunHandle, RunStatus, StartRunCommand, Task,
     TaskContract, TaskStatus, WorkerRun,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::workflow::TaskRuntime;
+use custos_engine::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_engine::contracts::storage::{EffectLedgerPort, OutboxPort, OutboxStatus, RunPort};
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::workflow::TaskRuntime;
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 struct TestGovernedHarness;

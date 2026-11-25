@@ -4,31 +4,15 @@
 //! 1. `start_and_checkpoint_lifecycle`: Task creation, start_run, Running transition, and integrity checkpointing.
 //! 2. `graceful_cancellation_lifecycle`: Cancellation request, zero uncertain side effects, and terminal cancellation transition.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_provider::cloud::fake::FakeProvider;
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_domain::{
+use custos_contracts::{
     ContractEvidence, EvidenceKind, RunHandle, RunStatus, StartRunCommand, Task, TaskContract,
     TaskStatus,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::workflow::TaskRuntime;
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::workflow::TaskRuntime;
+use custos_integrations::cloud::fake::FakeProvider;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 async fn setup_spine_fixture() -> (Arc<dyn KernelPort>, Arc<TaskRuntime>, Task) {
@@ -134,7 +118,7 @@ mod graceful_cancellation_lifecycle {
 // =========================================================================
 mod atomic_claim_and_fencing {
     use super::*;
-    use custos_domain::DomainError;
+    use custos_contracts::DomainError;
 
     #[tokio::test]
     async fn test_gate_a_double_dispatch_fencing() {
@@ -195,7 +179,7 @@ mod atomic_claim_and_fencing {
 // =========================================================================
 mod mode_negotiation_and_recording {
     use super::*;
-    use custos_core::contracts::storage::RunPort;
+    use custos_engine::contracts::storage::RunPort;
 
     #[tokio::test]
     async fn test_gate_a_mode_negotiation_recording() {
@@ -313,8 +297,8 @@ mod daemon_api_spine_roundtrip {
 // =========================================================================
 mod workspace_lease_isolation_in_start_run {
     use super::*;
-    use custos_core::contracts::RunPort;
-    use custos_runtime::workspace::WorkspaceLeaseManager;
+    use custos_engine::contracts::RunPort;
+    use custos_engine::workspace::WorkspaceLeaseManager;
 
     #[tokio::test]
     async fn test_gate_c_workspace_lease_allocation_and_release() {
@@ -324,7 +308,7 @@ mod workspace_lease_isolation_in_start_run {
 
         let temp_dir = std::env::temp_dir().join(format!(
             "custos_lease_test_{}",
-            custos_domain::new_id("test")
+            custos_contracts::new_id("test")
         ));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 

@@ -6,31 +6,15 @@
 //! - `local_api_rpc_transport`: Daemon local API dispatch and strongly-typed client integration.
 //! - `comparative_benchmarks`: OI vs Baseline benchmark suite across canonical pack fixtures.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_runtime::bridge::BridgeService;
-use custos_core::TaskService;
+use custos_contracts::oi::{DecisionSnapshot, ExecutionTopology};
 use custos_daemon::custos_local_api::ExplainPlanRequest;
 use custos_daemon::LocalApiDispatcher;
+use custos_engine::bridge::BridgeService;
+use custos_engine::oi::ExplainService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use custos_sdk::local_api::LocalApiClient;
-use custos_domain::oi::{DecisionSnapshot, ExecutionTopology};
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::oi::ExplainService;
-use custos_runtime::session::SessionManager;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,7 +30,9 @@ mod domain_pack_specifications {
         engineering_refactor_fixture, engineering_repair_fixture,
     };
     use custos_workbench_coding::profile::engineering_profile;
-    use custos_workbench_research::fixtures::{research_survey_fixture, research_synthesis_fixture};
+    use custos_workbench_research::fixtures::{
+        research_survey_fixture, research_synthesis_fixture,
+    };
     use custos_workbench_research::profile::research_profile;
 
     #[test]
@@ -220,7 +206,7 @@ mod local_api_rpc_transport {
 // ─────────────────────────────────────────────────────────────────────────────
 mod comparative_benchmarks {
     use super::*;
-    use custos_runtime::oi::benchmark::OiBenchmarkRunner;
+    use custos_engine::oi::benchmark::OiBenchmarkRunner;
 
     #[test]
     fn test_benchmark_suite_across_all_domain_packs() {

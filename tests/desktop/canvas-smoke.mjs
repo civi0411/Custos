@@ -748,18 +748,25 @@ test('workbench contribution registry filters active modes and isolates uninstal
   assert.equal(canonicalWorkbenchId('research'), 'research');
   assert.equal(canonicalWorkbenchId('quant'), 'quant');
 
-  // 2. Base installation preset: only builtins (assistant & coding) active
+  // 2. Base installation preset: ONLY Assistant/Copilot is built-in; Coding, Research, Quant require install
   const baseContributions = getActiveContributions(['assistant']);
   const baseIds = baseContributions.map(c => c.canonicalId);
   assert.ok(baseIds.includes('assistant'));
-  assert.ok(baseIds.includes('coding')); // built-in developer mode
+  assert.equal(baseIds.includes('coding'), false);
   assert.equal(baseIds.includes('research'), false);
   assert.equal(baseIds.includes('quant'), false);
 
-  // 3. Selective install: adding quant activates quant without research
+  // 3. Selective install: adding coding or quant activates only the installed workbench
+  const codingContributions = getActiveContributions(['assistant', 'coding']);
+  const codingIds = codingContributions.map(c => c.canonicalId);
+  assert.ok(codingIds.includes('coding'));
+  assert.equal(codingIds.includes('research'), false);
+  assert.equal(codingIds.includes('quant'), false);
+
   const quantContributions = getActiveContributions(['assistant', 'quant']);
   const quantIds = quantContributions.map(c => c.canonicalId);
   assert.ok(quantIds.includes('quant'));
+  assert.equal(quantIds.includes('coding'), false);
   assert.equal(quantIds.includes('research'), false);
 
   // 4. Tab domain isolation mapping

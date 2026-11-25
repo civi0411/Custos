@@ -5,25 +5,9 @@
 //! - `d0_planner_baseline_strategy`: D0 rule-based baseline planning with sub-50ms latency overhead.
 //! - `durable_decision_ledger`: Appending and querying DecisionRecords from SQLite ledger.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_domain::task::{ContractEvidence, EvidenceKind, TaskContract};
-use custos_persistence::SqliteTaskStore;
+use custos_contracts::task::{ContractEvidence, EvidenceKind, TaskContract};
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 fn make_engineering_contract() -> TaskContract {
@@ -50,8 +34,8 @@ fn make_engineering_contract() -> TaskContract {
 // ─────────────────────────────────────────────────────────────────────────────
 mod reality_snapshot_extraction {
     use super::*;
-    use custos_runtime::oi::DecisionSnapshotExtractor;
-    use custos_domain::TaskStatus;
+    use custos_contracts::TaskStatus;
+    use custos_engine::oi::DecisionSnapshotExtractor;
 
     #[tokio::test]
     async fn test_extract_snapshot_from_contract_and_budget() {
@@ -83,8 +67,8 @@ mod reality_snapshot_extraction {
 // Theme 2: D0 Planner Baseline Strategy (RFC 003 §2B, §3)
 // ─────────────────────────────────────────────────────────────────────────────
 mod d0_planner_baseline_strategy {
-    use custos_domain::oi::{DecisionSnapshot, ExecutionTopology};
-    use custos_runtime::oi::DumbOiPlanner;
+    use custos_contracts::oi::{DecisionSnapshot, ExecutionTopology};
+    use custos_engine::oi::DumbOiPlanner;
 
     #[test]
     fn test_d0_planner_proposes_baseline_with_minimal_overhead() {
@@ -113,10 +97,10 @@ mod d0_planner_baseline_strategy {
 // ─────────────────────────────────────────────────────────────────────────────
 mod durable_decision_ledger {
     use super::*;
-    use custos_core::contracts::storage::DecisionPort;
-    use custos_domain::oi::{
+    use custos_contracts::oi::{
         DecisionRecord, DecisionSnapshot, ExecutionTopology, StrategyProposal,
     };
+    use custos_engine::contracts::storage::DecisionPort;
 
     #[tokio::test]
     async fn test_decision_record_ledger_persistence_and_auditability() {

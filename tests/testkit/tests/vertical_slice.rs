@@ -2,23 +2,18 @@
 //! Kernel -> Context Compiler -> Model -> Authority -> Sandbox -> Outbox -> Evidence -> Kernel
 //! plus the negative paths that Custos.md's invariants demand.
 
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
-extern crate custos_engine as custos_runtime;
-extern crate custos_integrations as custos_provider;
-
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_core::contracts::{
-    KernelPort, MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxPort,
-};
-use custos_core::evidence::EvidenceBundle;
-use custos_domain::{
+use custos_contracts::{
     new_id, ActionIntent, ContractEvidence, EvidenceKind, FactProposal, MemoryScope,
     ProposalStatus, RecallQuery, RiskLevel, StartRunCommand, TaskContract, TaskStatus,
 };
-use custos_provider::request::ProviderRequest;
-use custos_provider::ModelProvider;
-use custos_runtime::context::{CompileContextRequest, ContextCompiler};
+use custos_engine::context::{CompileContextRequest, ContextCompiler};
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::contracts::{
+    KernelPort, MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxPort,
+};
+use custos_engine::evidence::EvidenceBundle;
+use custos_integrations::request::ProviderRequest;
+use custos_integrations::ModelProvider;
 use custos_testkit::Harness;
 
 fn exec_intent(task_id: &str, risk: RiskLevel) -> ActionIntent {
@@ -418,7 +413,7 @@ async fn test_workflow_port_lifecycle() {
     let cmd = StartRunCommand::new(&task.id, "worker_1");
     let handle = h.workflow.start_run(cmd).await.unwrap();
     assert_eq!(handle.task_id, task.id);
-    assert_eq!(handle.status, custos_domain::RunStatus::Active);
+    assert_eq!(handle.status, custos_contracts::RunStatus::Active);
 
     // 2. checkpoint
     let cp = h.workflow.checkpoint(&handle.run_id).await.unwrap();

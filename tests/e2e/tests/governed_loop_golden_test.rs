@@ -8,38 +8,22 @@
 //! 5. Bounded iteration exhaustion: Endless tool-calling without clean completion returns DomainError::BudgetExceeded with 'status: limited', never returns success.
 //! 6. Cancellation responsiveness: Mid-loop cancellation halts execution promptly with DomainError::Validation, and steering/cancellation handles are pruned.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use async_trait::async_trait;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_core::contracts::harness::AgentRuntimePort;
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_daemon::runtime::DaemonGovernedToolExecutor;
-use custos_domain::{
+use custos_contracts::inference::ToolCall;
+use custos_contracts::inference::{ModelResponse, ProviderRequest};
+use custos_contracts::ModelPort;
+use custos_contracts::{
     ActionLifecycleState, ContextPack, ContractEvidence, DomainError, EffectStatus, EvidenceKind,
     ReceiptStatus, StartRunCommand, TaskContract, WorkerRun,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_domain::inference::ToolCall;
-use custos_domain::inference::{ModelResponse, ProviderRequest};
-use custos_domain::ModelPort;
-use custos_runtime::agent::runtime_port::GovernedAgentRuntime;
-use custos_runtime::workflow::TaskRuntime;
+use custos_daemon::runtime::DaemonGovernedToolExecutor;
+use custos_engine::agent::runtime_port::GovernedAgentRuntime;
+use custos_engine::contracts::harness::AgentRuntimePort;
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::workflow::TaskRuntime;
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_storage::SqliteTaskStore;
 use std::sync::{Arc, Mutex};
 use tempfile::tempdir;
 
@@ -196,10 +180,10 @@ async fn test_g07_composed_path_admitted_tool_to_real_disk_and_single_receipt() 
     assert_eq!(content, "port=8080\nenv=production");
 
     // 3. Assert Outbox ledger: exactly 1 entry recorded, status is Receipted with valid receipt
-    let entries = custos_core::contracts::storage::OutboxPort::list_by_task_and_status(
+    let entries = custos_engine::contracts::storage::OutboxPort::list_by_task_and_status(
         store.outbox(),
         &task.id,
-        custos_core::contracts::storage::OutboxStatus::Receipted,
+        custos_engine::contracts::storage::OutboxStatus::Receipted,
     )
     .await
     .expect("list receipted outbox entries");
@@ -307,10 +291,10 @@ async fn test_g07_prevention_of_duplicate_execution_in_task_runtime() {
     assert_eq!(content, "{\"version\": \"1.0.0\"}");
 
     // Verify outbox contains exactly 1 receipted entry (no duplicate execution by TaskRuntime)
-    let entries = custos_core::contracts::storage::OutboxPort::list_by_task_and_status(
+    let entries = custos_engine::contracts::storage::OutboxPort::list_by_task_and_status(
         store.outbox(),
         &task.id,
-        custos_core::contracts::storage::OutboxStatus::Receipted,
+        custos_engine::contracts::storage::OutboxStatus::Receipted,
     )
     .await
     .expect("list outbox entries");
@@ -367,10 +351,10 @@ async fn test_g07_security_kernel_critical_risk_rejection_no_disk_mutation() {
     );
 
     // Verify zero receipted or dispatching outbox entries for this task
-    let entries = custos_core::contracts::storage::OutboxPort::list_by_task_and_status(
+    let entries = custos_engine::contracts::storage::OutboxPort::list_by_task_and_status(
         store.outbox(),
         "task_critical_check",
-        custos_core::contracts::storage::OutboxStatus::Receipted,
+        custos_engine::contracts::storage::OutboxStatus::Receipted,
     )
     .await
     .expect("list outbox entries");

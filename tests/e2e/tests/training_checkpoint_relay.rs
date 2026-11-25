@@ -8,23 +8,7 @@
 //! 5. Tampering/corruption with checkpoint files fails closed with IntegrityCheckFailed.
 //! 6. Three-tier progress triplet guarantees (observed >= local >= protected).
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_domain::{
+use custos_contracts::{
     digest, CheckpointCommitStatus, DomainError, ProgressTriplet, ProtectionPolicy,
     ProtectionStatus,
 };
@@ -306,7 +290,7 @@ fn test_progress_triplet_reporting_and_policy() {
         max_inflight_uploads: 2,
     };
 
-    let status = custos_domain::protection_status(&progress, &policy, 60, 1);
+    let status = custos_contracts::protection_status(&progress, &policy, 60, 1);
     assert_eq!(status, ProtectionStatus::Protected);
 
     // If observed step jumps to 960 (960 - 850 = 110 > 100) -> AtRisk
@@ -316,13 +300,13 @@ fn test_progress_triplet_reporting_and_policy() {
         protected: Some(850),
     };
     assert_eq!(
-        custos_domain::protection_status(&risky_progress, &policy, 60, 1),
+        custos_contracts::protection_status(&risky_progress, &policy, 60, 1),
         ProtectionStatus::AtRisk
     );
 
     // If inflight uploads exceed max (e.g. 3 > 2) -> Degraded
     assert_eq!(
-        custos_domain::protection_status(&progress, &policy, 60, 3),
+        custos_contracts::protection_status(&progress, &policy, 60, 3),
         ProtectionStatus::Degraded
     );
 }

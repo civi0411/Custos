@@ -1,10 +1,10 @@
-use custos_core::authority::{AuthorityEngine, PathSandbox};
-use custos_core::contracts::sandbox::SandboxPort;
-use custos_core::contracts::tool_gate::{ExecutionResult, ToolGate};
 use async_trait::async_trait;
-use custos_domain::{
+use custos_contracts::{
     digest, new_id, Action, DomainError, ExecutionReceipt, ReceiptStatus, VerificationClaim,
 };
+use custos_engine::authority::{AuthorityEngine, PathSandbox};
+use custos_engine::contracts::sandbox::SandboxPort;
+use custos_engine::contracts::tool_gate::{ExecutionResult, ToolGate};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -146,7 +146,7 @@ impl DeterministicGate {
                     error_message: Some(format!("File not found: {}", resolved_path.display())),
                     duration_ms: Some(1),
                     executed_at: chrono::Utc::now(),
-                    assurance: custos_domain::Assurance::CustosMediated,
+                    assurance: custos_contracts::Assurance::CustosMediated,
                 };
 
                 return Ok(ExecutionResult {
@@ -181,7 +181,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {
@@ -251,7 +251,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {
@@ -320,7 +320,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {

@@ -1,6 +1,6 @@
 use super::*;
-use custos_core::contracts::ToolGate;
-use custos_domain::{Action, DomainError, ReceiptStatus, RiskLevel};
+use custos_contracts::{Action, DomainError, ReceiptStatus, RiskLevel};
+use custos_engine::contracts::ToolGate;
 use std::path::PathBuf;
 
 #[tokio::test]

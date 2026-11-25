@@ -6,29 +6,13 @@
 //! -> Context Compiler -> FakeProvider -> Citation Verifier -> Artifact Store
 //! -> Evidence Engine -> Crash Recovery.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_provider::cloud::fake::FakeProvider;
-use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
-use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
-use custos_persistence::{ArtifactStore, FsArtifactStore, SqliteTaskStore};
-use custos_provider::{ModelProvider, ProviderRequest};
-use custos_runtime::context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
+use custos_contracts::{ContinuationPacket, Span, SpanState, TaskStatus};
+use custos_engine::context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
+use custos_engine::evidence::{EvidenceBundle, EvidencePipeline};
+use custos_engine::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
+use custos_integrations::cloud::fake::FakeProvider;
+use custos_integrations::{ModelProvider, ProviderRequest};
+use custos_storage::{ArtifactStore, FsArtifactStore, SqliteTaskStore};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -209,7 +193,7 @@ pub struct Task;
         // Step 8: Evidence Engine verifies citations
         // -------------------------------------------------------------
         let source_acq = std::sync::Arc::new(
-            custos_adapters::documents::SourceFetchAdapter::with_base_dir(&fixture_repo),
+            custos_integrations::documents::SourceFetchAdapter::with_base_dir(&fixture_repo),
         );
         let pipeline = EvidencePipeline::with_source_acquisition(source_acq);
         let evidence_bundle = EvidenceBundle::new(

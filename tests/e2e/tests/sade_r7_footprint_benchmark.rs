@@ -5,31 +5,15 @@
 //! 2. Disk Artifact Footprint: Source, package archives, and manifests.
 //! 3. Admission Latency: Interactive lane TTFT overhead under unloaded vs saturated workloads.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use std::time::Instant;
 
-use custos_core::contracts::compute::WorkloadAdmissionPort;
-use custos_core::contracts::pack::DomainPack;
-use custos_domain::{
-    ComputeDeviceRef, ComputeWorkloadKind, ExecutionLane,
-    WorkloadAdmissionRequest, WorkloadAdmissionVerdict,
+use custos_contracts::{
+    ComputeDeviceRef, ComputeWorkloadKind, ExecutionLane, WorkloadAdmissionRequest,
+    WorkloadAdmissionVerdict,
 };
-use custos_runtime::compute::WorkloadAdmissionCoordinator;
+use custos_engine::compute::WorkloadAdmissionCoordinator;
+use custos_engine::contracts::compute::WorkloadAdmissionPort;
+use custos_engine::contracts::pack::DomainPack;
 use custos_workbench_assistant::AssistantPack;
 use custos_workbench_coding::EngineeringPack;
 use custos_workbench_quant::pack::QuantPack;
@@ -192,5 +176,7 @@ async fn test_sade_r7_empirical_footprint_and_latency() {
         "Admission scheduler overhead must be < 100µs (non-blocking for TTFT)"
     );
 
-    println!("\n================================================================================\n");
+    println!(
+        "\n================================================================================\n"
+    );
 }

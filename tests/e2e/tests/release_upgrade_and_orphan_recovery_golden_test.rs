@@ -32,31 +32,17 @@
 //!      rather than dropping database records.
 //!    - Dirty workspace protection prevents destructive archive/deletion without explicit force consent.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use chrono::Utc;
-use custos_adapters::workspace::LocalWorkspaceProvider;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
-use custos_domain::session::SessionId;
-use custos_domain::task::run::{DispatchClaim, LaunchAttempt, LaunchStatus, Run, WorkerRun};
-use custos_domain::workspace::{ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus};
-use custos_domain::{DomainError, RunStatus, TaskStatus};
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::workspace::WorkspaceCoordinator;
+use custos_contracts::session::SessionId;
+use custos_contracts::task::run::{DispatchClaim, LaunchAttempt, LaunchStatus, Run, WorkerRun};
+use custos_contracts::workspace::{
+    ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus,
+};
+use custos_contracts::{DomainError, RunStatus, TaskStatus};
+use custos_engine::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+use custos_engine::workspace::WorkspaceCoordinator;
+use custos_integrations::workspace::LocalWorkspaceProvider;
+use custos_storage::SqliteTaskStore;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -92,13 +78,10 @@ fn test_g13_legacy_database_migration_preserves_all_historical_data() {
 
         // Execute early schemas
         let schema_01 = include_str!("../../../platform/storage/migrations/0001_core.sql");
-        let schema_02 =
-            include_str!("../../../platform/storage/migrations/0002_runtime.sql");
-        let schema_03 =
-            include_str!("../../../platform/storage/migrations/0003_authority.sql");
-        let schema_06 = include_str!(
-            "../../../platform/storage/migrations/0006_session_and_bridge.sql"
-        );
+        let schema_02 = include_str!("../../../platform/storage/migrations/0002_runtime.sql");
+        let schema_03 = include_str!("../../../platform/storage/migrations/0003_authority.sql");
+        let schema_06 =
+            include_str!("../../../platform/storage/migrations/0006_session_and_bridge.sql");
 
         conn.execute_batch(schema_01).expect("schema 01");
         conn.execute_batch(schema_02).expect("schema 02");
@@ -162,7 +145,8 @@ fn test_g13_legacy_database_migration_preserves_all_historical_data() {
     );
 
     // 4. Verify modern schema extensions are functional without data loss
-    let _research_repo = custos_workbench_research::ResearchRepository::from_raw(store.writer_arc());
+    let _research_repo =
+        custos_workbench_research::ResearchRepository::from_raw(store.writer_arc());
     let notebook_cells_count: i64 = store
         .db()
         .lock()
@@ -254,15 +238,15 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         .expect("insert outbox entry");
 
     // D. In-flight experiment attempt in 'running' state
-    let mut attempt = custos_domain::evidence::ExecutionAttempt::new(
+    let mut attempt = custos_contracts::evidence::ExecutionAttempt::new(
         "exp_recovery",
         "recipe_train",
-        custos_domain::compute::ComputeBackendKind::RunPod,
+        custos_contracts::compute::ComputeBackendKind::RunPod,
         None,
     );
     attempt.id = "attempt_crash_001".into();
-    attempt.exec_state = custos_domain::evidence::ExecState::Running;
-    attempt.resource_state = custos_domain::evidence::ResourceState::Held;
+    attempt.exec_state = custos_contracts::evidence::ExecState::Running;
+    attempt.resource_state = custos_contracts::evidence::ResourceState::Held;
     store
         .experiment_attempts()
         .save_attempt(&attempt)
@@ -292,7 +276,7 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         node_id: None,
         assignee: "worker_01".into(),
         depth: 1,
-        status: custos_domain::task::run::ClaimStatus::Pending,
+        status: custos_contracts::task::run::ClaimStatus::Pending,
         claimed_at: now,
         dispatched_at: None,
         released_at: None,
@@ -364,7 +348,7 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         .expect("attempt exists");
     assert_eq!(
         reconciled_att.exec_state,
-        custos_domain::evidence::ExecState::Uncertain
+        custos_contracts::evidence::ExecState::Uncertain
     );
 
     // E. Prepared launch attempt transitioned to 'unknown'
@@ -388,7 +372,7 @@ async fn test_g13_crash_startup_reconciliation_fences_orphans_without_destructiv
         .expect("claim exists");
     assert_eq!(
         reconciled_claim.status,
-        custos_domain::task::run::ClaimStatus::Released
+        custos_contracts::task::run::ClaimStatus::Released
     );
     assert!(reconciled_claim.released_at.is_some());
 }

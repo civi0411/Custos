@@ -9,32 +9,16 @@
 //! 6. Direct Teardown Safety: Calling release_compute on running job guarantees process termination before pod deletion.
 //! 7. Artifact Collection & CAS Verification: Remote outputs downloaded and verified via SHA-256 digests.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use std::sync::Arc;
 use tempfile::tempdir;
 
-use custos_adapters::compute::rented_gpu::RentedGpuTargetAdapter;
-use custos_domain::{
+use custos_contracts::{
     ComputeBackendKind, ComputeDeviceRef, DomainError, ExecState, ExecutionAttempt,
     ProgressTriplet, ResourceState,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::compute::{RemoteExecutionCoordinator, WorkloadAdmissionCoordinator};
+use custos_engine::compute::{RemoteExecutionCoordinator, WorkloadAdmissionCoordinator};
+use custos_integrations::compute::rented_gpu::RentedGpuTargetAdapter;
+use custos_storage::SqliteTaskStore;
 
 #[tokio::test]
 async fn test_g_remote_01_preflight_and_capability_gate() {

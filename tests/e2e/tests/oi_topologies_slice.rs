@@ -6,30 +6,14 @@
 //! - `write_set_isolation_invariants`: Gate 5 compile-time rejection of concurrent overlapping write-sets.
 //! - `t6_repair_loop_topology`: T6 Bounded Repair Loop with max iteration termination.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme 1: T3 Read Fan-Out Topology
 // ─────────────────────────────────────────────────────────────────────────────
 mod t3_read_fan_out_topology {
-    use custos_runtime::oi::compiler::PlanCompiler;
-    use custos_runtime::oi::join_policy::JoinEvaluation;
-    use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkPacket};
-    use custos_runtime::oi::topologies::T3ReadFanOutCoordinator;
+    use custos_contracts::oi::{ExecutionTopology, StrategyProposal, WorkPacket};
+    use custos_engine::oi::compiler::PlanCompiler;
+    use custos_engine::oi::join_policy::JoinEvaluation;
+    use custos_engine::oi::topologies::T3ReadFanOutCoordinator;
 
     #[tokio::test]
     async fn test_coverage_threshold_fan_out_and_join() {
@@ -63,11 +47,11 @@ mod t3_read_fan_out_topology {
 // Theme 2: T4 Worktree Integrator Topology (WorkspaceLease Isolation)
 // ─────────────────────────────────────────────────────────────────────────────
 mod t4_worktree_integrator_topology {
-    use custos_runtime::oi::compiler::PlanCompiler;
-    use custos_runtime::oi::join_policy::JoinEvaluation;
-    use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
-    use custos_runtime::oi::topologies::T4WorktreeCoordinator;
-    use custos_runtime::workspace::lease::WorkspaceLeaseManager;
+    use custos_contracts::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
+    use custos_engine::oi::compiler::PlanCompiler;
+    use custos_engine::oi::join_policy::JoinEvaluation;
+    use custos_engine::oi::topologies::T4WorktreeCoordinator;
+    use custos_engine::workspace::lease::WorkspaceLeaseManager;
     use std::fs;
 
     #[tokio::test]
@@ -130,8 +114,8 @@ mod t4_worktree_integrator_topology {
 // Theme 3: Write-Set Conflict Invariants (Gate 5 Invariant Enforcement)
 // ─────────────────────────────────────────────────────────────────────────────
 mod write_set_isolation_invariants {
-    use custos_runtime::oi::join_policy::WriteSetConflictChecker;
-    use custos_domain::workflow::RevisionNode;
+    use custos_contracts::workflow::RevisionNode;
+    use custos_engine::oi::join_policy::WriteSetConflictChecker;
 
     #[test]
     fn test_overlapping_concurrent_writes_blocked_without_leases() {
@@ -170,9 +154,9 @@ mod write_set_isolation_invariants {
 // Theme 4: T6 Bounded Repair Loop Topology
 // ─────────────────────────────────────────────────────────────────────────────
 mod t6_repair_loop_topology {
-    use custos_runtime::oi::join_policy::JoinEvaluation;
-    use custos_domain::oi::WorkerResult;
-    use custos_runtime::oi::topologies::T6RepairLoopCoordinator;
+    use custos_contracts::oi::WorkerResult;
+    use custos_engine::oi::join_policy::JoinEvaluation;
+    use custos_engine::oi::topologies::T6RepairLoopCoordinator;
 
     #[test]
     fn test_bounded_iterations_and_retry_exhaustion() {
@@ -211,9 +195,9 @@ mod t6_repair_loop_topology {
 // Theme 5: T5 Lead Worker DAG Topology
 // ─────────────────────────────────────────────────────────────────────────────
 mod t5_lead_worker_topology {
-    use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
-    use custos_runtime::oi::compiler::PlanCompiler;
-    use custos_runtime::oi::topologies::T5LeadWorkerCoordinator;
+    use custos_contracts::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
+    use custos_engine::oi::compiler::PlanCompiler;
+    use custos_engine::oi::topologies::T5LeadWorkerCoordinator;
 
     #[test]
     fn test_t5_lead_worker_dag_decomposition_and_synthesis() {
@@ -236,10 +220,22 @@ mod t5_lead_worker_topology {
 
         // 3. Worker Execution Verification
         let w_results = vec![
-            WorkerResult::success(&decomp.ordered[0].node.node_id, "Plan decomposed into sub-tasks"),
-            WorkerResult::success(&decomp.ordered[1].node.node_id, "Sub-worker 1 implemented component A"),
-            WorkerResult::success(&decomp.ordered[2].node.node_id, "Sub-worker 2 implemented component B"),
-            WorkerResult::success(&decomp.ordered[3].node.node_id, "Integrated and verified components"),
+            WorkerResult::success(
+                &decomp.ordered[0].node.node_id,
+                "Plan decomposed into sub-tasks",
+            ),
+            WorkerResult::success(
+                &decomp.ordered[1].node.node_id,
+                "Sub-worker 1 implemented component A",
+            ),
+            WorkerResult::success(
+                &decomp.ordered[2].node.node_id,
+                "Sub-worker 2 implemented component B",
+            ),
+            WorkerResult::success(
+                &decomp.ordered[3].node.node_id,
+                "Integrated and verified components",
+            ),
         ];
         T5LeadWorkerCoordinator::verify_dag_execution(&decomp.ordered, &w_results)
             .expect("all dependencies satisfied");
