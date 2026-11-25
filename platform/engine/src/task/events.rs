@@ -2,4 +2,4 @@
 //!
 //! Re-exported from custos_contracts::task::events.
 
-pub use custos_domain::task::events::*;
+pub use custos_contracts::task::events::*;

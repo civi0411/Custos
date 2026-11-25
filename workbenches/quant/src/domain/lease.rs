@@ -3,8 +3,8 @@
 //! Provides distributed lease ownership, monotonic deadline enforcement,
 //! and durable command state machines to prevent multi-worker split-brain executions.
 
-use custos_domain::DomainError;
-use custos_domain::new_id;
+use custos_contracts::new_id;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

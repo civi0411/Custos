@@ -1,6 +1,6 @@
 //! Bounded ephemeral run projections. Durable outcomes remain in RunPort.
-use custos_core::contracts::harness::RunObserver;
-use custos_domain::{
+use custos_contracts::contracts::harness::RunObserver;
+use custos_contracts::{
     DomainError, LiveRunEvent, LiveRunReplay, LiveRunSnapshot, Run, StartRunCommand,
 };
 use std::{

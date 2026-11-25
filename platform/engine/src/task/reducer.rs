@@ -2,7 +2,7 @@
 //!
 //! Applies immutable events to state in a deterministic manner.
 
-use custos_domain::{DomainError, Task, TaskStatus};
+use custos_contracts::{DomainError, Task, TaskStatus};
 
 use crate::events::{
     TaskAdvanced, TaskBlocked, TaskCancelled, TaskCompleted, TaskCreated, TaskEvent,

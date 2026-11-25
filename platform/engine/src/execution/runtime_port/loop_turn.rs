@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use custos_core::contracts::harness::{
+use custos_contracts::contracts::harness::{
     AgentRuntimePort, CostVisibility, HarnessProfile, ToolMediationLevel, WorktreeOwnership,
 };
-use custos_domain::{
+use custos_contracts::inference::ProviderRequest;
+use custos_contracts::{
     Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, WorkerRun,
 };
-use custos_contracts::inference::ProviderRequest;
 
 use super::tool::{classify_tool_risk, extract_target, InvocationContext, ToolResult};
 use super::writer::{truncate_to_char_boundary, LimitedWriter};
@@ -93,11 +93,12 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         }
 
         // Fast path: if no tool executor is configured, preserve single-turn intent extraction
+        let active_tools = self.resolve_tools();
         let executor = match &self.tool_executor {
-            Some(exec) if !self.available_tools.is_empty() => exec.clone(),
+            Some(exec) if !active_tools.is_empty() => exec.clone(),
             _ => {
                 let request = ProviderRequest {
-                    request_id: custos_domain::new_id("req"),
+                    request_id: custos_contracts::new_id("req"),
                     task_id: worker_run.task_id.clone(),
                     span_num: worker_run.attempt_id,
                     prompt: prompt_content,
@@ -106,10 +107,10 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                     reasoning_effort: None,
                     temperature: Some(0.2),
                     max_tokens: Some(4096),
-                    tools: if self.available_tools.is_empty() {
+                    tools: if active_tools.is_empty() {
                         None
                     } else {
-                        Some(self.available_tools.clone())
+                        Some(active_tools.clone())
                     },
                 };
                 let response = self.provider.generate(&request).await?;
@@ -122,7 +123,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                         Action::new(call.call_id, call.name, target, call.arguments, risk);
                     intent.task_id = Some(worker_run.task_id.clone());
                     intent.lifecycle_state = ActionLifecycleState::Intent;
-                    intent.assurance = custos_domain::Assurance::CustosMediated;
+                    intent.assurance = custos_contracts::Assurance::CustosMediated;
                     action_intents.push(intent);
                 }
                 return Ok(action_intents);
@@ -154,7 +155,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
             }
 
             let request = ProviderRequest {
-                request_id: custos_domain::new_id("req"),
+                request_id: custos_contracts::new_id("req"),
                 task_id: worker_run.task_id.clone(),
                 span_num: worker_run.attempt_id.saturating_add(iteration as u32),
                 prompt: current_prompt,
@@ -163,7 +164,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                 reasoning_effort: None,
                 temperature: Some(0.2),
                 max_tokens: Some(4096),
-                tools: Some(self.available_tools.clone()),
+                tools: Some(active_tools.clone()),
             };
 
             let response = self.provider.generate(&request).await?;
@@ -202,7 +203,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                 );
                 intent.task_id = Some(worker_run.task_id.clone());
                 intent.lifecycle_state = ActionLifecycleState::Intent;
-                intent.assurance = custos_domain::Assurance::CustosMediated;
+                intent.assurance = custos_contracts::Assurance::CustosMediated;
 
                 conversation_history.push_str(&format!(
                     "\nTool Request [{}] {}: {}\n",

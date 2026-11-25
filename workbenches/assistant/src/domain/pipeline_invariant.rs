@@ -1,5 +1,5 @@
-use custos_domain::pipeline::DataInvariant;
-use custos_domain::DomainError;
+use custos_contracts::pipeline::DataInvariant;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Assistant Workbench Invariant: Guarantees effectful actions have explicit permits before dispatch.
@@ -50,9 +50,11 @@ mod tests {
 
     #[test]
     fn test_governed_outbox_invariant_validation() {
-        assert!(GovernedOutboxInvariant::new("act_1", "fs.read", None::<String>, true)
-            .verify()
-            .is_ok());
+        assert!(
+            GovernedOutboxInvariant::new("act_1", "fs.read", None::<String>, true)
+                .verify()
+                .is_ok()
+        );
         assert!(
             GovernedOutboxInvariant::new("act_2", "fs.write", Some("permit_99"), false)
                 .verify()
@@ -65,4 +67,3 @@ mod tests {
         );
     }
 }
-

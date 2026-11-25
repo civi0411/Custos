@@ -2,7 +2,7 @@
 //!
 //! Enforces completion gate checks and evidence verification before a task succeeds.
 
-use custos_domain::{
+use custos_contracts::{
     DomainError, EvidenceKind, EvidenceStatus, Task, TaskStatus, VerificationClaim,
 };
 
@@ -47,7 +47,9 @@ impl CompletionGate {
                 )));
             }
             if claim.id.trim().is_empty() {
-                return Err(DomainError::InvariantViolation("Claim ID cannot be empty".into()));
+                return Err(DomainError::InvariantViolation(
+                    "Claim ID cannot be empty".into(),
+                ));
             }
             if claim.verifier_id.trim().is_empty() {
                 return Err(DomainError::InvariantViolation(format!(
@@ -106,7 +108,10 @@ impl CompletionGate {
                         // Criterion matching invariant: if criteria are defined, claim must match a defined criterion
                         if let Some(ref rev) = task.active_contract_revision {
                             if !rev.criteria.is_empty()
-                                && !rev.criteria.iter().any(|c| c.criterion_id == claim.criterion_id)
+                                && !rev
+                                    .criteria
+                                    .iter()
+                                    .any(|c| c.criterion_id == claim.criterion_id)
                             {
                                 return false;
                             }
@@ -114,7 +119,6 @@ impl CompletionGate {
 
                         Self::is_verifier_compatible_with_kind(&req.kind, &claim.verifier_id)
                     });
-
 
                     if !satisfied {
                         missing.push(format!("{:?}", req.kind));
@@ -139,12 +143,13 @@ impl CompletionGate {
         match kind {
             EvidenceKind::FileAnchor => matches!(
                 verifier_id,
-                "file_anchor" | "hash" | "citation" | "citation_coverage" | "citation_coverage_oracle"
+                "file_anchor"
+                    | "hash"
+                    | "citation"
+                    | "citation_coverage"
+                    | "citation_coverage_oracle"
             ),
-            EvidenceKind::SymbolAnchor => matches!(
-                verifier_id,
-                "symbol_anchor" | "exact_match"
-            ),
+            EvidenceKind::SymbolAnchor => matches!(verifier_id, "symbol_anchor" | "exact_match"),
             EvidenceKind::TestResult => matches!(
                 verifier_id,
                 "command_exit_code"
@@ -156,10 +161,7 @@ impl CompletionGate {
                     | "alce"
                     | "user_acceptance_oracle"
             ),
-            EvidenceKind::Diff => matches!(
-                verifier_id,
-                "diff" | "patch_preview"
-            ),
+            EvidenceKind::Diff => matches!(verifier_id, "diff" | "patch_preview"),
         }
     }
 
@@ -175,11 +177,10 @@ impl CompletionGate {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{ContractEvidence, EvidenceKind, TaskContract};
+    use custos_contracts::{ContractEvidence, EvidenceKind, TaskContract};
 
     #[test]
     fn test_task_without_contract_can_complete_when_running() {
@@ -367,7 +368,8 @@ mod tests {
             serde_json::json!({"exit_code": 0}),
         );
 
-        let err = CompletionGate::can_complete_with_evidence(&task, &[unversioned_claim]).unwrap_err();
+        let err =
+            CompletionGate::can_complete_with_evidence(&task, &[unversioned_claim]).unwrap_err();
         match err {
             DomainError::InvariantViolation(msg) => {
                 assert!(msg.contains("Missing source version"));
@@ -401,7 +403,7 @@ mod tests {
     #[test]
     fn test_task_with_mismatched_criterion_fails_completion() {
         use chrono::Utc;
-        use custos_domain::{CriterionSpec, TaskContractRevision};
+        use custos_contracts::{CriterionSpec, TaskContractRevision};
 
         let mut task = Task::new("task_crit".into(), "Crit task".into());
         task.status = TaskStatus::Running;
@@ -447,7 +449,8 @@ mod tests {
         )
         .with_criterion("crit_non_existent");
 
-        let err = CompletionGate::can_complete_with_evidence(&task, &[invalid_crit_claim]).unwrap_err();
+        let err =
+            CompletionGate::can_complete_with_evidence(&task, &[invalid_crit_claim]).unwrap_err();
         assert!(matches!(err, DomainError::InvariantViolation(_)));
 
         // Claim bound to valid criterion

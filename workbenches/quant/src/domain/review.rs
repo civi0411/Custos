@@ -3,10 +3,43 @@
 //! Provides deterministic post-trade analysis, FIFO holding duration buckets,
 //! exit reason cohorts, commission add-back decomposition, and 4-check diagnostics.
 
-use custos_domain::DomainError;
 use crate::domain::order::OrderDirection;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+
+/// Machine-standardized close / exit reason codes for post-trade cohort accounting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseReason {
+    ServerStopLoss,
+    ServerTakeProfit,
+    TrailingStop,
+    ExchangeLiquidation,
+    ExchangeAdl,
+    GridTakeProfit,
+    GridStopLoss,
+    SignalTrigger,
+    ManualClose,
+    EmergencyKillSwitch,
+}
+
+impl CloseReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ServerStopLoss => "server_stop_loss",
+            Self::ServerTakeProfit => "server_take_profit",
+            Self::TrailingStop => "trailing_stop",
+            Self::ExchangeLiquidation => "exchange_liquidation",
+            Self::ExchangeAdl => "exchange_adl",
+            Self::GridTakeProfit => "grid_take_profit",
+            Self::GridStopLoss => "grid_stop_loss",
+            Self::SignalTrigger => "signal_trigger",
+            Self::ManualClose => "manual_close",
+            Self::EmergencyKillSwitch => "emergency_kill_switch",
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TradeFillRecord {
@@ -107,8 +140,10 @@ impl PostTradeAnalyzer {
         let mut exit_reason_map: std::collections::HashMap<String, (usize, f64)> =
             std::collections::HashMap::new();
 
-        let mut open_longs: VecDeque<OpenPositionFill> = VecDeque::new();
-        let mut open_shorts: VecDeque<OpenPositionFill> = VecDeque::new();
+        let mut open_longs_by_sym: std::collections::HashMap<String, VecDeque<OpenPositionFill>> =
+            std::collections::HashMap::new();
+        let mut open_shorts_by_sym: std::collections::HashMap<String, VecDeque<OpenPositionFill>> =
+            std::collections::HashMap::new();
 
         let mut total_gross_pnl = 0.0;
         let mut total_commission = 0.0;
@@ -125,9 +160,11 @@ impl PostTradeAnalyzer {
             } else {
                 0.0
             };
+            let open_longs = open_longs_by_sym.entry(fill.symbol.clone()).or_default();
+            let open_shorts = open_shorts_by_sym.entry(fill.symbol.clone()).or_default();
 
             match fill.direction {
-                OrderDirection::Buy => {
+                OrderDirection::Buy | OrderDirection::BuyToCover => {
                     // Check if closing shorts first
                     let mut needed = fill.quantity;
                     while needed > 0.0 && !open_shorts.is_empty() {
@@ -204,7 +241,7 @@ impl PostTradeAnalyzer {
                         });
                     }
                 }
-                OrderDirection::Sell => {
+                OrderDirection::Sell | OrderDirection::SellShort => {
                     // Check if closing longs first
                     let mut needed = fill.quantity;
                     while needed > 0.0 && !open_longs.is_empty() {
@@ -279,7 +316,6 @@ impl PostTradeAnalyzer {
                         });
                     }
                 }
-                _ => {}
             }
         }
 
@@ -343,11 +379,18 @@ impl PostTradeAnalyzer {
         let mut diagnostics = Vec::new();
 
         // 1. Costs check
-        if total_commission > 0.25 * total_gross_pnl.abs() && total_commission > 10.0 {
+        if total_gross_pnl.abs() > 1e-9
+            && total_commission > 0.25 * total_gross_pnl.abs()
+            && total_commission > 10.0
+        {
             diagnostics.push(DiagnosticCheck {
                 code: "costs".into(),
                 severity: "warning".into(),
-                summary: format!("Commissions (${:.2}) consumed {:.1}% of gross PnL", total_commission, (total_commission / total_gross_pnl.abs()) * 100.0),
+                summary: format!(
+                    "Commissions (${:.2}) consumed {:.1}% of gross PnL",
+                    total_commission,
+                    (total_commission / total_gross_pnl.abs()) * 100.0
+                ),
                 recommendation: "Consider switching to limit orders or widening take-profit targets to reduce turnover drag".into(),
             });
         } else {
@@ -386,7 +429,11 @@ impl PostTradeAnalyzer {
         }
 
         // 3. Exits check
-        let sl_cohort = exit_cohorts.iter().find(|e| e.reason == "stop_loss");
+        let sl_cohort = exit_cohorts.iter().find(|e| {
+            e.reason == "stop_loss"
+                || e.reason == "server_stop_loss"
+                || e.reason == "grid_stop_loss"
+        });
         if let Some(sl) = sl_cohort {
             if sl.count > total_trades_paired / 2 && sl.net_pnl < 0.0 {
                 diagnostics.push(DiagnosticCheck {

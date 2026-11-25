@@ -1,6 +1,6 @@
 use super::dag::{DagGraph, DagNode};
-use custos_domain::DomainError;
-use custos_domain::WorkflowRevision;
+use custos_contracts::DomainError;
+use custos_contracts::WorkflowRevision;
 use std::collections::HashMap;
 
 pub struct RevisionLoader;

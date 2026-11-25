@@ -5,12 +5,14 @@
 //! Unbound worker actions are rejected instead of fabricating execution results.
 
 use async_trait::async_trait;
-use custos_core::contracts::harness::AgentRuntimePort;
-use custos_core::contracts::kernel::KernelPort;
-use custos_core::contracts::sandbox::SandboxPort;
-use custos_core::contracts::storage::{EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus};
-use custos_domain::{new_id, ActionIntent, DomainError, EffectAttempt, EffectStatus};
+use custos_contracts::contracts::harness::AgentRuntimePort;
+use custos_contracts::contracts::kernel::KernelPort;
+use custos_contracts::contracts::sandbox::SandboxPort;
+use custos_contracts::contracts::storage::{
+    EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus,
+};
 use custos_contracts::inference::{ModelPort, ProviderRequest};
+use custos_contracts::{new_id, ActionIntent, DomainError, EffectAttempt, EffectStatus};
 use std::sync::Arc;
 
 use super::graph_runtime::StepExecutor;
@@ -187,7 +189,7 @@ impl StepExecutor for WorkerExecutor {
                     risk_level,
                 )
                 .with_task_id(ctx.task_id.clone());
-                action.assurance = custos_domain::Assurance::CustosMediated;
+                action.assurance = custos_contracts::Assurance::CustosMediated;
 
                 let proposed = match kernel
                     .request_permit(&ctx.task_id, &action, &ctx.worker_id)
@@ -301,10 +303,10 @@ impl StepExecutor for WorkerExecutor {
                 })?;
 
                 let wrun =
-                    custos_domain::WorkerRun::new(ctx.task_id.clone(), ctx.worker_id.clone(), 3)
+                    custos_contracts::WorkerRun::new(ctx.task_id.clone(), ctx.worker_id.clone(), 3)
                         .with_run_id(ctx.run_id.clone());
 
-                let context_pack = custos_domain::ContextPack::new(
+                let context_pack = custos_contracts::ContextPack::new(
                     new_id("ctx"),
                     Vec::new(),
                     0,

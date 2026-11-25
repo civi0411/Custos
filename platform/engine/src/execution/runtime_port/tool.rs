@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_domain::{DomainError, RiskLevel};
+use custos_contracts::{DomainError, RiskLevel};
 use serde::{Deserialize, Serialize};
 
 /// Invocation context resolved by the backend (never trusted from model payload).

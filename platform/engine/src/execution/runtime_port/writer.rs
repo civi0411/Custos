@@ -1,6 +1,6 @@
 /// Truncate a String to at most `max_bytes` without slicing inside a multi-byte UTF-8 char.
 pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
-    custos_domain::truncate_to_char_boundary(s, max_bytes);
+    custos_contracts::truncate_to_char_boundary(s, max_bytes);
 }
 
 /// A streaming writer that discards bytes beyond `limit` to prevent unbounded memory allocation

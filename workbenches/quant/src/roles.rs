@@ -1,4 +1,4 @@
-use custos_core::contracts::pack::WorkerRole;
+use custos_engine::contracts::pack::WorkerRole;
 
 pub fn quant_roles() -> Vec<WorkerRole> {
     vec![
@@ -13,7 +13,7 @@ pub fn quant_roles() -> Vec<WorkerRole> {
              Output structured JSON: { signal_name, ic_mean, ic_std, ir, q_value, classification }. \
              Never hallucinate numbers. Set lookahead_clean=true only if verified by AST inspection.",
             8_000,
-            &["file_read", "lexical_search", "http_fetch", "shell_exec"],
+            &["file_read", "lexical_search", "http_fetch"],
             true,
         ),
         WorkerRole::new(

@@ -3,7 +3,7 @@
 //! Provides the normalized Domain Value Objects, Polymorphic Adapter Traits,
 //! and Execution Strategies (Strategy Pattern) for order execution.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

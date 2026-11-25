@@ -22,9 +22,9 @@ pub use dedup::HashDeduplicator;
 pub use redaction::SecretRedactor;
 pub use structural::StructuralExtractor;
 
-use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use crate::authority::PathSandbox;
-use custos_domain::{digest, new_id, ContextItem, ContextPack, DomainError, ExecutionWorkspace};
+use custos_contracts::contracts::workspace_files::WorkspaceFilesPort;
+use custos_contracts::{digest, new_id, ContextItem, ContextPack, DomainError, ExecutionWorkspace};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -220,7 +220,7 @@ impl ContextCompiler {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::{
+    use custos_contracts::{
         WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff, WorkspaceFileTree,
         WorkspaceId, WorkspaceKind, WriteWorkspaceFileParams,
     };

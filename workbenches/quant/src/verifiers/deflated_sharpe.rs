@@ -1,9 +1,9 @@
 //! Deflated Sharpe Ratio Verifier
 //! Reference: Bailey & de Prado (2016) "The Deflated Sharpe Ratio"
 
-use async_trait::async_trait;
-use custos_core::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 use crate::domain::calculate_dsr;
+use async_trait::async_trait;
+use custos_engine::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 
 pub struct DeflatedSharpeVerifier;
 

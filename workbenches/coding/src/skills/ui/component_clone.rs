@@ -5,7 +5,7 @@
 //! component code adapted for the Custos application.
 
 use async_trait::async_trait;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput,
 };
 use serde::{Deserialize, Serialize};
@@ -195,10 +195,7 @@ mod tests {
         };
         let res = skill.run(&ctx).await.expect("run succeeds");
         assert_eq!(res.skill_id, "component_clone");
-        assert_eq!(
-            res.taint,
-            custos_runtime::agent::skills::TaintLevel::Clean
-        );
+        assert_eq!(res.taint, custos_engine::agent::skills::TaintLevel::Clean);
         let output = res.result;
         assert_eq!(output["component_name"], "HeroBannerCard");
         let code = output["generated_code"].as_str().unwrap();

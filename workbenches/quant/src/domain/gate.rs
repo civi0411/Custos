@@ -3,8 +3,8 @@
 //! Enforces deterministic pre-trade risk inspection, notional caps, drawdown boundaries,
 //! exit immunity (risk-reducing exits never blocked), and fail-open resilience.
 
-use custos_domain::DomainError;
 use crate::domain::order::OrderDirection;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

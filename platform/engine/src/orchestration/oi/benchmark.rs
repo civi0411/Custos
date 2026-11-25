@@ -3,9 +3,9 @@
 //! Compares Orchestration Intelligence against the unguided Native Baseline (Claude Code)
 //! across canonical fixtures for Engineering, Research, and Assistant domain packs.
 
-use custos_domain::oi::{DecisionSnapshot, ExecutionTopology};
-use custos_domain::task::TaskContract;
 use super::ExplainService;
+use custos_contracts::oi::{DecisionSnapshot, ExecutionTopology};
+use custos_contracts::task::TaskContract;
 use serde::{Deserialize, Serialize};
 
 /// Benchmark result comparing OI plan against Baseline.
@@ -102,20 +102,14 @@ impl OiBenchmarkRunner {
                 pack_id: "assistant".to_string(),
                 name: "Personal Schedule Optimization".to_string(),
                 description: "Triages calendar items and drafts confirmation".to_string(),
-                required_capabilities: vec![
-                    "calendar_read".to_string(),
-                    "draft_reply".to_string(),
-                ],
+                required_capabilities: vec!["calendar_read".to_string(), "draft_reply".to_string()],
                 evidence_requirements: Vec::new(),
             },
             TaskContract {
                 pack_id: "research".to_string(),
                 name: "Scientific Literature Synthesis".to_string(),
                 description: "Cross-checks empirical claims and extracts methodology".to_string(),
-                required_capabilities: vec![
-                    "claim_verify".to_string(),
-                    "pdf_extract".to_string(),
-                ],
+                required_capabilities: vec!["claim_verify".to_string(), "pdf_extract".to_string()],
                 evidence_requirements: Vec::new(),
             },
         ]

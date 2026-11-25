@@ -2,13 +2,13 @@
 
 use super::coordinator::SupervisionCoordinator;
 use super::PayloadRedactor;
-use custos_core::contracts::supervision::NormalizedTelemetryBatch;
-use custos_domain::supervision::{
+use custos_contracts::contracts::supervision::NormalizedTelemetryBatch;
+use custos_contracts::supervision::{
     compute_error_signature, evaluate_snapshot, RunStepSpan, StepError, SupervisionFinding,
     SupervisionLogEntry, SupervisionProfile, SupervisionRunRecord, SupervisionRunStatus,
     SupervisionSnapshot,
 };
-use custos_domain::{DomainError, UsageMeasurement};
+use custos_contracts::{DomainError, UsageMeasurement};
 use std::collections::{HashMap, HashSet};
 
 const MAX_ACTIVE_SPANS_PER_RUN: usize = 512;
@@ -39,7 +39,10 @@ pub(super) struct ActiveRunWindow {
 }
 
 impl SupervisionCoordinator {
-    pub(super) async fn process_commands(&self, cmds: Vec<SupervisionCommand>) -> Result<(), DomainError> {
+    pub(super) async fn process_commands(
+        &self,
+        cmds: Vec<SupervisionCommand>,
+    ) -> Result<(), DomainError> {
         let mut runs_out = Vec::new();
         let mut spans_out = Vec::new();
         let mut logs_out = Vec::new();
@@ -48,10 +51,9 @@ impl SupervisionCoordinator {
         let mut completed_runs: Vec<ActiveRunWindow> = Vec::new();
 
         {
-            let mut active = self
-                .active_runs
-                .lock()
-                .map_err(|_| DomainError::Validation("Supervision active lock unavailable".into()))?;
+            let mut active = self.active_runs.lock().map_err(|_| {
+                DomainError::Validation("Supervision active lock unavailable".into())
+            })?;
             let was_empty = active.is_empty();
 
             for cmd in cmds {
@@ -70,24 +72,27 @@ impl SupervisionCoordinator {
                             SupervisionRunStatus::Success
                         };
                         let duration_ms = ended_at_ms.map(|e| e.saturating_sub(started_at_ms));
-                        let entry = active.entry(run_id.clone()).or_insert_with(|| ActiveRunWindow {
-                            record: SupervisionRunRecord {
-                                run_id: run_id.clone(),
-                                workbench_id: workbench_id.clone(),
-                                agent: agent.clone(),
-                                status,
-                                started_at_ms,
-                                ended_at_ms,
-                                duration_ms,
-                                tokens: None,
-                                cost_usd: None,
-                                usage_measurement: UsageMeasurement::Unknown,
-                            },
-                            spans: Vec::new(),
-                            logs: Vec::new(),
-                            errors: Vec::new(),
-                            emitted_findings: HashSet::new(),
-                        });
+                        let entry =
+                            active
+                                .entry(run_id.clone())
+                                .or_insert_with(|| ActiveRunWindow {
+                                    record: SupervisionRunRecord {
+                                        run_id: run_id.clone(),
+                                        workbench_id: workbench_id.clone(),
+                                        agent: agent.clone(),
+                                        status,
+                                        started_at_ms,
+                                        ended_at_ms,
+                                        duration_ms,
+                                        tokens: None,
+                                        cost_usd: None,
+                                        usage_measurement: UsageMeasurement::Unknown,
+                                    },
+                                    spans: Vec::new(),
+                                    logs: Vec::new(),
+                                    errors: Vec::new(),
+                                    emitted_findings: HashSet::new(),
+                                });
                         if workbench_id.is_some() {
                             entry.record.workbench_id = workbench_id;
                         }
@@ -110,9 +115,9 @@ impl SupervisionCoordinator {
                         let profile = self.resolve_profile_for(&active, &span.run_id);
                         span.metadata = redactor_for(&profile).redact_json(span.metadata);
                         touched_runs.insert(span.run_id.clone());
-                        let window = active
-                            .entry(span.run_id.clone())
-                            .or_insert_with(|| empty_window(default_run_record(&span.run_id, span.started_at_ms)));
+                        let window = active.entry(span.run_id.clone()).or_insert_with(|| {
+                            empty_window(default_run_record(&span.run_id, span.started_at_ms))
+                        });
                         upsert_bounded_span(&mut window.spans, &span);
                         self.live.emit(
                             &span.run_id,
@@ -127,9 +132,9 @@ impl SupervisionCoordinator {
                         entry.message = redactor.redact_text(&entry.message);
                         entry.metadata = redactor.redact_json(entry.metadata);
                         touched_runs.insert(entry.run_id.clone());
-                        let window = active
-                            .entry(entry.run_id.clone())
-                            .or_insert_with(|| empty_window(default_run_record(&entry.run_id, entry.timestamp_ms)));
+                        let window = active.entry(entry.run_id.clone()).or_insert_with(|| {
+                            empty_window(default_run_record(&entry.run_id, entry.timestamp_ms))
+                        });
                         push_bounded(&mut window.logs, entry.clone(), MAX_ACTIVE_LOGS_PER_RUN);
                         self.live.emit(
                             &entry.run_id,
@@ -146,9 +151,9 @@ impl SupervisionCoordinator {
                             err.signature_hash = hash;
                         }
                         touched_runs.insert(err.run_id.clone());
-                        let window = active
-                            .entry(err.run_id.clone())
-                            .or_insert_with(|| empty_window(default_run_record(&err.run_id, err.timestamp_ms)));
+                        let window = active.entry(err.run_id.clone()).or_insert_with(|| {
+                            empty_window(default_run_record(&err.run_id, err.timestamp_ms))
+                        });
                         push_bounded(&mut window.errors, err.clone(), MAX_ACTIVE_ERRORS_PER_RUN);
                         self.live.emit(
                             &err.run_id,
@@ -180,10 +185,9 @@ impl SupervisionCoordinator {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let mut findings_out = Vec::new();
         {
-            let mut active = self
-                .active_runs
-                .lock()
-                .map_err(|_| DomainError::Validation("Supervision active lock unavailable".into()))?;
+            let mut active = self.active_runs.lock().map_err(|_| {
+                DomainError::Validation("Supervision active lock unavailable".into())
+            })?;
             for run_id in touched_runs {
                 if let Some(window) = active.get_mut(&run_id) {
                     findings_out.extend(self.evaluate_window(window, now_ms));
@@ -270,10 +274,9 @@ impl SupervisionCoordinator {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let mut new_findings = Vec::new();
         {
-            let mut active = self
-                .active_runs
-                .lock()
-                .map_err(|_| DomainError::Validation("Supervision active lock unavailable".into()))?;
+            let mut active = self.active_runs.lock().map_err(|_| {
+                DomainError::Validation("Supervision active lock unavailable".into())
+            })?;
             for window in active.values_mut() {
                 new_findings.extend(self.evaluate_window(window, now_ms));
             }
@@ -293,9 +296,7 @@ impl SupervisionCoordinator {
         window: &mut ActiveRunWindow,
         now_ms: i64,
     ) -> Vec<SupervisionFinding> {
-        let profile = self
-            .profiles
-            .resolve(window.record.workbench_id.as_deref());
+        let profile = self.profiles.resolve(window.record.workbench_id.as_deref());
         let snap = SupervisionSnapshot {
             run_id: &window.record.run_id,
             agent: &window.record.agent,
@@ -380,4 +381,3 @@ fn upsert_bounded_span(spans: &mut Vec<RunStepSpan>, incoming: &RunStepSpan) {
     }
     push_bounded(spans, incoming.clone(), MAX_ACTIVE_SPANS_PER_RUN);
 }
-

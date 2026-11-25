@@ -2,7 +2,7 @@
 //!
 //! Encapsulates user or system intentions to mutate task state.
 
-use custos_domain::{TaskContract, TaskStatus};
+use custos_contracts::{TaskContract, TaskStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ pub struct CompleteTask {
     pub expected_epoch: u64,
     pub summary: String,
     #[serde(default)]
-    pub evidence_claims: Vec<custos_domain::VerificationClaim>,
+    pub evidence_claims: Vec<custos_contracts::VerificationClaim>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

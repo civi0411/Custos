@@ -9,10 +9,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use custos_core::contracts::compute::WorkloadAdmissionPort;
-use custos_domain::{
-    new_id, ComputeDeviceRef, DomainError, ExecutionLane, LanePolicy,
-    WorkloadAdmissionRequest, WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
+use custos_contracts::contracts::compute::WorkloadAdmissionPort;
+use custos_contracts::{
+    new_id, ComputeDeviceRef, DomainError, ExecutionLane, LanePolicy, WorkloadAdmissionRequest,
+    WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
 };
 
 #[cfg(test)]
@@ -164,7 +164,7 @@ impl WorkloadAdmissionCoordinator {
         }
         // Default to first available accelerator, or fallback to CPU
         for (id, slot) in devs.iter() {
-            if slot.device.device_kind != custos_domain::DeviceKind::Cpu {
+            if slot.device.device_kind != custos_contracts::DeviceKind::Cpu {
                 return Ok(id.clone());
             }
         }
@@ -236,7 +236,9 @@ impl WorkloadAdmissionPort for WorkloadAdmissionCoordinator {
                 // Find lowest-priority preemptible lease across system to free slot
                 if let Some(target_id) = leases
                     .iter()
-                    .filter(|(_, l)| l.status == WorkloadLeaseStatus::Admitted && l.lane.is_preemptible())
+                    .filter(|(_, l)| {
+                        l.status == WorkloadLeaseStatus::Admitted && l.lane.is_preemptible()
+                    })
                     .min_by_key(|(_, l)| l.lane.priority_rank())
                     .map(|(k, _)| k.clone())
                 {
@@ -324,7 +326,10 @@ impl WorkloadAdmissionPort for WorkloadAdmissionCoordinator {
         // 3. Shared workloads conflict with exclusive request
         if request.require_exclusive && slot.active_shared_count() > 0 {
             let can_preempt_all = policy.allow_preemption
-                && slot.active_shared_leases.values().all(|l| lane.can_preempt(&l.lane));
+                && slot
+                    .active_shared_leases
+                    .values()
+                    .all(|l| lane.can_preempt(&l.lane));
             if can_preempt_all && !slot.active_shared_leases.is_empty() {
                 for (shared_id, shared_lease) in slot.active_shared_leases.drain() {
                     if let Some(l) = leases.get_mut(&shared_id) {

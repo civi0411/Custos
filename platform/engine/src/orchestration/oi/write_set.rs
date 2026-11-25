@@ -3,9 +3,9 @@
 //! Validates that concurrent nodes in a revision do not write to overlapping paths
 //! unless explicitly isolated into distinct workspace leases.
 
-use custos_domain::oi::NodePlacement;
-use custos_domain::workflow::RevisionNode;
-use custos_domain::DomainError;
+use custos_contracts::oi::NodePlacement;
+use custos_contracts::workflow::RevisionNode;
+use custos_contracts::DomainError;
 use std::collections::{HashMap, HashSet};
 
 pub struct WriteSetConflictChecker;

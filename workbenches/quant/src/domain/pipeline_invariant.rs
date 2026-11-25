@@ -1,5 +1,5 @@
-use custos_domain::pipeline::DataInvariant;
-use custos_domain::DomainError;
+use custos_contracts::pipeline::DataInvariant;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Quantitative Trading Invariant: Guarantees zero lookahead bias by enforcing closed bar boundaries.
@@ -51,4 +51,3 @@ mod tests {
         assert!(lookahead_inv.verify().is_err());
     }
 }
-

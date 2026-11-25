@@ -3,7 +3,7 @@
 //! Manages atomic execution steps (spans) and continuation state packets.
 
 use crate::ports::TaskStore;
-use custos_domain::{new_id, ContinuationPacket, DomainError, Span};
+use custos_contracts::{new_id, ContinuationPacket, DomainError, Span};
 use std::sync::Arc;
 
 pub struct SpanService {

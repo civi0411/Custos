@@ -3,7 +3,7 @@
 //! Provides a typed pipeline for autonomous engineering workflows with
 //! explicit input, intermediate artifacts, failure branches, and verified outcomes.
 
-use custos_domain::repo::SourceSpan;
+use custos_contracts::repo::SourceSpan;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -105,6 +105,17 @@ impl EngineeringRecipePipeline {
             return Ok(());
         }
         for file in modified_files {
+            if file.starts_with('/')
+                || file.starts_with('\\')
+                || file
+                    .split(['/', '\\'])
+                    .any(|seg| seg == ".." || seg.is_empty())
+            {
+                return Err(RecipeFailure::ScopeViolation {
+                    path: file.clone(),
+                    allowed: allowed_paths.to_vec(),
+                });
+            }
             let allowed = allowed_paths
                 .iter()
                 .any(|allowed| file == allowed || file.starts_with(&format!("{allowed}/")));

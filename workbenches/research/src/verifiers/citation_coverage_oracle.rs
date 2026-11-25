@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use custos_core::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
+use custos_engine::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 
 pub struct CitationCoverageOracle {
     default_min_ratio: f64,
@@ -73,6 +73,8 @@ impl PackVerifier for CitationCoverageOracle {
                 ),
             };
         }
+        // Policy floor: caller metadata may tighten coverage, never relax it below policy minimum.
+        let min_ratio = min_ratio.max(self.default_min_ratio);
 
         let total_claims = claims.len();
         let mut grounded_claims = 0;

@@ -5,7 +5,7 @@
 
 use crate::domain::portal::BarTimeframe;
 use crate::domain::{ClosedBarInvariant, OhlcvBar};
-use custos_domain::pipeline::{DataModality, PipelineRecord};
+use custos_contracts::pipeline::{DataModality, PipelineRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -250,4 +250,3 @@ mod tests {
         assert_eq!(coordinator.state(), StreamState::Streaming);
     }
 }
-

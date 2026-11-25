@@ -1,9 +1,9 @@
 //! Agent Execution & Workflow Runtime Application Service
 
-use std::sync::Arc;
-use custos_contracts::*;
 use crate::contracts::workflow::WorkflowPort;
 use crate::orchestration::TaskRuntime;
+use custos_contracts::*;
+use std::sync::Arc;
 
 /// Application service orchestrating agent runs, workflow execution and candidate races.
 pub struct ExecutionApplicationService {
@@ -19,7 +19,11 @@ impl ExecutionApplicationService {
         self.task_runtime.start_run(cmd).await
     }
 
-    pub async fn cancel_run(&self, task_id: &TaskId, reason: &str) -> Result<CancelReceipt, DomainError> {
+    pub async fn cancel_run(
+        &self,
+        task_id: &TaskId,
+        reason: &str,
+    ) -> Result<CancelReceipt, DomainError> {
         self.task_runtime.request_cancel(task_id, reason).await
     }
 }

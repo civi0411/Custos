@@ -7,7 +7,9 @@
 //! 4. Capabilities: required capabilities must not be violated.
 //! 5. Egress & Isolation: egress rules and local constraints.
 
-use custos_domain::oi::{DecisionSnapshot, ExecutionTopology, RejectionReason, StrategyProposal};
+use custos_contracts::oi::{
+    DecisionSnapshot, ExecutionTopology, RejectionReason, StrategyProposal,
+};
 
 pub struct HardFilters;
 

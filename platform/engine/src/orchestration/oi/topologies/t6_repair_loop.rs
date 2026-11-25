@@ -4,7 +4,7 @@
 //! number of iterations, preventing runaway retry loops.
 
 use crate::oi::join_policy::{JoinEvaluation, JoinEvaluator, JoinPolicy};
-use custos_domain::oi::WorkerResult;
+use custos_contracts::oi::WorkerResult;
 
 pub struct T6RepairLoopCoordinator;
 

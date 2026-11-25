@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, SessionStatus};
+use custos_contracts::{DomainError, SessionStatus};
 
 pub struct SessionStateMachine;
 

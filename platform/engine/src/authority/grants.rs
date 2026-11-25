@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_domain::{Action, Grant, RiskLevel};
+use custos_contracts::{Action, Grant, RiskLevel};
 
 #[derive(Debug, Default, Clone)]
 pub struct GrantStore {
@@ -18,18 +18,18 @@ impl GrantStore {
     }
 
     pub fn insert(&self, grant: Grant) {
-        let mut guard = self.grants.write().expect("lock poisoned");
+        let mut guard = self.grants.write().unwrap_or_else(|e| e.into_inner());
         guard.insert(grant.id.clone(), grant);
     }
 
     pub fn get(&self, id: &str) -> Option<Grant> {
-        let guard = self.grants.read().expect("lock poisoned");
+        let guard = self.grants.read().unwrap_or_else(|e| e.into_inner());
         guard.get(id).cloned()
     }
 
     /// Capability discovery only; authorization must use `find_grant_for_action`.
     pub fn find_active_grant(&self, task_id: &str, capability: &str) -> Option<Grant> {
-        let guard = self.grants.read().expect("lock poisoned");
+        let guard = self.grants.read().unwrap_or_else(|e| e.into_inner());
         guard
             .values()
             .find(|g| g.task_id == task_id && g.capability == capability && g.is_valid())

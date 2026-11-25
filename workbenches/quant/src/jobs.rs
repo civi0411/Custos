@@ -1,6 +1,6 @@
-use custos_core::contracts::pack::WorkbenchJob;
-use custos_domain::oi::ExecutionTopology;
-use custos_domain::session::WorkbenchLens;
+use custos_contracts::oi::ExecutionTopology;
+use custos_contracts::session::WorkbenchLens;
+use custos_engine::contracts::pack::WorkbenchJob;
 
 pub fn quant_jobs() -> Vec<WorkbenchJob> {
     vec![

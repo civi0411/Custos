@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
-pub use custos_contracts::contributions::pack::{DomainPack, DomainPackManifest, WorkbenchModule};
 use crate::execution::skills::SkillRegistry;
+pub use custos_contracts::contributions::pack::{DomainPack, DomainPackManifest, WorkbenchModule};
 
 use crate::components::registry::DomainPackRegistry;
 

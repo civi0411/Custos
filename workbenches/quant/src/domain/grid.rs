@@ -4,7 +4,7 @@
 //! resting limit order placement, and realized volatility-harvesting PnL in Rust.
 
 use super::order::OrderDirection;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

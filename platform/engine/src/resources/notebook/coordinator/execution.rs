@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use custos_domain::DomainError;
-use custos_core::contracts::notebook::{
+use custos_contracts::contracts::notebook::{
     CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, KernelStatus, NotebookCell,
     NotebookCellType, NotebookStoragePort, NotebookWorkerSession,
 };
+use custos_contracts::DomainError;
 
 use super::{ActiveKernel, PythonKernelCoordinator};
 
@@ -54,24 +54,24 @@ impl PythonKernelCoordinator {
         let mut acquired_lease = None;
         if let Some(ref dev_id) = params.device_id {
             if let Some(ref adm) = self.admission {
-                let req = custos_domain::WorkloadAdmissionRequest {
-                    workload_kind: custos_domain::ComputeWorkloadKind::NotebookKernel,
+                let req = custos_contracts::WorkloadAdmissionRequest {
+                    workload_kind: custos_contracts::ComputeWorkloadKind::NotebookKernel,
                     owner_id: key.clone(),
                     preferred_device_id: Some(dev_id.clone()),
                     require_exclusive: false,
                     required_memory_mb: None,
-                    lane: Some(custos_domain::ExecutionLane::Interactive),
+                    lane: Some(custos_contracts::ExecutionLane::Interactive),
                 };
                 match adm.admit_workload(&req).await? {
-                    custos_domain::WorkloadAdmissionVerdict::Admitted { lease } => {
+                    custos_contracts::WorkloadAdmissionVerdict::Admitted { lease } => {
                         acquired_lease = Some(lease.lease_id);
                     }
-                    custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. } => {
+                    custos_contracts::WorkloadAdmissionVerdict::Queued { reason, .. } => {
                         return Err(DomainError::Conflict(format!(
                             "Compute device '{dev_id}' busy: {reason}"
                         )));
                     }
-                    custos_domain::WorkloadAdmissionVerdict::Rejected { reason } => {
+                    custos_contracts::WorkloadAdmissionVerdict::Rejected { reason } => {
                         return Err(DomainError::Validation(format!(
                             "Compute admission for device '{dev_id}' rejected: {reason}"
                         )));
@@ -139,6 +139,33 @@ impl PythonKernelCoordinator {
         };
 
         let start = Instant::now();
+        let kernels_ref = self.kernels.clone();
+        let reset_key = key.clone();
+        struct BusyResetGuard {
+            kernels: Arc<tokio::sync::RwLock<HashMap<String, ActiveKernel>>>,
+            key: String,
+            epoch: u32,
+            armed: bool,
+        }
+        impl Drop for BusyResetGuard {
+            fn drop(&mut self) {
+                if self.armed {
+                    if let Ok(mut map) = self.kernels.try_write() {
+                        if let Some(k) = map.get_mut(&self.key) {
+                            if k.epoch == self.epoch && k.status == KernelStatus::Busy {
+                                k.status = KernelStatus::Idle;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut busy_guard = BusyResetGuard {
+            kernels: kernels_ref,
+            key: reset_key,
+            epoch,
+            armed: true,
+        };
         let worker_res = worker_session
             .execute(params.code.clone(), params.cwd.clone())
             .await;
@@ -148,14 +175,15 @@ impl PythonKernelCoordinator {
             let mut kernels = self.kernels.write().await;
             if let Some(k) = kernels.get_mut(&key) {
                 if k.epoch != epoch {
+                    busy_guard.armed = false;
                     return Err(DomainError::Validation(
                         "Execution was interrupted or reset; its output is stale".into(),
                     ));
                 }
                 k.status = KernelStatus::Idle;
+                busy_guard.armed = false;
             }
         }
-
         let resp = worker_res?;
 
         let status = if resp.status == "success" {

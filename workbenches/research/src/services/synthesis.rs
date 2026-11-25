@@ -1,11 +1,11 @@
 //! Pure Research Synthesis & Coding Handoff Application Service.
 
-use custos_core::CreateTask;
-use custos_domain::{
+use custos_contracts::{
     new_id,
     task::{ContractEvidence, EvidenceKind, TaskContract},
     DomainError, Recipe, ReviewStatus,
 };
+use custos_engine::CreateTask;
 
 use crate::domain::claim::{ClaimGroundingLevel, ResearchClaim};
 use crate::domain::synthesis::{
@@ -27,7 +27,7 @@ pub struct SynthesisService;
 impl SynthesisService {
     pub fn build_and_save_proposal(
         research: &ResearchRepository,
-        all_reviews: &[custos_domain::ReviewerRecord],
+        all_reviews: &[custos_contracts::ReviewerRecord],
         params: SaveSynthesisProposalParams,
     ) -> Result<ResearchSynthesisProposal, DomainError> {
         let all_claims = research.list_claims()?;
@@ -78,35 +78,25 @@ impl SynthesisService {
 
     pub fn prepare_coding_handoff(
         research: &ResearchRepository,
-        all_reviews: &[custos_domain::ReviewerRecord],
+        all_reviews: &[custos_contracts::ReviewerRecord],
         params: &HandoffToCodingParams,
     ) -> Result<PreparedCodingHandoff, DomainError> {
         let all_claims = research.list_claims()?;
 
         let mut selected_claims = Vec::with_capacity(params.claim_ids.len());
         for cid in &params.claim_ids {
-            let claim = all_claims
-                .iter()
-                .find(|c| &c.id == cid)
-                .ok_or_else(|| {
-                    DomainError::Validation(format!(
-                        "Claim '{cid}' not found in research repository"
-                    ))
-                })?;
+            let claim = all_claims.iter().find(|c| &c.id == cid).ok_or_else(|| {
+                DomainError::Validation(format!("Claim '{cid}' not found in research repository"))
+            })?;
             selected_claims.push(claim);
         }
 
         let all_recipes = research.list_recipes()?;
         let mut selected_recipes: Vec<&Recipe> = Vec::with_capacity(params.recipe_ids.len());
         for rid in &params.recipe_ids {
-            let recipe = all_recipes
-                .iter()
-                .find(|r| &r.id == rid)
-                .ok_or_else(|| {
-                    DomainError::Validation(format!(
-                        "Recipe '{rid}' not found in research repository"
-                    ))
-                })?;
+            let recipe = all_recipes.iter().find(|r| &r.id == rid).ok_or_else(|| {
+                DomainError::Validation(format!("Recipe '{rid}' not found in research repository"))
+            })?;
             selected_recipes.push(recipe);
         }
 
@@ -127,7 +117,8 @@ impl SynthesisService {
 
         let claim_summaries = collect_claim_summaries(&params.claim_ids, &all_claims, all_reviews);
         let recipe_summaries = collect_recipe_summaries(&params.recipe_ids, &all_recipes);
-        let caveats = ResearchSynthesisProposal::generate_caveats(&claim_summaries, &recipe_summaries);
+        let caveats =
+            ResearchSynthesisProposal::generate_caveats(&claim_summaries, &recipe_summaries);
 
         let mut task_commands = Vec::with_capacity(selected_claims.len() + selected_recipes.len());
         for claim in &selected_claims {
@@ -217,7 +208,7 @@ impl SynthesisService {
 fn collect_claim_summaries(
     claim_ids: &[String],
     all_claims: &[ResearchClaim],
-    all_reviews: &[custos_domain::ReviewerRecord],
+    all_reviews: &[custos_contracts::ReviewerRecord],
 ) -> Vec<ClaimHandoffSummary> {
     claim_ids
         .iter()
@@ -239,17 +230,23 @@ fn collect_claim_summaries(
         .collect()
 }
 
-fn collect_recipe_summaries(recipe_ids: &[String], all_recipes: &[Recipe]) -> Vec<RecipeHandoffSummary> {
+fn collect_recipe_summaries(
+    recipe_ids: &[String],
+    all_recipes: &[Recipe],
+) -> Vec<RecipeHandoffSummary> {
     recipe_ids
         .iter()
         .filter_map(|rid| {
-            all_recipes.iter().find(|r| &r.id == rid).map(|r| RecipeHandoffSummary {
-                recipe_id: r.id.clone(),
-                name: r.name.clone(),
-                command: r.command.clone(),
-                inputs_count: r.inputs.len(),
-                outputs: r.outputs.clone(),
-            })
+            all_recipes
+                .iter()
+                .find(|r| &r.id == rid)
+                .map(|r| RecipeHandoffSummary {
+                    recipe_id: r.id.clone(),
+                    name: r.name.clone(),
+                    command: r.command.clone(),
+                    inputs_count: r.inputs.len(),
+                    outputs: r.outputs.clone(),
+                })
         })
         .collect()
 }

@@ -5,7 +5,7 @@
 //! from third-party external web services.
 
 use async_trait::async_trait;
-use custos_core::contracts::skill::{
+use custos_engine::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 use serde_json::json;
@@ -31,11 +31,32 @@ impl DoiVerifySkill {
         Self::default()
     }
 
-    /// Basic DOI format sanity check (e.g. 10.xxxx/yyyy)
+    /// Basic DOI format sanity check (e.g. 10.xxxx/yyyy) rejecting path/query injection
     pub fn is_valid_doi_format(doi: &str) -> bool {
         let trimmed = doi.trim();
-        trimmed.starts_with("10.") && trimmed.contains('/')
+        let Some((prefix, suffix)) = trimmed.split_once('/') else {
+            return false;
+        };
+        prefix.starts_with("10.")
+            && prefix.len() > 3
+            && !suffix.is_empty()
+            && !trimmed.contains("..")
+            && !trimmed.bytes().any(|b| {
+                b.is_ascii_whitespace() || b.is_ascii_control() || matches!(b, b'?' | b'#' | b'\\')
+            })
     }
+}
+
+fn encode_doi_for_url(doi: &str) -> String {
+    let mut out = String::with_capacity(doi.len());
+    for b in doi.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~' | b'/' | b':') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 #[async_trait]
@@ -71,7 +92,7 @@ impl Skill for DoiVerifySkill {
             )));
         }
 
-        let url = format!("https://api.crossref.org/works/{}", doi);
+        let url = format!("https://api.crossref.org/works/{}", encode_doi_for_url(doi));
 
         let response = match self.client.get(&url).send().await {
             Ok(resp) => resp,

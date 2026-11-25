@@ -3,13 +3,8 @@
 //! Authoritative mapping to Custos SADE Master Specification Part 10.
 //! Covers autonomous software engineering, codebase intelligence, Git patch operations,
 //! and regression testing across the Coding Workbench Lens.
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
-extern crate custos_engine as custos_runtime;
-extern crate custos_integrations as custos_adapters;
 
 pub mod application;
-pub mod contribution;
 pub mod fixtures;
 pub mod pipeline_invariant;
 pub mod profile;
@@ -19,7 +14,6 @@ pub mod supervision;
 pub mod verifiers;
 
 pub use application::*;
-pub use contribution::*;
 pub use fixtures::*;
 pub use pipeline_invariant::AstSyntaxInvariant;
 pub use profile::*;
@@ -29,12 +23,12 @@ pub use verifiers::*;
 pub use EngineeringPack as CodingPack;
 
 use async_trait::async_trait;
-use custos_domain::oi::ExecutionTopology;
-use custos_domain::session::WorkbenchLens;
-use custos_domain::DomainError;
+use custos_contracts::oi::ExecutionTopology;
+use custos_contracts::session::WorkbenchLens;
+use custos_contracts::DomainError;
 use std::sync::Arc;
 
-use custos_core::contracts::pack::{
+use custos_engine::contracts::pack::{
     DomainPack, DomainPackManifest, PackProfile, PackVerifier, WorkbenchJob, WorkbenchModule,
     WorkerRole,
 };
@@ -95,11 +89,10 @@ impl WorkbenchModule for CodingModule {
         Arc::new(EngineeringPack::new())
     }
 
-    fn register_skills(&self, registry: &mut dyn custos_core::contracts::skill::SkillSink) {
+    fn register_skills(&self, registry: &mut dyn custos_engine::contracts::skill::SkillSink) {
         skills::register_engineering_skills(registry);
     }
 }
-
 
 #[async_trait]
 impl DomainPack for EngineeringPack {
@@ -269,11 +262,11 @@ impl DomainPack for EngineeringPack {
         Ok(())
     }
 
-    fn lane_policy(&self) -> custos_domain::LanePolicy {
-        custos_domain::LanePolicy::coding_fanout(4)
+    fn lane_policy(&self) -> custos_contracts::LanePolicy {
+        custos_contracts::LanePolicy::coding_fanout(4)
     }
 
-    fn supervision_profile(&self) -> Option<custos_domain::supervision::SupervisionProfile> {
+    fn supervision_profile(&self) -> Option<custos_contracts::supervision::SupervisionProfile> {
         Some(supervision::coding_supervision_profile())
     }
 
@@ -315,25 +308,12 @@ impl DomainPack for EngineeringPack {
     async fn execute_tool(
         &self,
         tool_name: &str,
-        params: &serde_json::Value,
+        _params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
         match tool_name {
-            "edit_file" => {
-                let path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
-                Ok(serde_json::json!({
-                    "status": "executed",
-                    "action": "edit_file",
-                    "path": path,
-                }))
-            }
-            "bash" => {
-                let cmd = params.get("command").and_then(|v| v.as_str()).unwrap_or("");
-                Ok(serde_json::json!({
-                    "status": "executed",
-                    "action": "bash",
-                    "command": cmd,
-                }))
-            }
+            "edit_file" | "bash" => Err(DomainError::Validation(format!(
+                "Coding tool '{tool_name}' must execute through SovereignDeveloperAdapter sandbox; stub execution is prohibited (Zero-Mock INV-11)"
+            ))),
             _ => Err(DomainError::Validation(format!(
                 "Unsupported coding tool: '{tool_name}'"
             ))),

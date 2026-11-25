@@ -3,8 +3,8 @@
 //! Models performance metrics, risk-adjusted returns (Sharpe, Deflated Sharpe Ratio, Calmar),
 //! drawdowns, and monthly return distributions from strategy simulations.
 
-use custos_domain::DomainError;
-use custos_domain::new_id;
+use custos_contracts::new_id;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -12,6 +12,17 @@ pub struct MonthlyReturn {
     pub year: i32,
     pub month: u32,
     pub return_pct: f64,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EquityPoint {
+    pub timestamp: i64,
+    pub equity: f64,
+    pub drawdown: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,6 +48,16 @@ pub struct BacktestTearsheet {
     pub omega_ratio: f64,
     #[serde(default)]
     pub cvar_95: f64,
+    #[serde(default = "default_true")]
+    pub lookahead_clean: bool,
+    #[serde(default)]
+    pub start_timestamp: Option<i64>,
+    #[serde(default)]
+    pub end_timestamp: Option<i64>,
+    #[serde(default)]
+    pub bar_count: usize,
+    #[serde(default)]
+    pub equity_curve: Vec<EquityPoint>,
 }
 
 impl BacktestTearsheet {
@@ -83,7 +104,28 @@ impl BacktestTearsheet {
             downside_deviation: 0.0,
             omega_ratio: 1.0,
             cvar_95: 0.0,
+            lookahead_clean: true,
+            start_timestamp: None,
+            end_timestamp: None,
+            bar_count: 0,
+            equity_curve: Vec::new(),
         })
+    }
+
+    pub fn with_provenance(
+        mut self,
+        lookahead_clean: bool,
+        start_timestamp: Option<i64>,
+        end_timestamp: Option<i64>,
+        bar_count: usize,
+        equity_curve: Vec<EquityPoint>,
+    ) -> Self {
+        self.lookahead_clean = lookahead_clean;
+        self.start_timestamp = start_timestamp;
+        self.end_timestamp = end_timestamp;
+        self.bar_count = bar_count;
+        self.equity_curve = equity_curve;
+        self
     }
 
     pub fn with_deflated_sharpe(mut self, deflated_sharpe: f64) -> Self {

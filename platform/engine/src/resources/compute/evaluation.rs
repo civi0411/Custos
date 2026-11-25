@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use custos_core::contracts::compute::WorkloadAdmissionPort;
-use custos_domain::{
+use custos_contracts::contracts::compute::WorkloadAdmissionPort;
+use custos_contracts::{
     ComputeWorkloadKind, DomainError, ModelEvaluationReport, ModelEvaluationSpec,
     WorkloadAdmissionRequest, WorkloadAdmissionVerdict,
 };
@@ -36,7 +36,7 @@ impl ModelEvaluationRunner {
             preferred_device_id: spec.target_device_id.clone(),
             require_exclusive: false,
             required_memory_mb: Some(4096),
-            lane: Some(custos_domain::ExecutionLane::Batch),
+            lane: Some(custos_contracts::ExecutionLane::Batch),
         };
 
         let verdict = self.admission.admit_workload(&admission_req).await?;
@@ -56,6 +56,12 @@ impl ModelEvaluationRunner {
 
         // 2. Perform bounded evaluation on samples
         let sample_count = spec.sample_limit.min(1000);
+        if sample_count == 0 {
+            let _ = self.admission.release_lease(&lease.lease_id).await;
+            return Err(DomainError::Validation(
+                "Evaluation sample_limit must be greater than 0".into(),
+            ));
+        }
         let passed_count = (sample_count as f64 * 0.88).round() as usize;
         let failed_count = sample_count.saturating_sub(passed_count);
         let accuracy = (passed_count as f64) / (sample_count as f64);

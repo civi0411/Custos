@@ -11,7 +11,7 @@ pub use draft::PayloadLockSkill;
 pub use identity::ContactResolveSkill;
 pub use subagent::{AxTreeAuditSkill, BrowserSubagentDispatchSkill};
 
-use custos_core::contracts::skill::SkillSink;
+use custos_engine::contracts::skill::SkillSink;
 use std::sync::Arc;
 
 /// Register all assistant skills into the central SkillSink

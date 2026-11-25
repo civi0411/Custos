@@ -1,7 +1,7 @@
 use super::*;
 use crate::workflow::contracts::ExecutionContext;
-use custos_domain::RiskLevel;
 use custos_contracts::inference::ModelResponse;
+use custos_contracts::RiskLevel;
 
 mod outbox;
 
@@ -86,8 +86,8 @@ impl SandboxPort for DummySandbox {
     async fn execute(
         &self,
         _intent: &ActionIntent,
-        _permit: &custos_domain::Permit,
-    ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
+        _permit: &custos_contracts::Permit,
+    ) -> Result<custos_contracts::ExecutionReceipt, DomainError> {
         unreachable!()
     }
 }
@@ -114,30 +114,27 @@ async fn dag_step_uses_task_id_not_node_id() {
 
     #[async_trait]
     impl KernelPort for CapturingKernel {
-        async fn create_task(
-            &self,
-            _title: String,
-        ) -> Result<custos_domain::Task, DomainError> {
+        async fn create_task(&self, _title: String) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn create_task_with_contract(
             &self,
             _title: String,
-            _contract: custos_domain::TaskContract,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _contract: custos_contracts::TaskContract,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn get_task(
             &self,
             _task_id: &str,
-        ) -> Result<Option<custos_domain::Task>, DomainError> {
+        ) -> Result<Option<custos_contracts::Task>, DomainError> {
             unreachable!()
         }
         async fn transition_task(
             &self,
             _task_id: &str,
-            _next: custos_domain::TaskStatus,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _next: custos_contracts::TaskStatus,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn request_permit(
@@ -145,14 +142,14 @@ async fn dag_step_uses_task_id_not_node_id() {
             task_id: &str,
             _intent: &ActionIntent,
             _actor: &str,
-        ) -> Result<custos_domain::Permit, DomainError> {
+        ) -> Result<custos_contracts::Permit, DomainError> {
             *self.captured_task_id.lock().unwrap() = Some(task_id.to_string());
-            Ok(custos_domain::Permit::new(
+            Ok(custos_contracts::Permit::new(
                 task_id.into(),
                 "act_1".into(),
                 "sandbox".into(),
                 None,
-                custos_domain::RiskClass::Low,
+                custos_contracts::RiskClass::Low,
                 60,
             ))
         }
@@ -160,8 +157,8 @@ async fn dag_step_uses_task_id_not_node_id() {
             &self,
             _permit_id: &str,
             intent: &ActionIntent,
-        ) -> Result<custos_domain::Permit, DomainError> {
-            Ok(custos_domain::Permit::new(
+        ) -> Result<custos_contracts::Permit, DomainError> {
+            Ok(custos_contracts::Permit::new(
                 intent
                     .task_id
                     .clone()
@@ -169,14 +166,14 @@ async fn dag_step_uses_task_id_not_node_id() {
                 intent.id.clone(),
                 "sandbox".into(),
                 None,
-                custos_domain::RiskClass::Low,
+                custos_contracts::RiskClass::Low,
                 60,
             ))
         }
         async fn verify_evidence(
             &self,
-            _bundle: &custos_core::evidence::EvidenceBundle,
-        ) -> Result<custos_domain::VerificationClaim, DomainError> {
+            _bundle: &custos_contracts::evidence::EvidenceBundle,
+        ) -> Result<custos_contracts::VerificationClaim, DomainError> {
             unreachable!()
         }
         async fn grant_capability(
@@ -184,22 +181,22 @@ async fn dag_step_uses_task_id_not_node_id() {
             _task_id: &str,
             _grantee: &str,
             _capability: &str,
-        ) -> Result<custos_domain::Grant, DomainError> {
+        ) -> Result<custos_contracts::Grant, DomainError> {
             unreachable!()
         }
         async fn find_active_grant(
             &self,
             _task_id: &str,
             _capability: &str,
-        ) -> Result<Option<custos_domain::Grant>, DomainError> {
+        ) -> Result<Option<custos_contracts::Grant>, DomainError> {
             Ok(None)
         }
         async fn complete_task(
             &self,
             _task_id: &str,
             _summary: String,
-            _claims: Vec<custos_domain::VerificationClaim>,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _claims: Vec<custos_contracts::VerificationClaim>,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
     }
@@ -213,13 +210,13 @@ async fn dag_step_uses_task_id_not_node_id() {
         async fn execute(
             &self,
             action: &ActionIntent,
-            permit: &custos_domain::Permit,
-        ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
-            Ok(custos_domain::ExecutionReceipt {
+            permit: &custos_contracts::Permit,
+        ) -> Result<custos_contracts::ExecutionReceipt, DomainError> {
+            Ok(custos_contracts::ExecutionReceipt {
                 receipt_id: "rcpt_1".into(),
                 permit_id: permit.id.clone(),
                 action_id: action.id.clone(),
-                status: custos_domain::ReceiptStatus::Success,
+                status: custos_contracts::ReceiptStatus::Success,
                 output_digest: "blake3:00".into(),
                 output_data: Some(
                     serde_json::json!({ "task_id": action.task_id, "target": action.target }),
@@ -227,7 +224,7 @@ async fn dag_step_uses_task_id_not_node_id() {
                 error_message: None,
                 duration_ms: Some(1),
                 executed_at: chrono::Utc::now(),
-                assurance: custos_domain::Assurance::CustosMediated,
+                assurance: custos_contracts::Assurance::CustosMediated,
             })
         }
     }
@@ -240,8 +237,7 @@ async fn dag_step_uses_task_id_not_node_id() {
         .with_sandbox(Arc::new(EchoSandbox));
 
     let ctx = ExecutionContext::new("real_task_123", "run_456", "dag_node_789", "worker_1");
-    let inputs =
-        serde_json::json!({ "tool": "read_file", "parameters": { "path": "test.txt" } });
+    let inputs = serde_json::json!({ "tool": "read_file", "parameters": { "path": "test.txt" } });
 
     let res = executor
         .execute_step(&ctx, "tool_call", &inputs)
@@ -264,30 +260,27 @@ async fn shell_tool_does_not_inherit_read_risk_level() {
     struct MockKernel;
     #[async_trait]
     impl KernelPort for MockKernel {
-        async fn create_task(
-            &self,
-            _title: String,
-        ) -> Result<custos_domain::Task, DomainError> {
+        async fn create_task(&self, _title: String) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn create_task_with_contract(
             &self,
             _title: String,
-            _contract: custos_domain::TaskContract,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _contract: custos_contracts::TaskContract,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn get_task(
             &self,
             _task_id: &str,
-        ) -> Result<Option<custos_domain::Task>, DomainError> {
+        ) -> Result<Option<custos_contracts::Task>, DomainError> {
             unreachable!()
         }
         async fn transition_task(
             &self,
             _task_id: &str,
-            _next: custos_domain::TaskStatus,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _next: custos_contracts::TaskStatus,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn request_permit(
@@ -295,20 +288,20 @@ async fn shell_tool_does_not_inherit_read_risk_level() {
             _task_id: &str,
             _intent: &ActionIntent,
             _actor: &str,
-        ) -> Result<custos_domain::Permit, DomainError> {
+        ) -> Result<custos_contracts::Permit, DomainError> {
             unreachable!()
         }
         async fn consume_permit(
             &self,
             _permit_id: &str,
             _intent: &ActionIntent,
-        ) -> Result<custos_domain::Permit, DomainError> {
+        ) -> Result<custos_contracts::Permit, DomainError> {
             unreachable!()
         }
         async fn verify_evidence(
             &self,
-            _bundle: &custos_core::evidence::EvidenceBundle,
-        ) -> Result<custos_domain::VerificationClaim, DomainError> {
+            _bundle: &custos_contracts::evidence::EvidenceBundle,
+        ) -> Result<custos_contracts::VerificationClaim, DomainError> {
             unreachable!()
         }
         async fn grant_capability(
@@ -316,29 +309,28 @@ async fn shell_tool_does_not_inherit_read_risk_level() {
             _task_id: &str,
             _grantee: &str,
             _capability: &str,
-        ) -> Result<custos_domain::Grant, DomainError> {
+        ) -> Result<custos_contracts::Grant, DomainError> {
             unreachable!()
         }
         async fn find_active_grant(
             &self,
             _task_id: &str,
             _capability: &str,
-        ) -> Result<Option<custos_domain::Grant>, DomainError> {
+        ) -> Result<Option<custos_contracts::Grant>, DomainError> {
             unreachable!()
         }
         async fn complete_task(
             &self,
             _task_id: &str,
             _summary: String,
-            _claims: Vec<custos_domain::VerificationClaim>,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _claims: Vec<custos_contracts::VerificationClaim>,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
     }
     let kernel = MockKernel;
     let read_risk = kernel.classify_effect("read_file", &serde_json::json!({}));
-    let shell_risk =
-        kernel.classify_effect("bash", &serde_json::json!({ "command": "echo 1" }));
+    let shell_risk = kernel.classify_effect("bash", &serde_json::json!({ "command": "echo 1" }));
     assert_eq!(read_risk, RiskLevel::Low);
     assert_eq!(shell_risk, RiskLevel::High);
     assert_ne!(read_risk, shell_risk);

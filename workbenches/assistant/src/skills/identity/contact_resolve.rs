@@ -4,7 +4,7 @@
 //! prompt-injection sanitization.
 
 use async_trait::async_trait;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 use regex::Regex;
@@ -52,31 +52,30 @@ impl Skill for ContactResolveSkill {
         let email_re = Regex::new(r"^[\w\.\+-]+@[\w\.-]+\.[a-zA-Z]{2,}$")
             .map_err(|e| SkillError::InvalidArg(format!("regex error: {}", e)))?;
 
-        let (canonical_email, display_name, confidence) = if email_re.is_match(query) {
-            (query.to_string(), query.to_string(), 1.0)
+        let (canonical_email, display_name, confidence, resolved) = if email_re.is_match(query) {
+            (Some(query.to_string()), query.to_string(), 1.0, true)
         } else {
-            // Simulated address book / alias lookup
+            // Known workspace contacts; never synthesize fake email domains for unknowns
             match lower.as_str() {
                 "alice" | "alice smith" => (
-                    "alice.smith@custos.org".to_string(),
+                    Some("alice.smith@custos.org".to_string()),
                     "Alice Smith".to_string(),
                     0.95,
+                    true,
                 ),
                 "bob" | "bob jones" => (
-                    "bob.jones@custos.org".to_string(),
+                    Some("bob.jones@custos.org".to_string()),
                     "Bob Jones".to_string(),
                     0.95,
+                    true,
                 ),
                 "security" | "security team" => (
-                    "security@custos.org".to_string(),
+                    Some("security@custos.org".to_string()),
                     "Custos Security Team".to_string(),
                     0.99,
+                    true,
                 ),
-                _ => (
-                    format!("{}@unverified.local", query.replace(' ', ".")),
-                    query.to_string(),
-                    0.50,
-                ),
+                _ => (None, query.to_string(), 0.0, false),
             }
         };
 
@@ -84,6 +83,7 @@ impl Skill for ContactResolveSkill {
             skill_id: self.skill_id().to_string(),
             result: json!({
                 "query": query,
+                "resolved": resolved,
                 "email": canonical_email,
                 "display_name": display_name,
                 "confidence": confidence,
@@ -91,7 +91,8 @@ impl Skill for ContactResolveSkill {
             artifacts: vec![],
             evidence_hint: Some(format!(
                 "contact_resolve '{}' -> {}",
-                query, canonical_email
+                query,
+                canonical_email.as_deref().unwrap_or("unverified")
             )),
             taint: TaintLevel::Clean,
         })

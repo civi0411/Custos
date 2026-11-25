@@ -4,7 +4,7 @@
 //! identifying candidate assertions and their associated citations or DOIs.
 
 use async_trait::async_trait;
-use custos_core::contracts::skill::{
+use custos_engine::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 use regex::Regex;
@@ -34,16 +34,26 @@ fn split_sentences(text: &str) -> Vec<&str> {
 
         if (bytes[i] == b'.' || bytes[i] == b'!' || bytes[i] == b'?')
             && i + 1 < len
-            && (bytes[i + 1] == b' ' || bytes[i + 1] == b'\t' || bytes[i + 1] == b'\n' || bytes[i + 1] == b'\r')
+            && (bytes[i + 1] == b' '
+                || bytes[i + 1] == b'\t'
+                || bytes[i + 1] == b'\n'
+                || bytes[i + 1] == b'\r')
         {
-            let is_doi_or_number = i > 0 && bytes[i - 1].is_ascii_digit() && (i + 2 < len && bytes[i + 2].is_ascii_digit());
+            let is_doi_or_number = i > 0
+                && bytes[i - 1].is_ascii_digit()
+                && (i + 2 < len && bytes[i + 2].is_ascii_digit());
             if !is_doi_or_number {
                 let chunk = text[start..=i].trim();
                 if !chunk.is_empty() {
                     sentences.push(chunk);
                 }
                 i += 1;
-                while i < len && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b'\n' || bytes[i] == b'\r') {
+                while i < len
+                    && (bytes[i] == b' '
+                        || bytes[i] == b'\t'
+                        || bytes[i] == b'\n'
+                        || bytes[i] == b'\r')
+                {
                     i += 1;
                 }
                 start = i;
@@ -156,10 +166,7 @@ mod tests {
         let output = skill.run(&ctx).await.expect("execute skill");
         let claims = output.result["claims"].as_array().expect("claims array");
         assert_eq!(claims.len(), 2);
-        assert_eq!(
-            claims[0]["doi"].as_str(),
-            Some("10.1145/3292500.3330964")
-        );
+        assert_eq!(claims[0]["doi"].as_str(), Some("10.1145/3292500.3330964"));
         assert_eq!(claims[0]["level"].as_str(), Some("l1_heuristic_citation"));
     }
 }

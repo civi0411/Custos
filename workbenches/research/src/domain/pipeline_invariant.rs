@@ -1,5 +1,5 @@
-use custos_domain::pipeline::DataInvariant;
-use custos_domain::DomainError;
+use custos_contracts::pipeline::DataInvariant;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Research Workbench Invariant: Guarantees claims anchor to immutable source passages.
@@ -71,12 +71,15 @@ mod tests {
             165,
         );
         assert!(valid_claim.verify().is_ok());
-        assert!(EvidenceGroundingInvariant::new("paper_42", "sha", "text", 200, 150)
-            .verify()
-            .is_err());
-        assert!(EvidenceGroundingInvariant::new("paper_42", "sha", "   ", 10, 20)
-            .verify()
-            .is_err());
+        assert!(
+            EvidenceGroundingInvariant::new("paper_42", "sha", "text", 200, 150)
+                .verify()
+                .is_err()
+        );
+        assert!(
+            EvidenceGroundingInvariant::new("paper_42", "sha", "   ", 10, 20)
+                .verify()
+                .is_err()
+        );
     }
 }
-

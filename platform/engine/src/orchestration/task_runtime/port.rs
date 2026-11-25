@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use custos_core::contracts::storage::OutboxStatus;
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_domain::{
+use custos_contracts::contracts::storage::OutboxStatus;
+use custos_contracts::contracts::workflow::WorkflowPort;
+use custos_contracts::{
     CancelReceipt, ContinuationPacket, DomainError, RunHandle, RunStatus, StartRunCommand,
     TaskStatus,
 };
@@ -24,7 +24,7 @@ impl WorkflowPort for TaskRuntime {
         session_id: &str,
         run_id: &str,
         cursor: u64,
-    ) -> Result<custos_domain::LiveRunReplay, DomainError> {
+    ) -> Result<custos_contracts::LiveRunReplay, DomainError> {
         match self.live.replay(session_id, run_id, cursor) {
             Ok(replay) => Ok(replay),
             Err(DomainError::NotFound { .. }) => {
@@ -72,10 +72,10 @@ impl WorkflowPort for TaskRuntime {
                             .map(str::to_string),
                     )
                 };
-                Ok(custos_domain::LiveRunReplay {
+                Ok(custos_contracts::LiveRunReplay {
                     events: vec![],
                     gap: true,
-                    snapshot: custos_domain::LiveRunSnapshot {
+                    snapshot: custos_contracts::LiveRunSnapshot {
                         cursor: 0,
                         run_id: run.id,
                         task_id: run.task_id,
@@ -130,8 +130,7 @@ impl WorkflowPort for TaskRuntime {
             let uncertain_effects_count = if let Some(outbox) = &self.outbox {
                 let uncertain = outbox.list_by_status(OutboxStatus::Uncertain).await?;
                 let dispatching = outbox.list_by_status(OutboxStatus::Dispatching).await?;
-                u32::try_from(uncertain.len().saturating_add(dispatching.len()))
-                    .unwrap_or(u32::MAX)
+                u32::try_from(uncertain.len().saturating_add(dispatching.len())).unwrap_or(u32::MAX)
             } else {
                 0
             };
@@ -406,9 +405,8 @@ impl WorkflowPort for TaskRuntime {
 
     async fn execute_candidate_race(
         &self,
-        spec: custos_domain::CandidateRaceSpec,
-    ) -> Result<custos_domain::CandidateRaceResult, DomainError> {
+        spec: custos_contracts::CandidateRaceSpec,
+    ) -> Result<custos_contracts::CandidateRaceResult, DomainError> {
         self.execute_candidate_race(spec).await
     }
 }
-

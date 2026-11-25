@@ -5,9 +5,9 @@
 //! - Deflated Sharpe Ratio (DSR) Extreme Value Theory calculation
 //! - Combinatorially Symmetric Cross-Validation (CSCV) Probability of Backtest Overfitting (PBO)
 
-use async_trait::async_trait;
 use crate::domain::{calculate_dsr, calculate_pbo_cscv, detect_lookahead_bias};
-use custos_core::contracts::skill::{
+use async_trait::async_trait;
+use custos_engine::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, SkillSink,
 };
 use serde_json::json;
@@ -163,13 +163,13 @@ impl Skill for QuantPboEvaluateSkill {
             }
         }
 
-        let partitions = ctx
+        let max_combinations = ctx
             .args
-            .get("partitions")
+            .get("max_combinations")
             .and_then(|v| v.as_u64())
-            .unwrap_or(8) as usize;
+            .unwrap_or(2_000) as usize;
 
-        match calculate_pbo_cscv(&matrix, partitions) {
+        match calculate_pbo_cscv(&matrix, max_combinations) {
             Ok(pbo) => Ok(SkillOutput::clean(
                 self.skill_id(),
                 json!({

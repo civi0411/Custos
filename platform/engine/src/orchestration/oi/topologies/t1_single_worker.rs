@@ -2,8 +2,8 @@
 //!
 //! Sovereign native baseline execution with governed tool access and evidence requirements.
 
-use custos_domain::oi::{WorkPacket, WorkerResult, WorkerStatus};
-use custos_domain::DomainError;
+use custos_contracts::oi::{WorkPacket, WorkerResult, WorkerStatus};
+use custos_contracts::DomainError;
 
 pub struct T1SingleWorkerCoordinator;
 

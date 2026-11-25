@@ -1,5 +1,5 @@
-use custos_domain::pipeline::DataInvariant;
-use custos_domain::DomainError;
+use custos_contracts::pipeline::DataInvariant;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Coding Workbench Invariant: Guarantees basic syntactic validity and balanced delimiters.
@@ -81,12 +81,15 @@ mod tests {
 
     #[test]
     fn test_ast_syntax_invariant_validation() {
-        assert!(AstSyntaxInvariant::new("src/main.rs", "fn main() { println!(\"Hello\"); }")
-            .verify()
-            .is_ok());
-        assert!(AstSyntaxInvariant::new("src/lib.rs", "fn test() { let x = [1, 2; }")
-            .verify()
-            .is_err());
+        assert!(
+            AstSyntaxInvariant::new("src/main.rs", "fn main() { println!(\"Hello\"); }")
+                .verify()
+                .is_ok()
+        );
+        assert!(
+            AstSyntaxInvariant::new("src/lib.rs", "fn test() { let x = [1, 2; }")
+                .verify()
+                .is_err()
+        );
     }
 }
-

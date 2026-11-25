@@ -1,9 +1,9 @@
 //! Conversation & Interactive Session Application Service
 
-use std::sync::Arc;
-use custos_contracts::*;
-use crate::conversation::SessionManager;
 use crate::conversation::bridge::{BridgePort, BridgeService, SteerReceipt};
+use crate::conversation::SessionManager;
+use custos_contracts::*;
+use std::sync::Arc;
 
 /// Application service orchestrating conversation sessions and external harness bridging.
 pub struct ConversationApplicationService {
@@ -39,7 +39,9 @@ impl ConversationApplicationService {
         if let Some(bridge) = &self.bridge_service {
             bridge.steer(task_id, session_id, message).await
         } else {
-            Err(DomainError::Validation("Bridge service not initialized".to_string()))
+            Err(DomainError::Validation(
+                "Bridge service not initialized".to_string(),
+            ))
         }
     }
 }

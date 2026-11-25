@@ -1,6 +1,6 @@
 use super::*;
-use custos_core::contracts::storage::OutboxStatus;
-use custos_domain::{RunHandle, SessionId, StartRunCommand};
+use custos_contracts::contracts::storage::OutboxStatus;
+use custos_contracts::{RunHandle, SessionId, StartRunCommand};
 
 impl TaskRuntime {
     async fn persist_live_journal(
@@ -47,20 +47,20 @@ impl TaskRuntime {
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let run_started_ms = run.started_at.timestamp_millis();
-        let root_span_id = custos_domain::new_id("step");
+        let root_span_id = custos_contracts::new_id("step");
         let root_kind = if actual_mode == "native" {
-            custos_domain::supervision::StepSpanKind::Harness
+            custos_contracts::supervision::StepSpanKind::Harness
         } else {
-            custos_domain::supervision::StepSpanKind::Llm
+            custos_contracts::supervision::StepSpanKind::Llm
         };
-        let mut root_span = custos_domain::supervision::RunStepSpan {
+        let mut root_span = custos_contracts::supervision::RunStepSpan {
             id: root_span_id.clone(),
             run_id: run.id.clone(),
             worker_run_id: Some(wrun.id.clone()),
             parent_id: None,
             kind: root_kind,
             name: format!("{actual_mode}_turn"),
-            status: custos_domain::supervision::StepSpanStatus::Running,
+            status: custos_contracts::supervision::StepSpanStatus::Running,
             started_at_ms: run_started_ms,
             ended_at_ms: None,
             duration_ms: None,
@@ -93,14 +93,8 @@ impl TaskRuntime {
                     )
                     .await
                 } else if actual_mode == "model" {
-                    self.execute_model_turn(
-                        &cmd,
-                        &mut run,
-                        &mut wrun,
-                        &requested_mode,
-                        &observer,
-                    )
-                    .await
+                    self.execute_model_turn(&cmd, &mut run, &mut wrun, &requested_mode, &observer)
+                        .await
                 } else {
                     Ok(None)
                 }
@@ -194,23 +188,26 @@ impl TaskRuntime {
                     }),
                 );
                 let err_ms = chrono::Utc::now().timestamp_millis();
-                root_span.finish(err_ms, custos_domain::supervision::StepSpanStatus::Error);
+                root_span.finish(err_ms, custos_contracts::supervision::StepSpanStatus::Error);
                 self.supervision.record_span(root_span.clone());
                 let err_msg = e.to_string();
-                let (_, sig_hash) =
-                    custos_domain::supervision::compute_error_signature("ExecutionError", &err_msg);
-                self.supervision.record_error(custos_domain::supervision::StepError {
-                    id: custos_domain::new_id("serr"),
-                    run_id: run.id.clone(),
-                    worker_run_id: Some(wrun.id.clone()),
-                    span_id: Some(root_span_id),
-                    error_type: "ExecutionError".into(),
-                    message: err_msg,
-                    stack: None,
-                    agent: cmd.actor.clone(),
-                    signature_hash: sig_hash,
-                    timestamp_ms: err_ms,
-                });
+                let (_, sig_hash) = custos_contracts::supervision::compute_error_signature(
+                    "ExecutionError",
+                    &err_msg,
+                );
+                self.supervision
+                    .record_error(custos_contracts::supervision::StepError {
+                        id: custos_contracts::new_id("serr"),
+                        run_id: run.id.clone(),
+                        worker_run_id: Some(wrun.id.clone()),
+                        span_id: Some(root_span_id),
+                        error_type: "ExecutionError".into(),
+                        message: err_msg,
+                        stack: None,
+                        agent: cmd.actor.clone(),
+                        signature_hash: sig_hash,
+                        timestamp_ms: err_ms,
+                    });
                 self.supervision.notify_run_state(
                     &run.id,
                     wb_id.as_deref(),
@@ -348,9 +345,9 @@ impl TaskRuntime {
         );
         let done_ms = chrono::Utc::now().timestamp_millis();
         let done_status = if handle.status == RunStatus::Failed {
-            custos_domain::supervision::StepSpanStatus::Error
+            custos_contracts::supervision::StepSpanStatus::Error
         } else {
-            custos_domain::supervision::StepSpanStatus::Success
+            custos_contracts::supervision::StepSpanStatus::Success
         };
         root_span.finish(done_ms, done_status);
         self.supervision.record_span(root_span);

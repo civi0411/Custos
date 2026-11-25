@@ -57,7 +57,7 @@ pub fn create_skill_registry_from_inventory(enabled: &[&str]) -> SkillRegistry {
 /// Prevents token bloat and hallucination by disclosing only core safe read tools
 /// plus domain tools belonging to the active and installed workbench lens.
 pub fn compile_governed_tools(
-    lens: custos_domain::WorkbenchLens,
+    lens: custos_contracts::WorkbenchLens,
     pack_registry: &DomainPackRegistry,
 ) -> Vec<serde_json::Value> {
     // 1. Cross-lens core safe inspection tools (read-only)
@@ -113,8 +113,8 @@ pub fn register_pack_verifiers_into_pipeline(
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::session::WorkbenchLens;
-    use custos_domain::DomainError;
+    use custos_contracts::session::WorkbenchLens;
+    use custos_contracts::DomainError;
 
     struct DummyModule;
     impl WorkbenchModule for DummyModule {
@@ -127,7 +127,11 @@ mod tests {
         fn pack(&self) -> Arc<dyn DomainPack> {
             Arc::new(DummyPack)
         }
-        fn register_skills(&self, _registry: &mut dyn custos_core::contracts::skill::SkillSink) {}
+        fn register_skills(
+            &self,
+            _registry: &mut dyn custos_contracts::contracts::skill::SkillSink,
+        ) {
+        }
     }
 
     struct DummyPack;
@@ -149,7 +153,7 @@ mod tests {
             custos_contracts::PackProfile::new(
                 "dummy",
                 "Dummy Profile",
-                custos_domain::oi::ExecutionTopology::T1SingleWorker,
+                custos_contracts::oi::ExecutionTopology::T1SingleWorker,
                 vec![],
                 "dummy_oracle",
                 10_000,
@@ -179,7 +183,10 @@ mod tests {
         fn description(&self) -> &'static str {
             "Dummy oracle"
         }
-        async fn verify(&self, _ctx: &custos_contracts::VerificationContext) -> custos_contracts::VerificationResult {
+        async fn verify(
+            &self,
+            _ctx: &custos_contracts::VerificationContext,
+        ) -> custos_contracts::VerificationResult {
             custos_contracts::VerificationResult::Pass {
                 detail: "verified".into(),
             }
@@ -198,7 +205,9 @@ mod tests {
         let pack_reg = registry.create_pack_registry(&["dummy_alias"]);
         assert!(pack_reg.has_pack("dummy"));
 
-        let manifest = registry.get_manifest_for_pack("dummy_alias").expect("manifest");
+        let manifest = registry
+            .get_manifest_for_pack("dummy_alias")
+            .expect("manifest");
         assert_eq!(manifest.id, "dummy");
         assert_eq!(manifest.lens, WorkbenchLens::Coding);
     }
@@ -243,7 +252,10 @@ mod tests {
             serde_json::json!({ "status": "ok" }),
         );
 
-        let claim = pipeline.verify_bundle(&bundle).await.expect("verify bundle via pipeline");
+        let claim = pipeline
+            .verify_bundle(&bundle)
+            .await
+            .expect("verify bundle via pipeline");
         assert!(claim.passed);
         assert_eq!(claim.verifier_id, "dummy_oracle");
     }

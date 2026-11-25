@@ -3,17 +3,8 @@ pub mod executions;
 pub mod sources;
 pub mod synthesis;
 
-#[allow(unused_imports)]
-pub use claims::*;
-#[allow(unused_imports)]
-pub use executions::*;
-#[allow(unused_imports)]
-pub use sources::*;
-#[allow(unused_imports)]
-pub use synthesis::*;
-
+use custos_contracts::DomainError;
 use std::sync::{Arc, Mutex};
-use custos_domain::DomainError;
 
 #[derive(Clone)]
 pub struct DbConnection(pub Arc<Mutex<rusqlite::Connection>>);
@@ -24,8 +15,8 @@ impl DbConnection {
     }
 
     pub fn open(path: &str) -> Result<Self, DomainError> {
-        let conn = rusqlite::Connection::open(path)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let conn =
+            rusqlite::Connection::open(path).map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(Self(Arc::new(Mutex::new(conn))))
     }
 
@@ -85,7 +76,9 @@ impl ResearchRepository {
     pub fn ensure_tables(&self) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         conn.execute_batch(include_str!("../../migrations/research_schema.sql"))
-            .map_err(|e| DomainError::Validation(format!("Failed to initialize research schema: {e}")))?;
+            .map_err(|e| {
+                DomainError::Validation(format!("Failed to initialize research schema: {e}"))
+            })?;
         Self::ensure_column(&conn, "research_execution_records", "record_json", "TEXT")?;
         Ok(())
     }

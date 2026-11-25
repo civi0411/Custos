@@ -2,7 +2,7 @@
 //!
 //! Validates state graph transitions and provides introspection.
 
-use custos_domain::{DomainError, TaskStatus};
+use custos_contracts::{DomainError, TaskStatus};
 
 pub struct TaskStateMachine;
 
@@ -36,7 +36,7 @@ impl TaskStateMachine {
                 to: to.to_string(),
             });
         }
-        crate::kernel::observability::KernelObservability::on_state_change(
+        crate::task::observability::KernelObservability::on_state_change(
             "task",
             &from.to_string(),
             &to.to_string(),

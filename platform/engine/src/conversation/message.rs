@@ -9,7 +9,9 @@ pub struct MessageMetadata {
 
 impl MessageMetadata {
     pub fn user_only() -> Self {
-        Self { agent_visible: false }
+        Self {
+            agent_visible: false,
+        }
     }
 }
 
@@ -67,7 +69,9 @@ impl Message {
         Self {
             id: None,
             content: Vec::new(),
-            metadata: MessageMetadata { agent_visible: true },
+            metadata: MessageMetadata {
+                agent_visible: true,
+            },
         }
     }
 
