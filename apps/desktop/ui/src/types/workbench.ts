@@ -12,7 +12,7 @@ export type PaneWidth = 'full' | 'half' | 'third';
 export interface PaneProps {
   workspaceId?: string;
   taskId?: string;
-  job?: any;
+  job?: unknown;
   className?: string;
   onClose?: () => void;
   onRefresh?: () => void;
@@ -21,8 +21,8 @@ export interface PaneProps {
 export interface PaneContribution {
   id: string;
   title: string;
-  icon?: any;
-  component?: ComponentType<any> | LazyExoticComponent<any>;
+  icon?: ComponentType<{ className?: string }>;
+  component?: ComponentType<PaneProps> | LazyExoticComponent<ComponentType<PaneProps>>;
   requiredCapabilities?: string[];
   defaultWidth?: PaneWidth;
   position?: PanePosition;
@@ -31,7 +31,7 @@ export interface PaneContribution {
 export interface SidebarContribution {
   id: string;
   title: string;
-  component?: ComponentType<any> | LazyExoticComponent<any>;
+  component?: ComponentType<Record<string, unknown>> | LazyExoticComponent<ComponentType<Record<string, unknown>>>;
 }
 
 export interface WorkbenchCommandContribution {
@@ -45,7 +45,7 @@ export interface WorkbenchContribution {
   id: WorkbenchId;
   canonicalId: CanonicalWorkbenchId;
   label: string;
-  icon?: any;
+  icon: ComponentType<{ className?: string }>;
   shortcut: string;
   builtin: boolean;
   description: string;
@@ -62,7 +62,7 @@ export interface WorkbenchPaneProps {
   paneId?: string;
   workspaceId?: string;
   taskId?: string;
-  job?: any;
+  job?: unknown;
   isLoading?: boolean;
   error?: string | null;
   emptyState?: ReactNode;

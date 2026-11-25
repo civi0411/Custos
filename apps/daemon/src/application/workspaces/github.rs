@@ -1,11 +1,11 @@
 //! GitHub accounts, login, auth status, and viewer use cases.
 
 use crate::api::*;
-use custos_adapters::host::binaries::resolve_gh_binary;
-use custos_adapters::host::workspace::git_discovery::{
+use custos_engine::contracts::terminal::TerminalPort;
+use custos_integrations::host::binaries::resolve_gh_binary;
+use custos_integrations::host::workspace::git_discovery::{
     github_login_command, GITHUB_LOGIN_LOCK,
 };
-use custos_core::contracts::terminal::TerminalPort;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_workspaces_github(&self, req: ApiRequest) -> ApiResponse {
@@ -20,7 +20,7 @@ impl LocalApiDispatcher {
                         )
                     }
                 };
-                match custos_adapters::repository_git::github_accounts(&gh).await {
+                match custos_integrations::repository_git::github_accounts(&gh).await {
                     Ok(value) => ApiResponse::success(req.id, value),
                     Err(error) => ApiResponse::error(req.id, error.to_string()),
                 }
@@ -38,7 +38,10 @@ impl LocalApiDispatcher {
                 let existing = self.env.terminal.list_sessions(Some("github-auth")).await;
                 if let Ok(sessions) = existing {
                     if let Some(session) = sessions.into_iter().find(|session| {
-                        matches!(session.status, custos_domain::TerminalSessionStatus::Active)
+                        matches!(
+                            session.status,
+                            custos_contracts::TerminalSessionStatus::Active
+                        )
                     }) {
                         return match serde_json::to_value(session) {
                             Ok(value) => ApiResponse::success(req.id, value),
@@ -49,7 +52,8 @@ impl LocalApiDispatcher {
                 let command = github_login_command(&gh);
                 tracing::info!(request_id = %req.id, "Starting user-requested GitHub CLI login");
                 match self
-                    .env.terminal
+                    .env
+                    .terminal
                     .spawn(
                         "github-auth",
                         &std::env::temp_dir(),
@@ -81,7 +85,8 @@ impl LocalApiDispatcher {
                 };
                 // The authenticated viewer is authoritative. Never export gh's token or
                 // trust a cached profile / a fragment of multi-account auth-status text.
-                let value = custos_adapters::repository_git::github_auth_status_probe(&gh).await;
+                let value =
+                    custos_integrations::repository_git::github_auth_status_probe(&gh).await;
                 ApiResponse::success(req.id, value)
             }
             METHOD_GITHUB_VIEWER => {
@@ -95,7 +100,9 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                match custos_adapters::repository_git::fetch_ambient_github_viewer(&gh_bin).await {
+                match custos_integrations::repository_git::fetch_ambient_github_viewer(&gh_bin)
+                    .await
+                {
                     Ok(val) => ApiResponse::success(req.id, val),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
@@ -107,7 +114,7 @@ impl LocalApiDispatcher {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use custos_adapters::host::workspace::git_discovery::github_auth_metadata;
+    use custos_integrations::host::workspace::git_discovery::github_auth_metadata;
 
     #[test]
     fn test_github_auth_metadata_offline() {

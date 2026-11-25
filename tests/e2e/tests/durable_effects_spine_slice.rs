@@ -4,29 +4,13 @@
 //! 1. `outbox_and_crash_reconciliation`: Durable outbox enqueuing, InFlight recording, startup crash reconciliation to Uncertain, and INV-03 enforcement.
 //! 2. `receipt_resolution_and_terminal_idempotency`: Outbox receipting, effect resolution to Succeeded, and idempotency key audit.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
-use custos_core::kernel::{CreateTask, TaskService};
-use custos_domain::{
+use custos_contracts::{
     new_id, ActionIntent, ActionLifecycleState, EffectAttempt, EffectStatus, ExecutionReceipt,
     ReceiptStatus, RiskLevel, Task,
 };
-use custos_persistence::SqliteTaskStore;
+use custos_engine::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+use custos_engine::{CreateTask, TaskService};
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 async fn setup_task(store: &Arc<SqliteTaskStore>) -> Task {
@@ -181,7 +165,7 @@ mod receipt_resolution_and_terminal_idempotency {
             error_message: None,
             duration_ms: Some(15),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         };
 
         store

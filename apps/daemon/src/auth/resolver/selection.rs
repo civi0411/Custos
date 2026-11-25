@@ -1,10 +1,10 @@
 //! Provider account reservation and catalog scoping logic.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 #[cfg(test)]
 pub(crate) fn reserve_provider_account(
-    repo: &custos_persistence::ProviderRepository,
+    repo: &custos_storage::ProviderRepository,
     service: &str,
     model: &str,
 ) -> Result<Option<String>, DomainError> {
@@ -12,11 +12,11 @@ pub(crate) fn reserve_provider_account(
 }
 
 pub(crate) fn reserve_available_provider_account(
-    repo: &custos_persistence::ProviderRepository,
+    repo: &custos_storage::ProviderRepository,
     service: &str,
     model: &str,
     effort: Option<&str>,
-    availability: &custos_provider::routing::availability::ModelAvailability,
+    availability: &custos_integrations::routing::availability::ModelAvailability,
 ) -> Result<Option<String>, DomainError> {
     let providers = repo.list_providers()?;
     let mut eligible = Vec::new();
@@ -60,7 +60,7 @@ pub(crate) fn reserve_available_provider_account(
                 "local" => "http://localhost:11434",
                 _ => "",
             });
-        let key = custos_provider::routing::probe::verified_catalog_key(
+        let key = custos_integrations::routing::probe::verified_catalog_key(
             &account.id,
             endpoint,
             oauth,
@@ -72,7 +72,7 @@ pub(crate) fn reserve_available_provider_account(
         }
         if repo.list_catalog_models(Some(&key))?.iter().any(|m| {
             m.id == model
-                && custos_provider::routing::probe::conversation_model_is_visible(
+                && custos_integrations::routing::probe::conversation_model_is_visible(
                     &m.id,
                     Some(&m.label),
                 )
@@ -94,7 +94,7 @@ pub(crate) fn reserve_available_provider_account(
 
 /// Recompute identity from current provider/credential metadata, never from model family.
 pub(crate) fn provider_catalog_scope(
-    repo: &custos_persistence::ProviderRepository,
+    repo: &custos_storage::ProviderRepository,
     account: &str,
 ) -> Result<String, DomainError> {
     let record = repo.get_provider(account)?.ok_or_else(|| {
@@ -118,7 +118,7 @@ pub(crate) fn provider_catalog_scope(
             "local" => "http://localhost:11434",
             _ => "",
         });
-    Ok(custos_provider::routing::probe::verified_catalog_key(
+    Ok(custos_integrations::routing::probe::verified_catalog_key(
         account,
         endpoint,
         oauth,

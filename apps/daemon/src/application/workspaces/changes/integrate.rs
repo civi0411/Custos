@@ -8,10 +8,7 @@ impl LocalApiDispatcher {
         let coordinator = match self.env.workspace.as_ref() {
             Some(c) => c,
             None => {
-                return ApiResponse::error(
-                    req.id,
-                    "WorkspaceCoordinator not configured on daemon",
-                )
+                return ApiResponse::error(req.id, "WorkspaceCoordinator not configured on daemon")
             }
         };
 
@@ -20,13 +17,8 @@ impl LocalApiDispatcher {
             .get("winner_workspace_id")
             .and_then(|v| v.as_str())
         {
-            Some(id) if !id.trim().is_empty() => custos_domain::WorkspaceId::new(id),
-            _ => {
-                return ApiResponse::error(
-                    req.id,
-                    "Missing 'winner_workspace_id' parameter",
-                )
-            }
+            Some(id) if !id.trim().is_empty() => custos_contracts::WorkspaceId::new(id),
+            _ => return ApiResponse::error(req.id, "Missing 'winner_workspace_id' parameter"),
         };
 
         let mut winner_ws = match coordinator.get_workspace(&winner_id).await {
@@ -40,15 +32,10 @@ impl LocalApiDispatcher {
         };
 
         let (repo_path, winner_branch) = match &winner_ws.kind {
-            custos_domain::WorkspaceKind::Git {
+            custos_contracts::WorkspaceKind::Git {
                 repo_path, branch, ..
             } => (repo_path.clone(), branch.clone()),
-            _ => {
-                return ApiResponse::error(
-                    req.id,
-                    "Winner workspace must be a Git workspace",
-                )
-            }
+            _ => return ApiResponse::error(req.id, "Winner workspace must be a Git workspace"),
         };
 
         if winner_ws.owner_task_id.is_none() || !winner_ws.metadata.is_object() {
@@ -75,7 +62,7 @@ impl LocalApiDispatcher {
                 .and_then(|value| value.as_str())
                 .unwrap_or("");
             let target_ref = format!("refs/heads/{recorded_target}");
-            if custos_adapters::host::workspace::git_ops::is_ancestor(
+            if custos_integrations::host::workspace::git_ops::is_ancestor(
                 std::path::Path::new(&repo_path),
                 recorded_head,
                 &target_ref,
@@ -98,7 +85,7 @@ impl LocalApiDispatcher {
                 }
                 return ApiResponse::success(req.id, result);
             }
-            let conflict = custos_adapters::host::workspace::git_ops::has_merge_head(
+            let conflict = custos_integrations::host::workspace::git_ops::has_merge_head(
                 std::path::Path::new(&repo_path),
             )
             .await;
@@ -126,25 +113,19 @@ impl LocalApiDispatcher {
         };
 
         if !winner_ws.is_ready() {
-            return ApiResponse::error(
-                req.id,
-                "Winner workspace is not ready for integration",
-            );
+            return ApiResponse::error(req.id, "Winner workspace is not ready for integration");
         }
 
         // `git merge` modifies the branch currently checked out in repo_path,
         // not the branch named by target_branch. Refuse a mismatched checkout.
-        let checked_out = match custos_adapters::host::workspace::git_ops::current_branch(
+        let checked_out = match custos_integrations::host::workspace::git_ops::current_branch(
             std::path::Path::new(&repo_path),
         )
         .await
         {
             Ok(branch) => branch,
             Err(_) => {
-                return ApiResponse::error(
-                    req.id,
-                    "Could not verify the checked-out target branch",
-                )
+                return ApiResponse::error(req.id, "Could not verify the checked-out target branch")
             }
         };
         if checked_out != target_branch {
@@ -157,7 +138,7 @@ impl LocalApiDispatcher {
             ("target", repo_path.as_str()),
             ("winner", winner_ws.path.as_str()),
         ] {
-            match custos_adapters::host::workspace::git_ops::is_working_tree_clean(
+            match custos_integrations::host::workspace::git_ops::is_working_tree_clean(
                 std::path::Path::new(path),
             )
             .await
@@ -180,7 +161,7 @@ impl LocalApiDispatcher {
             }
         }
 
-        match custos_adapters::host::workspace::git_ops::current_branch(std::path::Path::new(
+        match custos_integrations::host::workspace::git_ops::current_branch(std::path::Path::new(
             &winner_ws.path,
         ))
         .await
@@ -195,7 +176,7 @@ impl LocalApiDispatcher {
         }
 
         // Stale-Base Drift Check
-        let current_target_head = custos_adapters::host::workspace::git_ops::rev_parse(
+        let current_target_head = custos_integrations::host::workspace::git_ops::rev_parse(
             std::path::Path::new(&repo_path),
             &target_branch,
         )
@@ -204,10 +185,7 @@ impl LocalApiDispatcher {
         let (Some(ref current_head), Some(ref base_commit)) =
             (&current_target_head, &winner_ws.base_commit_hash)
         else {
-            return ApiResponse::error(
-                req.id,
-                "Cannot verify candidate base against target HEAD",
-            );
+            return ApiResponse::error(req.id, "Cannot verify candidate base against target HEAD");
         };
         let is_stale_base = current_head != base_commit;
         if is_stale_base {
@@ -216,7 +194,7 @@ impl LocalApiDispatcher {
             ));
         }
 
-        let winner_head = match custos_adapters::host::workspace::git_ops::rev_parse(
+        let winner_head = match custos_integrations::host::workspace::git_ops::rev_parse(
             std::path::Path::new(&winner_ws.path),
             "HEAD",
         )
@@ -269,7 +247,7 @@ impl LocalApiDispatcher {
             "Merge winner candidate {} ({})",
             winner_ws.name, winner_branch
         );
-        let outcome = custos_adapters::host::workspace::git_ops::merge_no_ff(
+        let outcome = custos_integrations::host::workspace::git_ops::merge_no_ff(
             std::path::Path::new(&repo_path),
             &winner_branch,
             &merge_msg,

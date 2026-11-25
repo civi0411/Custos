@@ -10,9 +10,7 @@ impl LocalApiDispatcher {
                 };
                 let repo = match self.providers.repo.as_ref() {
                     Some(repo) => repo,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 match repo.get_local_model_load_profile(model_path) {
                     Ok(Some(profile)) => {
@@ -30,8 +28,8 @@ impl LocalApiDispatcher {
                             Err(error) => return ApiResponse::error(req.id, error.to_string()),
                         };
                         let hardware =
-                            custos_provider::local::metal_probe::probe_local_hardware();
-                        let profile = custos_domain::LocalModelLoadProfile {
+                            custos_integrations::local::metal_probe::probe_local_hardware();
+                        let profile = custos_contracts::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
                             context_size: descriptor.context_length.clamp(512, 4096),
@@ -61,9 +59,7 @@ impl LocalApiDispatcher {
                 };
                 let repo = match self.providers.repo.as_ref() {
                     Some(repo) => repo,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let descriptor = match repo.get_cached_model_by_path(model_path) {
                     Ok(Some(value)) => value,
@@ -110,7 +106,7 @@ impl LocalApiDispatcher {
                     Ok(None) => 1,
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 };
-                let profile = custos_domain::LocalModelLoadProfile {
+                let profile = custos_contracts::LocalModelLoadProfile {
                     model_path: model_path.to_string(),
                     revision,
                     context_size,
@@ -162,22 +158,20 @@ impl LocalApiDispatcher {
                         format!("Model file does not exist: {}", model_path),
                     );
                 }
-                let hardware =
-                    custos_provider::local::metal_probe::probe_local_hardware();
-                let descriptor =
-                    match custos_provider::local::gguf_inspector::inspect_gguf_file(
-                        path,
-                        "preflight",
-                        &hardware,
-                    ) {
-                        Ok(d) => d,
-                        Err(e) => {
-                            return ApiResponse::error(
-                                req.id,
-                                format!("Failed to parse GGUF file: {}", e),
-                            )
-                        }
-                    };
+                let hardware = custos_integrations::local::metal_probe::probe_local_hardware();
+                let descriptor = match custos_integrations::local::gguf_inspector::inspect_gguf_file(
+                    path,
+                    "preflight",
+                    &hardware,
+                ) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Failed to parse GGUF file: {}", e),
+                        )
+                    }
+                };
                 let requested_context = req
                     .params
                     .get("requested_context")
@@ -203,15 +197,15 @@ impl LocalApiDispatcher {
                         estimated_memory_bytes, hardware.total_ram_bytes
                     ));
                 }
-                if descriptor.compatibility == custos_domain::ModelCompatibility::Red {
+                if descriptor.compatibility == custos_contracts::ModelCompatibility::Red {
                     issues.push("Model memory requirements with large context may exceed memory. Offloading or reduced context recommended.".to_string());
-                } else if descriptor.compatibility == custos_domain::ModelCompatibility::Yellow {
+                } else if descriptor.compatibility == custos_contracts::ModelCompatibility::Yellow {
                     issues.push(
                         "Model may require partial CPU offloading and run with reduced speed"
                             .to_string(),
                     );
                 }
-                let response = custos_domain::LocalModelPreflightResponse {
+                let response = custos_contracts::LocalModelPreflightResponse {
                     model_path: model_path.to_string(),
                     can_load,
                     architecture: descriptor.architecture,
@@ -237,9 +231,7 @@ impl LocalApiDispatcher {
                 };
                 let repo = match self.providers.repo.as_ref() {
                     Some(repo) => repo,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let profile = match repo.get_local_model_load_profile(model_path) {
                     Ok(Some(profile)) => profile,
@@ -254,7 +246,7 @@ impl LocalApiDispatcher {
                             }
                             Err(error) => return ApiResponse::error(req.id, error.to_string()),
                         };
-                        custos_domain::LocalModelLoadProfile {
+                        custos_contracts::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
                             context_size: descriptor.context_length.clamp(512, 4096),
@@ -271,10 +263,8 @@ impl LocalApiDispatcher {
                     }
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 };
-                match custos_provider::local::preload_model_with_profile(
-                    model_path, &profile,
-                )
-                .await
+                match custos_integrations::local::preload_model_with_profile(model_path, &profile)
+                    .await
                 {
                     Ok(instance) => match serde_json::to_value(&instance) {
                         Ok(val) => ApiResponse::success(req.id, val),
@@ -297,9 +287,7 @@ impl LocalApiDispatcher {
                     .unwrap_or(false);
                 let repo = match self.providers.repo.as_ref() {
                     Some(repo) => repo,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let profile = match repo.get_local_model_load_profile(model_path) {
                     Ok(Some(profile)) => profile,
@@ -314,7 +302,7 @@ impl LocalApiDispatcher {
                             }
                             Err(error) => return ApiResponse::error(req.id, error.to_string()),
                         };
-                        custos_domain::LocalModelLoadProfile {
+                        custos_contracts::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
                             context_size: descriptor.context_length.clamp(512, 4096),
@@ -332,7 +320,7 @@ impl LocalApiDispatcher {
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 };
 
-                let instances = custos_provider::local::list_loaded_instances()
+                let instances = custos_integrations::local::list_loaded_instances()
                     .await
                     .unwrap_or_default();
                 let clean_model = model_path.strip_prefix("native:").unwrap_or(model_path);
@@ -353,10 +341,8 @@ impl LocalApiDispatcher {
                     }
                 }
 
-                match custos_provider::local::preload_model_with_profile(
-                    model_path, &profile,
-                )
-                .await
+                match custos_integrations::local::preload_model_with_profile(model_path, &profile)
+                    .await
                 {
                     Ok(instance) => ApiResponse::success(
                         req.id,
@@ -381,7 +367,7 @@ impl LocalApiDispatcher {
                 let target_model = match model_opt {
                     Some(m) if !m.trim().is_empty() => m.trim().to_string(),
                     _ => {
-                        let instances = custos_provider::local::list_loaded_instances()
+                        let instances = custos_integrations::local::list_loaded_instances()
                             .await
                             .unwrap_or_default();
                         match instances.first() {
@@ -400,7 +386,7 @@ impl LocalApiDispatcher {
                     .strip_prefix("native:")
                     .unwrap_or(&target_model);
                 let start = std::time::Instant::now();
-                match custos_provider::local::verify_sidecar_generation(clean_model).await {
+                match custos_integrations::local::verify_sidecar_generation(clean_model).await {
                     Ok(output) => {
                         let latency_ms = start.elapsed().as_millis() as u64;
                         ApiResponse::success(
@@ -435,7 +421,7 @@ impl LocalApiDispatcher {
                 let clean_model = model_identifier
                     .strip_prefix("native:")
                     .unwrap_or(model_identifier);
-                match custos_provider::local::evict_model(clean_model).await {
+                match custos_integrations::local::evict_model(clean_model).await {
                     Ok(evicted) => ApiResponse::success(
                         req.id,
                         serde_json::json!({ "evicted": evicted, "model": clean_model }),
@@ -444,7 +430,7 @@ impl LocalApiDispatcher {
                 }
             }
             "v1.local_models.instances" => {
-                match custos_provider::local::list_loaded_instances().await {
+                match custos_integrations::local::list_loaded_instances().await {
                     Ok(instances) => {
                         ApiResponse::success(req.id, serde_json::json!({ "instances": instances }))
                     }

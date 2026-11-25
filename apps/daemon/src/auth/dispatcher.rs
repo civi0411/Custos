@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use custos_domain::DomainError;
 use crate::api::LocalApiDispatcher;
+use custos_contracts::DomainError;
+use std::sync::Arc;
 
 impl LocalApiDispatcher {
     pub(crate) fn credential_service(
@@ -16,14 +16,14 @@ impl LocalApiDispatcher {
     pub(crate) async fn read_provider_token(
         &self,
         account: &str,
-    ) -> Result<Option<custos_domain::OAuthTokenRecord>, DomainError> {
+    ) -> Result<Option<custos_contracts::OAuthTokenRecord>, DomainError> {
         self.credential_service()?.get_oauth_token(account).await
     }
 
     pub(crate) async fn refresh_provider_token(
         &self,
-        previous: &custos_domain::OAuthTokenRecord,
-        refreshed: &custos_domain::OAuthTokenRecord,
+        previous: &custos_contracts::OAuthTokenRecord,
+        refreshed: &custos_contracts::OAuthTokenRecord,
     ) -> Result<(), DomainError> {
         self.credential_service()?
             .save_refreshed(previous, refreshed)
@@ -32,8 +32,8 @@ impl LocalApiDispatcher {
 
     pub(crate) async fn write_provider_connection(
         &self,
-        token: &custos_domain::OAuthTokenRecord,
-        config: &custos_domain::ProviderConfig,
+        token: &custos_contracts::OAuthTokenRecord,
+        config: &custos_contracts::ProviderConfig,
     ) -> Result<(), DomainError> {
         self.credential_service()?
             .save_oauth_connection(token, Some(config))
@@ -52,7 +52,7 @@ impl LocalApiDispatcher {
 
     pub(crate) async fn provider_tokens(
         &self,
-    ) -> Result<Vec<custos_domain::OAuthTokenRecord>, DomainError> {
+    ) -> Result<Vec<custos_contracts::OAuthTokenRecord>, DomainError> {
         self.credential_service()?.list_oauth_tokens().await
     }
 }

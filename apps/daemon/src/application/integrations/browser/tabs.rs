@@ -1,18 +1,13 @@
 //! Browser tab lifecycle handlers.
 
 use crate::api::*;
-use custos_adapters::host::binaries::resolve_agent_browser_binary;
+use custos_integrations::host::binaries::resolve_agent_browser_binary;
 
 impl LocalApiDispatcher {
     pub(super) async fn handle_browser_tabs(&self, req: ApiRequest) -> ApiResponse {
         let fleet = match self.workbenches.browser.as_ref() {
             Some(f) => f,
-            None => {
-                return ApiResponse::error(
-                    req.id,
-                    "BrowserRepository not configured",
-                )
-            }
+            None => return ApiResponse::error(req.id, "BrowserRepository not configured"),
         };
 
         match req.method.as_str() {
@@ -53,7 +48,7 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
                 };
                 if let Some(agent_bin) = resolve_agent_browser_binary() {
-                    let _ = custos_adapters::integrations::run_agent_browser(
+                    let _ = custos_integrations::integrations::run_agent_browser(
                         &agent_bin,
                         tab_id,
                         &["close"],

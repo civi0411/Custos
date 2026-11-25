@@ -1,9 +1,9 @@
 use crate::credentials::ProviderCredentials;
-use custos_core::contracts::credentials::{
+use custos_contracts::OAuthTokenRecord;
+use custos_engine::contracts::credentials::{
     CredentialLocation, CredentialVault, CredentialVaultError as Error,
 };
-use custos_domain::OAuthTokenRecord;
-use custos_persistence::SqliteTaskStore;
+use custos_storage::SqliteTaskStore;
 use std::{
     collections::HashMap,
     sync::{
@@ -65,7 +65,7 @@ impl CredentialVault for FakeVault {
     }
 }
 pub(crate) fn fake_credentials(
-    repo: Arc<custos_persistence::ProviderRepository>,
+    repo: Arc<custos_storage::ProviderRepository>,
 ) -> Arc<ProviderCredentials> {
     Arc::new(ProviderCredentials::new(
         repo,
@@ -178,8 +178,8 @@ async fn caller_cancellation_cannot_race_delete_with_a_late_keyring_write() {
 
 #[tokio::test]
 async fn recovery_commits_complete_bundles_and_discards_partial_staging() {
-    use custos_core::contracts::credentials::credential_part_count;
-    use custos_persistence::{CredentialMetadata, CredentialOperation};
+    use custos_engine::contracts::credentials::credential_part_count;
+    use custos_storage::{CredentialMetadata, CredentialOperation};
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let repo = Arc::new(store.providers().clone());
     let vault = Arc::new(FakeVault::default());
@@ -343,7 +343,7 @@ async fn metadata_update_keeps_secret_and_service_change_requires_reauthenticati
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let repo = Arc::new(store.providers().clone());
     let service = fake_credentials(repo.clone());
-    let mut config = custos_domain::ProviderConfig {
+    let mut config = custos_contracts::ProviderConfig {
         id: "account".into(),
         name: "Account".into(),
         service_type: "openai".into(),
@@ -389,9 +389,9 @@ async fn api_save_failure_returns_error_and_never_marks_account_connected() {
     let vault = Arc::new(FakeVault::default());
     vault.fail_write.store(true, Ordering::SeqCst);
     let service = Arc::new(ProviderCredentials::new(repo.clone(), vault));
-    let tasks = Arc::new(custos_core::TaskService::new(store.clone()));
-    let sessions = Arc::new(custos_runtime::session::SessionManager::with_store(store));
-    let bridge = Arc::new(custos_runtime::bridge::BridgeService::new(
+    let tasks = Arc::new(custos_engine::TaskService::new(store.clone()));
+    let sessions = Arc::new(custos_engine::session::SessionManager::with_store(store));
+    let bridge = Arc::new(custos_engine::bridge::BridgeService::new(
         sessions.clone(),
         tasks.clone(),
     ));
@@ -414,14 +414,14 @@ async fn api_save_failure_returns_error_and_never_marks_account_connected() {
 #[tokio::test]
 #[ignore = "Migrates synthetic tokens into an isolated Windows credential namespace"]
 async fn native_keyring_service_restart_and_legacy_migration() {
-    use custos_adapters::host::vault::KeyringCredentialVault;
+    use custos_integrations::host::vault::KeyringCredentialVault;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("native-credentials.db");
     let store = SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
     let access = "synthetic-native-token-".repeat(350);
     store.db().lock().unwrap().execute("INSERT INTO provider_oauth_tokens(provider_id,service_type,access_token,refresh_token,expires_at,created_at,updated_at) VALUES('native-test','openai',?1,'synthetic-native-refresh',99999999999999,1,2)",[&access]).unwrap();
     let repo = Arc::new(store.providers().clone());
-    struct Cleanup(Arc<custos_persistence::ProviderRepository>);
+    struct Cleanup(Arc<custos_storage::ProviderRepository>);
     impl Drop for Cleanup {
         fn drop(&mut self) {
             if let Ok(vault_id) = self.0.credential_vault_id() {

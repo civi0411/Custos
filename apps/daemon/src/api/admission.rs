@@ -14,7 +14,7 @@ impl LocalApiDispatcher {
         let (admitted_cmd_id, payload_digest) = if method_kind == commands::MethodKind::Mutation {
             let cmd_id = command_id
                 .clone()
-                .unwrap_or_else(|| custos_domain::new_id("cmd"));
+                .unwrap_or_else(|| custos_contracts::new_id("cmd"));
             let digest = commands::compute_command_fingerprint(&req.params);
             (Some(cmd_id), Some(digest))
         } else {
@@ -34,8 +34,8 @@ impl LocalApiDispatcher {
                 .command_ledger()
                 .admit(cmd_id, &req.method, digest, scope, now_ms, ttl_ms)
             {
-                Ok(custos_core::contracts::storage::CommandAdmission::New) => {}
-                Ok(custos_core::contracts::storage::CommandAdmission::Replay(result_json)) => {
+                Ok(custos_engine::contracts::storage::CommandAdmission::New) => {}
+                Ok(custos_engine::contracts::storage::CommandAdmission::Replay(result_json)) => {
                     let val: serde_json::Value = match serde_json::from_str(&result_json) {
                         Ok(value) => value,
                         Err(error) => {
@@ -60,13 +60,13 @@ impl LocalApiDispatcher {
                     }
                     return ApiResponse::success(req.id, val);
                 }
-                Ok(custos_core::contracts::storage::CommandAdmission::InFlight) => {
+                Ok(custos_engine::contracts::storage::CommandAdmission::InFlight) => {
                     return ApiResponse::error(
                         req.id,
                         format!("Command ID '{cmd_id}' is currently in-flight"),
                     );
                 }
-                Ok(custos_core::contracts::storage::CommandAdmission::Conflict(msg)) => {
+                Ok(custos_engine::contracts::storage::CommandAdmission::Conflict(msg)) => {
                     return ApiResponse::error(req.id, msg);
                 }
                 Err(e) => {
@@ -78,9 +78,11 @@ impl LocalApiDispatcher {
 
         let resp = self.dispatch_application(req).await;
 
-        if let (Some(cmd_id), Some(store)) =
-            (admitted_cmd_id.as_deref(), self.kernel.sqlite_store.as_ref())
-        {
+        if let (Some(cmd_id), Some(_digest), Some(store)) = (
+            admitted_cmd_id.as_deref(),
+            payload_digest.as_deref(),
+            self.kernel.sqlite_store.as_ref(),
+        ) {
             // A handler error may follow an external effect; never make it retryable by deleting admission.
             let result_json =
                 serde_json::json!({"custos_command_response": 1, "response": &resp}).to_string();

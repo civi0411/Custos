@@ -190,8 +190,8 @@ impl LocalApiDispatcher {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use custos_storage::SqliteTaskStore;
     use custos_workbench_research::ClaimGroundingLevel;
-    use custos_persistence::SqliteTaskStore;
 
     #[tokio::test]
     async fn test_ingest_source_and_claim_transaction_rollback() {

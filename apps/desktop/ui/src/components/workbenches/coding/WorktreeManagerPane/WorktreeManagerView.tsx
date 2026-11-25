@@ -76,8 +76,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
           })
           .catch(() => {});
       }
-    } catch (err: any) {
-      onShowToast?.(`Failed to load workspaces: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Failed to load workspaces: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -110,8 +110,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
       await daemonClient.recoverWorkspace(workspace.id);
       onShowToast?.(`Worktree ${workspace.id.slice(0, 8)} status successfully reconciled.`);
       await loadWorkspaces();
-    } catch (err: any) {
-      onShowToast?.(`Recovery failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -130,8 +130,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
         task_id: taskId,
       });
       setCandidateComparisons(res.candidates || []);
-    } catch (err: any) {
-      onShowToast?.(`Failed to compare candidates: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Failed to compare candidates: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setComparing(false);
     }
@@ -186,8 +186,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
       if (showCompareModal) {
         await handleCompareAll();
       }
-    } catch (err: any) {
-      onShowToast?.(`Integration failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Integration failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIntegratingId(null);
     }
@@ -227,8 +227,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
       setShowSpawnModal(false);
       setSpawnTaskId('');
       await loadWorkspaces();
-    } catch (err: any) {
-      onShowToast?.(`Failed to spawn candidates: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Failed to spawn candidates: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSpawning(false);
     }
@@ -255,8 +255,8 @@ export const WorktreeManagerView: React.FC<WorktreeManagerPaneProps> = ({
         onShowToast?.('Candidate race finished without an automated winner.');
       }
       await loadWorkspaces();
-    } catch (err: any) {
-      onShowToast?.(`Failed to run candidate race: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Failed to run candidate race: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRacing(false);
     }

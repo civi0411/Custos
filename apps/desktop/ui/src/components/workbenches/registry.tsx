@@ -75,39 +75,71 @@ export function getWorkbenchForTabType(tabType: string): CanonicalWorkbenchId | 
 
 export interface WorkbenchNotInstalledPlaceholderProps {
   workbenchId: string;
+  packageState?: 'disabled' | 'not_installed';
+  activating?: boolean;
+  error?: string | null;
+  onActivate?: () => void;
   onOpenLibrary?: () => void;
 }
 
 export const WorkbenchNotInstalledPlaceholder: React.FC<WorkbenchNotInstalledPlaceholderProps> = ({
   workbenchId,
+  packageState = 'not_installed',
+  activating = false,
+  error,
+  onActivate,
   onOpenLibrary,
 }) => {
   const canonical = canonicalWorkbenchId(workbenchId);
   const contribution = BUILTIN_CONTRIBUTIONS.find((c) => c.canonicalId === canonical);
   const displayName = contribution?.label || workbenchId;
+  const isDisabled = packageState === 'disabled';
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center bg-[#121214] text-neutral-300 select-none">
       <div className="size-12 rounded-2xl bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center mb-4 text-neutral-400">
-        <AlertCircle className="size-6 text-amber-400" />
+        <AlertCircle className={`size-6 ${isDisabled ? 'text-sky-400' : 'text-amber-400'}`} />
       </div>
       <h3 className="text-base font-medium text-white mb-1">
-        {displayName} Workbench Not Installed
+        {isDisabled ? `${displayName} Workbench Disabled` : `${displayName} Workbench Not Installed`}
       </h3>
-      <p className="text-xs text-neutral-400 max-w-sm mb-6 leading-relaxed">
-        {contribution?.description ||
-          `The ${displayName} domain pack is an optional add-on that has not been enabled in this Custos environment.`}
+      <p className="text-xs text-neutral-400 max-w-sm mb-5 leading-relaxed">
+        {isDisabled
+          ? `The ${displayName} workbench is installed on this profile but currently disabled. Re-enable it to restore this view.`
+          : contribution?.description ||
+            `The ${displayName} domain workbench is an on-demand add-on that must be installed and enabled before use.`}
       </p>
-      {onOpenLibrary && (
-        <button
-          type="button"
-          onClick={onOpenLibrary}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white border border-neutral-700 transition cursor-pointer"
-        >
-          <Download className="size-3.5" />
-          Open Workbench Library
-        </button>
+      {error && (
+        <div className="mb-4 max-w-sm rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-200">
+          {error}
+        </div>
       )}
+      <div className="flex items-center gap-2">
+        {onActivate && (
+          <button
+            type="button"
+            disabled={activating}
+            onClick={onActivate}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-emerald-600/85 hover:bg-emerald-500 disabled:opacity-50 text-xs font-medium text-white transition cursor-pointer"
+          >
+            <Download className="size-3.5" />
+            {activating
+              ? 'Activating...'
+              : isDisabled
+              ? `Enable ${displayName}`
+              : `Install & Enable ${displayName}`}
+          </button>
+        )}
+        {onOpenLibrary && (
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white border border-neutral-700 transition cursor-pointer"
+          >
+            Open Workbench Library
+          </button>
+        )}
+      </div>
     </div>
   );
 };

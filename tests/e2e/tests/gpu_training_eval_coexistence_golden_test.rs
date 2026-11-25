@@ -9,33 +9,17 @@
 //! 6. In-Flight Inference Request Eviction Protection (eviction blocked while requests in-flight; clean release once drained).
 //! 7. Training Fault & OOM Recovery (simulated failure immediately reclaims lease, zero zombie allocations).
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use std::sync::Arc;
 
-use custos_provider::local::{evict_model, preload_model_with_profile, InferenceRuntime};
-use custos_core::contracts::compute::WorkloadAdmissionPort;
-use custos_domain::{
+use custos_contracts::{
     ComputeBackendKind, ComputeDeviceRef, DomainError, ExecState, ExecutionAttempt,
     FrozenTrainingRecipe, LocalModelLoadProfile, ModelEvaluationSpec,
 };
-use custos_runtime::compute::{
+use custos_engine::compute::{
     LocalTrainingRunner, ModelEvaluationRunner, WorkloadAdmissionCoordinator,
 };
+use custos_engine::contracts::compute::WorkloadAdmissionPort;
+use custos_integrations::local::{evict_model, preload_model_with_profile, InferenceRuntime};
 
 static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -107,8 +91,8 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
         FrozenTrainingRecipe::new("model-b", "dataset-b", 20).with_device(&cuda.device_id);
 
     // 1. Manually admit first training attempt to simulate in-flight execution holding the GPU
-    let req_training_1 = custos_domain::WorkloadAdmissionRequest {
-        workload_kind: custos_domain::ComputeWorkloadKind::TrainingRun,
+    let req_training_1 = custos_contracts::WorkloadAdmissionRequest {
+        workload_kind: custos_contracts::ComputeWorkloadKind::TrainingRun,
         owner_id: "attempt_in_flight_1".into(),
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
@@ -118,7 +102,7 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
     let v1 = admission.admit_workload(&req_training_1).await.unwrap();
     assert!(matches!(
         v1,
-        custos_domain::WorkloadAdmissionVerdict::Admitted { .. }
+        custos_contracts::WorkloadAdmissionVerdict::Admitted { .. }
     ));
 
     // 2. Second training attempt tries to launch concurrently on same GPU
@@ -169,8 +153,8 @@ async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
     let eval_runner = ModelEvaluationRunner::new(admission.clone());
 
     // 1. Training holds exclusive lease on the GPU
-    let req_training = custos_domain::WorkloadAdmissionRequest {
-        workload_kind: custos_domain::ComputeWorkloadKind::TrainingRun,
+    let req_training = custos_contracts::WorkloadAdmissionRequest {
+        workload_kind: custos_contracts::ComputeWorkloadKind::TrainingRun,
         owner_id: "active_training_run".into(),
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
@@ -264,8 +248,8 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
     ]));
 
     // 1. Training occupies GPU exclusively
-    let req_training = custos_domain::WorkloadAdmissionRequest {
-        workload_kind: custos_domain::ComputeWorkloadKind::TrainingRun,
+    let req_training = custos_contracts::WorkloadAdmissionRequest {
+        workload_kind: custos_contracts::ComputeWorkloadKind::TrainingRun,
         owner_id: "training_run_occupier".into(),
         preferred_device_id: Some(cuda.device_id.clone()),
         require_exclusive: true,
@@ -303,7 +287,7 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
 
     let result = preload_model_with_profile(&model_path, &profile).await;
     match result {
-        Err(custos_provider::errors::ProviderError::ExecutionError(msg)) => {
+        Err(custos_integrations::errors::ProviderError::ExecutionError(msg)) => {
             assert!(
                 msg.contains("Local inference queued")
                     || msg.contains("accelerator busy")

@@ -144,10 +144,9 @@ fn test_contracts_owns_skill_contract() {
         content.contains("pub trait SkillSink"),
         "custos-contracts must define pub trait SkillSink"
     );
-    let runtime_skills = fs::read_to_string(
-        manifest_dir.join("../../platform/engine/src/execution/skills/mod.rs"),
-    )
-    .unwrap();
+    let runtime_skills =
+        fs::read_to_string(manifest_dir.join("../../platform/engine/src/execution/skills/mod.rs"))
+            .unwrap();
     assert!(
         runtime_skills.contains("pub struct SkillRegistry"),
         "custos-engine must define pub struct SkillRegistry"
@@ -180,8 +179,14 @@ fn test_platform_four_blocks_and_workbench_isolation() {
 
     // 3. platform/contracts must never declare workbench modules directly
     let contracts_lib = fs::read_to_string(root.join("platform/contracts/src/lib.rs")).unwrap();
-    assert!(!contracts_lib.contains("pub mod quant;"), "platform/contracts must not contain pub mod quant");
-    assert!(!contracts_lib.contains("pub mod research;"), "platform/contracts must not contain pub mod research");
+    assert!(
+        !contracts_lib.contains("pub mod quant;"),
+        "platform/contracts must not contain pub mod quant"
+    );
+    assert!(
+        !contracts_lib.contains("pub mod research;"),
+        "platform/contracts must not contain pub mod research"
+    );
 
     // 4. platform/storage migrations must not contain decoupled research migrations
     let storage_migrations = root.join("platform/storage/migrations");
@@ -204,7 +209,9 @@ fn test_platform_four_blocks_and_workbench_isolation() {
 
     // 5. platform/storage must not contain assistant repository or migration
     assert!(
-        !root.join("platform/storage/src/repositories/assistant.rs").exists(),
+        !root
+            .join("platform/storage/src/repositories/assistant.rs")
+            .exists(),
         "platform/storage must not contain assistant repository (belongs in workbenches/assistant)"
     );
     assert!(

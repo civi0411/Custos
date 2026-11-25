@@ -237,7 +237,7 @@ async fn test_quant_orderbook_get_rpc() {
     let empty_resp = dispatcher.handle_request(empty_req).await;
     assert!(!empty_resp.is_success());
 
-    // 2. Ingest observed market bars, then build orderbook around latest close.
+    // 2. Even with observed OHLCV bars, Zero-Mock forbids synthesizing fake L2 depth.
     let ingest_req = ApiRequest {
         id: "orderbook_ingest".into(),
         method: METHOD_QUANT_MARKET_BARS_INGEST.into(),
@@ -262,27 +262,258 @@ async fn test_quant_orderbook_get_rpc() {
     };
 
     let resp = dispatcher.handle_request(req).await;
-    assert!(resp.is_success(), "{:?}", resp.error);
-    let ob = resp.result.unwrap();
+    assert!(!resp.is_success());
+    let err = resp.error.unwrap_or_default();
+    assert!(
+        err.contains("Live L2 orderbook feed is not connected"),
+        "unexpected error: {err}"
+    );
+}
 
-    assert_eq!(ob["symbol"], "BTC/USDT");
-    assert!((ob["mid_price"].as_f64().unwrap() - 65000.0).abs() < 200.0);
-    assert!(ob["spread"].as_f64().unwrap() > 0.0);
-    assert!(ob["microprice"].as_f64().unwrap() > 0.0);
+#[tokio::test]
+async fn test_quant_productized_closed_loop_and_pack_disable_isolation() {
+    let (dispatcher, task_id) = setup_quant_env().await;
 
-    let asks = ob["asks"].as_array().unwrap();
-    let bids = ob["bids"].as_array().unwrap();
-    assert_eq!(asks.len(), 5);
-    assert_eq!(bids.len(), 5);
+    // 1. Ingest real daily bars with explicit MarketCategory
+    let bars: Vec<serde_json::Value> = (0..40)
+        .map(|i| {
+            let base = 500.0 + (i as f64) * 1.25;
+            serde_json::json!({
+                "timestamp": 1_700_000_000_i64 + (i as i64) * 86_400,
+                "open": base - 0.5,
+                "high": base + 2.0,
+                "low": base - 1.5,
+                "close": base,
+                "volume": 100_000.0 + (i as f64) * 500.0
+            })
+        })
+        .collect();
 
-    // Asks must be strictly greater than bids
-    assert!(asks[0]["price"].as_f64().unwrap() > bids[0]["price"].as_f64().unwrap());
-    // Asks must be monotonically increasing
-    for i in 1..asks.len() {
-        assert!(asks[i]["price"].as_f64().unwrap() >= asks[i - 1]["price"].as_f64().unwrap());
-    }
-    // Bids must be monotonically decreasing
-    for i in 1..bids.len() {
-        assert!(bids[i]["price"].as_f64().unwrap() <= bids[i - 1]["price"].as_f64().unwrap());
-    }
+    let ingest_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_ingest".into(),
+            method: METHOD_QUANT_MARKET_BARS_INGEST.into(),
+            params: serde_json::json!({
+                "symbol": "SPY",
+                "timeframe": "1d",
+                "market": "USStock",
+                "venue": "verified_test_feed",
+                "bars": bars
+            }),
+        })
+        .await;
+    assert!(ingest_resp.is_success(), "{:?}", ingest_resp.error);
+
+    // 2. QuantPack::execute_tool runs real zero-mock backtest & rejects missing symbols
+    let quant_pack = dispatcher
+        .workbenches
+        .pack_registry
+        .find_pack_for_tool("run_backtest")
+        .expect("QuantPack must be registered when quant is installed");
+
+    let missing_tool = quant_pack
+        .execute_tool(
+            "run_backtest",
+            &serde_json::json!({ "symbol": "NO_SUCH_TICKER", "timeframe": "1d" }),
+        )
+        .await;
+    assert!(
+        missing_tool.is_err(),
+        "QuantPack must never generate synthetic sine waves for missing symbols"
+    );
+
+    let live_tool = quant_pack
+        .execute_tool(
+            "run_backtest",
+            &serde_json::json!({
+                "strategy_id": "strat_prod_loop",
+                "symbol": "SPY",
+                "timeframe": "1d",
+                "formula": "dual_ma(5, 15)"
+            }),
+        )
+        .await
+        .expect("QuantPack run_backtest should succeed against persisted SQLite bars");
+    assert_eq!(live_tool["strategy_id"], "strat_prod_loop");
+    assert!(live_tool["bar_count"].as_u64().unwrap() >= 40);
+
+    // 3. Strategy registry + Evidence quality assessment
+    let strat_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_strats".into(),
+            method: METHOD_QUANT_STRATEGIES_LIST.into(),
+            params: serde_json::json!({}),
+        })
+        .await;
+    assert!(strat_resp.is_success(), "{:?}", strat_resp.error);
+    let strategies = strat_resp.result.unwrap()["strategies"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(strategies.iter().any(|s| s["id"] == "strat_prod_loop"));
+
+    let evidence_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_evidence".into(),
+            method: METHOD_QUANT_EVIDENCE_ASSESS.into(),
+            params: serde_json::json!({
+                "symbol": "SPY",
+                "market": "USStock",
+                "required_metrics": ["close", "volume"],
+                "observations": [
+                    {
+                        "evidence_id": "ev_close_1",
+                        "metric": "close",
+                        "source": "verified_test_feed",
+                        "value": 548.75,
+                        "as_of_ts": chrono::Utc::now().timestamp(),
+                        "freshness_limit_secs": 3600,
+                        "required": true
+                    },
+                    {
+                        "evidence_id": "ev_vol_1",
+                        "metric": "volume",
+                        "source": "verified_test_feed",
+                        "value": 119500.0,
+                        "as_of_ts": chrono::Utc::now().timestamp(),
+                        "freshness_limit_secs": 3600,
+                        "required": true
+                    }
+                ]
+            }),
+        })
+        .await;
+    assert!(evidence_resp.is_success(), "{:?}", evidence_resp.error);
+    assert_eq!(evidence_resp.result.unwrap()["coverage_ratio"], 1.0);
+
+    // 4. Draft -> Approve with real cryptographic auto_issue permit & paper settlement
+    let create_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_order_create".into(),
+            method: METHOD_QUANT_ORDERS_CREATE.into(),
+            params: serde_json::json!({
+                "strategy_id": "strat_prod_loop",
+                "task_id": task_id,
+                "orders": [{
+                    "symbol": "SPY",
+                    "direction": "buy",
+                    "quantity": 10.0,
+                    "target_weight": 0.1,
+                    "limit_price": 510.0
+                }]
+            }),
+        })
+        .await;
+    assert!(create_resp.is_success(), "{:?}", create_resp.error);
+    let order_id = create_resp.result.unwrap()["created_orders"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let approve_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_order_approve".into(),
+            method: METHOD_QUANT_ORDERS_APPROVE.into(),
+            params: serde_json::json!({
+                "order_id": order_id,
+                "permit_id": "auto_issue",
+                "task_id": task_id,
+                "execute_paper": true,
+                "execution_price": 510.0
+            }),
+        })
+        .await;
+    assert!(approve_resp.is_success(), "{:?}", approve_resp.error);
+    let approve_val = approve_resp.result.unwrap();
+    assert_eq!(approve_val["status"], "filled");
+    assert_ne!(approve_val["permit_id"], "auto_issue");
+
+    let pos_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_pos_open".into(),
+            method: METHOD_QUANT_POSITIONS_LIST.into(),
+            params: serde_json::json!({ "strategy_id": "strat_prod_loop" }),
+        })
+        .await;
+    assert!(pos_resp.is_success(), "{:?}", pos_resp.error);
+    let open_positions = pos_resp.result.unwrap()["positions"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(open_positions.len(), 1);
+    assert_eq!(open_positions[0]["symbol"], "SPY");
+    assert_eq!(open_positions[0]["quantity"], 10.0);
+
+    // 5. Close position via Exit Immunity -> settles fill & clears position -> Review reads SQLite fills
+    let close_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_pos_close".into(),
+            method: METHOD_QUANT_ORDERS_CLOSE_POSITION.into(),
+            params: serde_json::json!({
+                "strategy_id": "strat_prod_loop",
+                "task_id": task_id,
+                "symbol": "SPY",
+                "direction": "long",
+                "quantity": 10.0,
+                "mark_price": 525.0,
+                "permit_id": "auto_issue",
+                "execute_paper": true
+            }),
+        })
+        .await;
+    assert!(close_resp.is_success(), "{:?}", close_resp.error);
+    assert_eq!(
+        close_resp.result.unwrap()["gate_outcome"]["status"],
+        "BypassExitImmunity"
+    );
+
+    let pos_after = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_pos_closed".into(),
+            method: METHOD_QUANT_POSITIONS_LIST.into(),
+            params: serde_json::json!({ "strategy_id": "strat_prod_loop" }),
+        })
+        .await;
+    assert!(pos_after.is_success(), "{:?}", pos_after.error);
+    assert!(pos_after.result.unwrap()["positions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let review_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_review_sqlite".into(),
+            method: METHOD_QUANT_REVIEW_COMPUTE.into(),
+            params: serde_json::json!({
+                "strategy_id": "strat_prod_loop",
+                "symbol": "SPY",
+                "fills": []
+            }),
+        })
+        .await;
+    assert!(review_resp.is_success(), "{:?}", review_resp.error);
+    let review = review_resp.result.unwrap();
+    assert_eq!(review["total_trades"], 1);
+    assert!(review["gross_pnl"].as_f64().unwrap() > 140.0);
+
+    // 6. Disabling 'quant' immediately locks all quant RPCs and removes QuantPack
+    let disable_resp = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_disable_quant".into(),
+            method: "packages.disable".into(),
+            params: serde_json::json!({ "component_id": "quant" }),
+        })
+        .await;
+    assert!(disable_resp.is_success(), "{:?}", disable_resp.error);
+    assert!(!dispatcher.workbenches.pack_registry.has_pack("quant"));
+
+    let blocked_pos = dispatcher
+        .handle_request(ApiRequest {
+            id: "prod_pos_blocked".into(),
+            method: METHOD_QUANT_POSITIONS_LIST.into(),
+            params: serde_json::json!({}),
+        })
+        .await;
+    assert!(!blocked_pos.is_success());
+    assert!(blocked_pos.error.unwrap().contains("pack_disabled"));
 }

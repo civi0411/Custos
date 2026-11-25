@@ -46,7 +46,8 @@ impl LocalApiDispatcher {
             );
         }
 
-        let detected = custos_adapters::host::workspace::git_ops::detect_repository(&canonical_path).await;
+        let detected =
+            custos_integrations::host::workspace::git_ops::detect_repository(&canonical_path).await;
 
         let name = canonical_path
             .file_name()

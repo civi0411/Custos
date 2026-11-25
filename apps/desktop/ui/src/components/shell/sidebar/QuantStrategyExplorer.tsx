@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { TrendingUp, ShieldCheck, Activity, BarChart2 } from 'lucide-react';
 import { Tooltip } from '@/components/common';
+import { daemonClient } from '@/api/daemon_client';
+import { quantSelectionStore, useQuantSelection } from '@/components/workbenches/quant/quantSelectionStore';
 import type { OrcaTabId } from '@/components/workbenches/workbenchResources';
 
 export interface QuantStrategyExplorerProps {
@@ -13,16 +15,60 @@ export interface StrategyItem {
   id: string;
   name: string;
   universe: string;
-  sharpe: number;
-  icMean: number;
-  status: 'live' | 'backtest' | 'audit';
+  symbol?: string;
+  timeframe?: string;
+  formula?: string;
+  sharpe: number | null;
+  icMean: number | null;
+  status: string;
 }
 
 export const QuantStrategyExplorer: React.FC<QuantStrategyExplorerProps> = ({
   onShowToast,
   onOpenTab,
-  strategies = [],
+  strategies: propStrategies,
 }) => {
+  const selection = useQuantSelection();
+  const [loadedStrategies, setLoadedStrategies] = useState<StrategyItem[]>([]);
+
+  useEffect(() => {
+    if (propStrategies) return;
+    let active = true;
+    daemonClient
+      .listQuantStrategies()
+      .then((res) => {
+        if (!active || !res?.strategies) return;
+        const mapped: StrategyItem[] = res.strategies.map((s) => ({
+          id: s.id,
+          name: s.name,
+          universe: `${s.market} · ${s.symbol} (${s.timeframe})`,
+          symbol: s.symbol,
+          timeframe: s.timeframe,
+          formula: s.formula,
+          sharpe: s.latest_sharpe ?? null,
+          icMean: s.latest_ic_mean ?? null,
+          status: s.status,
+        }));
+        setLoadedStrategies(mapped);
+        if (!selection.strategyId && mapped.length > 0) {
+          quantSelectionStore.update({
+            strategyId: mapped[0].id,
+            symbol: mapped[0].symbol || 'SPY',
+            timeframe: mapped[0].timeframe || '1d',
+            formula: mapped[0].formula || selection.formula,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) setLoadedStrategies([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [propStrategies, selection.revision]);
+
+  const strategies = propStrategies ?? loadedStrategies;
+
   return (
     <div className="space-y-2">
       <div className="p-2.5 rounded-xl border border-white/10 bg-white/[0.03] space-y-2">
@@ -58,34 +104,54 @@ export const QuantStrategyExplorer: React.FC<QuantStrategyExplorerProps> = ({
             </button>
           </div>
         ) : (
-          strategies.map((strat) => (
-            <div
-              key={strat.id}
-              onClick={() => onShowToast?.(`Selected ${strat.name}`)}
-              className="p-2.5 rounded-lg border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] text-left cursor-pointer transition space-y-1"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-white truncate">{strat.name}</span>
-                <span
-                  className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
-                    strat.status === 'live'
-                      ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20'
-                      : 'bg-amber-400/10 text-amber-300 border-amber-400/20'
-                  }`}
-                >
-                  {strat.status.toUpperCase()}
-                </span>
-              </div>
+          strategies.map((strat) => {
+            const isSelected = selection.strategyId === strat.id;
+            return (
+              <div
+                key={strat.id}
+                onClick={() => {
+                  quantSelectionStore.update({
+                    strategyId: strat.id,
+                    symbol: strat.symbol || selection.symbol,
+                    timeframe: strat.timeframe || selection.timeframe,
+                    formula: strat.formula || selection.formula,
+                  });
+                  onShowToast?.(`Selected strategy ${strat.name}`);
+                  onOpenTab?.('tearsheet');
+                }}
+                className={`p-2.5 rounded-lg border text-left cursor-pointer transition space-y-1 ${
+                  isSelected
+                    ? 'border-workbench-accent/50 bg-white/[0.06]'
+                    : 'border-white/8 bg-white/[0.02] hover:bg-white/[0.05]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-white truncate">{strat.name}</span>
+                  <span
+                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
+                      strat.status === 'live'
+                        ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20'
+                        : 'bg-amber-400/10 text-amber-300 border-amber-400/20'
+                    }`}
+                  >
+                    {strat.status.toUpperCase()}
+                  </span>
+                </div>
 
-              <div className="flex items-center justify-between text-[11px] text-white/40">
-                <span>{strat.universe}</span>
-                <div className="flex items-center gap-2 font-mono text-[10px]">
-                  <span className="text-emerald-400/90">SR {strat.sharpe.toFixed(2)}</span>
-                  <span className="text-white/60">IC {(strat.icMean * 100).toFixed(1)}%</span>
+                <div className="flex items-center justify-between text-[11px] text-white/40">
+                  <span className="truncate">{strat.universe}</span>
+                  <div className="flex items-center gap-2 font-mono text-[10px] shrink-0">
+                    <span className="text-emerald-400/90">
+                      SR {strat.sharpe != null ? strat.sharpe.toFixed(2) : '—'}
+                    </span>
+                    {strat.icMean != null && (
+                      <span className="text-white/60">IC {(strat.icMean * 100).toFixed(1)}%</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

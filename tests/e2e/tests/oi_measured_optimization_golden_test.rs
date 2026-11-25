@@ -20,32 +20,16 @@
 //!    - Model pin, local-only, and egress constraints are strictly enforced.
 //!    - Explicit representation of uncertainty: Estimator factors in unknowns and recovery buffers (never 0 instead of unknown).
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::judgment::{JudgmentPort, JudgmentRequest};
-use custos_core::contracts::storage::{OutboxEntry, OutboxStatus};
-use custos_runtime::oi::hard_filters::HardFilters;
-use custos_domain::oi::{
+use custos_contracts::oi::{
     ComparisonMarginConfig, DecisionSnapshot, OptimizationClaimOutcome, OptimizationEvaluator,
     RejectionReason, ReplanTrigger, StrategyProposal, TaskExecutionMetrics,
 };
-use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-use custos_runtime::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
-use custos_runtime::oi::{CandidateBuilder, Estimator, Replanner};
+use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
+use custos_engine::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
+use custos_engine::contracts::judgment::{JudgmentPort, JudgmentRequest};
+use custos_engine::contracts::storage::{OutboxEntry, OutboxStatus};
+use custos_engine::oi::hard_filters::HardFilters;
+use custos_engine::oi::{CandidateBuilder, Estimator, Replanner};
 use serde_json::json;
 
 // ─────────────────────────────────────────────────────────────────────────────

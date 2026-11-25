@@ -12,7 +12,7 @@ interface CreateTaskModalProps {
   initialDescription?: string;
   initialWorkspaceId?: string;
   initialSessionId?: string;
-  initialPackId?: 'code' | 'research' | 'copilot';
+  initialPackId?: 'code' | 'research' | 'quant' | 'copilot';
 }
 
 export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
@@ -28,7 +28,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   initialPackId,
 }) => {
   const [title, setTitle] = useState(initialTitle || '');
-  const [packId, setPackId] = useState<'code' | 'research' | 'copilot'>(initialPackId || 'code');
+  const [packId, setPackId] = useState<'code' | 'research' | 'quant' | 'copilot'>(initialPackId || 'code');
   const [description, setDescription] = useState(initialDescription || '');
   const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId || currentWorkspaceId || '');
   const [criteria, setCriteria] = useState<Criterion[]>([

@@ -94,7 +94,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({ isOpen, onClose }) => 
   });
 
   const handleUseSkill = (skill: SkillItem) => {
-    showToast(`Skill loaded: ${skill.name}`);
+    showToast(`Skill '${skill.name}' is a catalog reference; invoke tools via active Workbench pack.`);
     onClose();
   };
 

@@ -6,7 +6,7 @@ use std::sync::Arc;
 impl LocalApiDispatcher {
     pub fn with_environment_coordinator(
         mut self,
-        environment_coordinator: Arc<custos_runtime::environment::EnvironmentCoordinator>,
+        environment_coordinator: Arc<custos_engine::environment::EnvironmentCoordinator>,
     ) -> Self {
         self.env.environment_coordinator = Some(environment_coordinator);
         self
@@ -14,37 +14,41 @@ impl LocalApiDispatcher {
 
     pub fn with_admission_coordinator(
         mut self,
-        admission_coordinator: Arc<custos_runtime::compute::WorkloadAdmissionCoordinator>,
+        admission_coordinator: Arc<custos_engine::compute::WorkloadAdmissionCoordinator>,
     ) -> Self {
         self.env.admission_coordinator = Some(admission_coordinator);
         self
     }
 
-    pub fn with_mcp_hub(mut self, hub: Arc<custos_adapters::mcp::McpFederationHub>) -> Self {
+    pub fn with_mcp_hub(mut self, hub: Arc<custos_integrations::mcp::McpFederationHub>) -> Self {
         self.workbenches.mcp_hub = hub;
         self
     }
 
-    pub fn mcp_hub(&self) -> Arc<custos_adapters::mcp::McpFederationHub> {
+    pub fn mcp_hub(&self) -> Arc<custos_integrations::mcp::McpFederationHub> {
         self.workbenches.mcp_hub.clone()
     }
 
     pub fn with_model_availability(
         mut self,
-        availability: custos_provider::routing::availability::ModelAvailability,
+        availability: custos_integrations::routing::availability::ModelAvailability,
     ) -> Self {
         self.providers.model_availability = availability;
         self
     }
 
-    pub fn with_sqlite_store(mut self, store: Arc<custos_persistence::SqliteTaskStore>) -> Self {
+    pub fn with_sqlite_store(mut self, store: Arc<custos_storage::SqliteTaskStore>) -> Self {
         if self.workbenches.shared_capabilities.is_none() {
-            self.workbenches.shared_capabilities = Some(Arc::new(store.shared_capabilities().clone()));
+            self.workbenches.shared_capabilities =
+                Some(Arc::new(store.shared_capabilities().clone()));
         }
         if self.workbenches.browser.is_none() {
             self.workbenches.browser = Some(Arc::new(store.browser().clone()));
         }
-        let enabled = store.packages().list_enabled_components().unwrap_or_default();
+        let enabled = store
+            .packages()
+            .list_enabled_components()
+            .unwrap_or_default();
         self.kernel.sqlite_store = Some(store);
         for component_id in enabled {
             self.activate_workbench_resources(&component_id);
@@ -54,7 +58,7 @@ impl LocalApiDispatcher {
 
     pub fn with_shared_capabilities(
         mut self,
-        repo: Arc<custos_persistence::SharedCapabilitiesRepository>,
+        repo: Arc<custos_storage::SharedCapabilitiesRepository>,
     ) -> Self {
         self.workbenches.shared_capabilities = Some(repo);
         self
@@ -63,7 +67,12 @@ impl LocalApiDispatcher {
     #[cfg(feature = "custos-workbench-quant")]
     pub fn with_quant(self, quant: Arc<dyn custos_workbench_quant::QuantPort>) -> Self {
         if let Ok(mut guard) = self.workbenches.quant.write() {
-            *guard = Some(quant);
+            *guard = Some(quant.clone());
+        }
+        if self.workbenches.pack_registry.has_pack("quant") {
+            self.workbenches.pack_registry.register(Arc::new(
+                custos_workbench_quant::QuantPack::with_port(quant),
+            ));
         }
         self
     }
@@ -75,12 +84,20 @@ impl LocalApiDispatcher {
 
     #[cfg(feature = "custos-workbench-research")]
     pub(crate) fn research_repo(&self) -> Option<Arc<ResearchRepository>> {
-        self.workbenches.research.read().ok().and_then(|g| g.clone())
+        self.workbenches
+            .research
+            .read()
+            .ok()
+            .and_then(|g| g.clone())
     }
 
     #[cfg(feature = "custos-workbench-assistant")]
     pub(crate) fn assistant_repo(&self) -> Option<Arc<AssistantRepository>> {
-        self.workbenches.assistant.read().ok().and_then(|g| g.clone())
+        self.workbenches
+            .assistant
+            .read()
+            .ok()
+            .and_then(|g| g.clone())
     }
 
     pub(crate) fn activate_workbench_resources(&self, component_id: &str) {
@@ -92,10 +109,23 @@ impl LocalApiDispatcher {
             #[cfg(feature = "custos-workbench-quant")]
             "quant" => {
                 if let Ok(mut guard) = self.workbenches.quant.write() {
-                    if guard.is_none() {
-                        *guard = Some(Arc::new(custos_workbench_quant::QuantRepository::new(
-                            store.db().writer_arc(),
-                        )));
+                    let repo = guard
+                        .get_or_insert_with(|| {
+                            Arc::new(custos_workbench_quant::QuantRepository::new(
+                                store.db().writer_arc(),
+                            ))
+                        })
+                        .clone();
+                    if self.workbenches.pack_registry.has_pack("quant") {
+                        let outbox_port: Option<
+                            Arc<dyn custos_engine::contracts::storage::OutboxPort>,
+                        > = self.outbox_repo().map(|o| {
+                            Arc::new(o.clone())
+                                as Arc<dyn custos_engine::contracts::storage::OutboxPort>
+                        });
+                        self.workbenches.pack_registry.register(Arc::new(
+                            custos_workbench_quant::QuantPack::with_ports(repo, outbox_port),
+                        ));
                     }
                 }
             }
@@ -103,11 +133,13 @@ impl LocalApiDispatcher {
             "research" => {
                 if let Ok(mut guard) = self.workbenches.research.write() {
                     if guard.is_none() {
-                        *guard = Some(Arc::new(custos_workbench_research::ResearchRepository::new(
-                            custos_workbench_research::repository::DbConnection::new(
-                                store.db().writer_arc(),
+                        *guard = Some(Arc::new(
+                            custos_workbench_research::ResearchRepository::new(
+                                custos_workbench_research::repository::DbConnection::new(
+                                    store.db().writer_arc(),
+                                ),
                             ),
-                        )));
+                        ));
                     }
                 }
             }
@@ -170,7 +202,7 @@ impl LocalApiDispatcher {
 
     pub fn with_supervision(
         mut self,
-        supervision: Arc<custos_runtime::workflow::SupervisionCoordinator>,
+        supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
     ) -> Self {
         self.kernel.supervision = supervision;
         self.sync_supervision_profiles();
@@ -245,7 +277,7 @@ impl LocalApiDispatcher {
 
     pub fn with_usage_runs(
         mut self,
-        runs: Arc<dyn custos_core::contracts::storage::RunPort>,
+        runs: Arc<dyn custos_engine::contracts::storage::RunPort>,
     ) -> Self {
         self.kernel.usage_runs = Some(runs);
         self
@@ -283,7 +315,8 @@ impl LocalApiDispatcher {
     }
 
     pub(crate) fn outbox_repo(&self) -> Option<&OutboxRepository> {
-        self.workbenches.outbox
+        self.workbenches
+            .outbox
             .as_deref()
             .or_else(|| self.kernel.sqlite_store.as_ref().map(|s| s.outbox()))
     }
@@ -291,7 +324,8 @@ impl LocalApiDispatcher {
     pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
         #[cfg(test)]
         {
-            self.providers.credentials = Some(crate::credential_tests::fake_credentials(providers.clone()));
+            self.providers.credentials =
+                Some(crate::credential_tests::fake_credentials(providers.clone()));
         }
         self.providers.repo = Some(providers);
         self
@@ -307,8 +341,15 @@ impl LocalApiDispatcher {
 
     pub fn with_pack_registry(
         mut self,
-        pack_registry: Arc<custos_packs::DomainPackRegistry>,
+        pack_registry: Arc<custos_engine::DomainPackRegistry>,
     ) -> Self {
+        #[cfg(feature = "custos-workbench-quant")]
+        if pack_registry.has_pack("quant") {
+            if let Some(repo) = self.quant_port() {
+                pack_registry
+                    .register(Arc::new(custos_workbench_quant::QuantPack::with_port(repo)));
+            }
+        }
         self.workbenches.pack_registry = pack_registry;
         self
     }
@@ -335,8 +376,7 @@ impl LocalApiDispatcher {
     }
 
     #[deprecated(note = "use with_pack_registry instead (A02 deduplication)")]
-    pub fn with_packs(self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
+    pub fn with_packs(self, pack_registry: Arc<custos_engine::DomainPackRegistry>) -> Self {
         self.with_pack_registry(pack_registry)
     }
 }
-

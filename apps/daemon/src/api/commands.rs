@@ -11,6 +11,9 @@ pub fn classify_method(method: &str) -> MethodKind {
     let m = method.to_ascii_lowercase();
     if m == "v1.ping"
         || m == "v1.health"
+        || m == "packages.list_inventory"
+        || m == "v1.packages.list_inventory"
+        || m == "custos.packages.list_inventory"
         || m.ends_with(".get")
         || m.ends_with(".list")
         || m.ends_with(".read")
@@ -27,6 +30,26 @@ pub fn classify_method(method: &str) -> MethodKind {
         || m.ends_with(".catalog")
         || m.ends_with(".snapshot")
         || m.ends_with(".screenshot")
+        || m.ends_with(".metrics")
+        || m.ends_with(".usage")
+        || m.ends_with(".journal")
+        || m.ends_with(".overview")
+        || m.ends_with(".runs")
+        || m.ends_with(".inspect")
+        || m.ends_with(".logs")
+        || m.ends_with(".findings")
+        || m.ends_with(".errors")
+        || m.ends_with(".profiles")
+        || m.ends_with(".session_runs")
+        || m.ends_with(".hardware")
+        || m.ends_with(".instances")
+        || m.ends_with(".preflight")
+        || m.ends_with(".viewer")
+        || m.ends_with(".auth_status")
+        || m.ends_with(".lineage_graph")
+        || m.ends_with(".capabilities")
+        || m.ends_with(".compute")
+        || m.ends_with(".assess")
     {
         MethodKind::Read
     } else {
@@ -46,11 +69,11 @@ pub fn compute_command_fingerprint(params: &serde_json::Value) -> String {
                 }
             }
             let canonical_json = serde_json::to_string(&filtered).unwrap_or_default();
-            custos_domain::digest(canonical_json.as_bytes())
+            custos_contracts::digest(canonical_json.as_bytes())
         }
         other => {
             let canonical_json = serde_json::to_string(other).unwrap_or_default();
-            custos_domain::digest(canonical_json.as_bytes())
+            custos_contracts::digest(canonical_json.as_bytes())
         }
     }
 }

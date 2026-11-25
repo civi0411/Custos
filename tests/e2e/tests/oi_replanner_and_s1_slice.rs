@@ -6,23 +6,7 @@
 //! - `s1_judge_calibration`: Calibrated confidence evaluations, criteria satisfaction, and S2 escalation.
 //! - `s1_scout_and_micro_executor`: Fast read-only discovery and zero-risk preview execution with authority denial.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_domain::workflow::RevisionNode;
+use custos_contracts::workflow::RevisionNode;
 
 fn make_node(id: &str, role: &str) -> RevisionNode {
     RevisionNode {
@@ -42,9 +26,9 @@ fn make_node(id: &str, role: &str) -> RevisionNode {
 // ─────────────────────────────────────────────────────────────────────────────
 mod delta_replanning_and_reachability {
     use super::*;
-    use custos_domain::oi::ReplanTrigger;
-    use custos_domain::workflow::WorkflowRevision;
-    use custos_runtime::oi::replanner::Replanner;
+    use custos_contracts::oi::ReplanTrigger;
+    use custos_contracts::workflow::WorkflowRevision;
+    use custos_engine::oi::replanner::Replanner;
 
     #[tokio::test]
     async fn test_transitive_delta_isolation_and_node_preservation() {
@@ -93,10 +77,10 @@ mod delta_replanning_and_reachability {
 // ─────────────────────────────────────────────────────────────────────────────
 mod inv03_side_effects_guardrails {
     use super::*;
-    use custos_core::contracts::storage::{OutboxEntry, OutboxStatus};
-    use custos_domain::oi::ReplanTrigger;
-    use custos_domain::workflow::WorkflowRevision;
-    use custos_runtime::oi::replanner::Replanner;
+    use custos_contracts::oi::ReplanTrigger;
+    use custos_contracts::workflow::WorkflowRevision;
+    use custos_engine::contracts::storage::{OutboxEntry, OutboxStatus};
+    use custos_engine::oi::replanner::Replanner;
 
     #[tokio::test]
     async fn test_uncertain_outbox_effect_blocks_blind_retry() {
@@ -134,8 +118,8 @@ mod inv03_side_effects_guardrails {
 // Theme 3: S1 Judge Calibration & Abstain (< 0.75)
 // ─────────────────────────────────────────────────────────────────────────────
 mod s1_judge_calibration {
-    use custos_core::contracts::judgment::{JudgmentPort, JudgmentRequest};
-    use custos_runtime::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
+    use custos_engine::agent::s1::{S1Judge, ABSTAIN_CONFIDENCE_THRESHOLD};
+    use custos_engine::contracts::judgment::{JudgmentPort, JudgmentRequest};
     use serde_json::json;
 
     #[tokio::test]
@@ -200,8 +184,8 @@ mod s1_judge_calibration {
 // Theme 4: S1 Scout & Micro-Executor (Zero-Risk & INV-04/06 Invariants)
 // ─────────────────────────────────────────────────────────────────────────────
 mod s1_scout_and_micro_executor {
-    use custos_domain::DomainError;
-    use custos_runtime::agent::s1::{MicroExecutor, MicroTask, ProjectEcosystem, S1Scout};
+    use custos_contracts::DomainError;
+    use custos_engine::agent::s1::{MicroExecutor, MicroTask, ProjectEcosystem, S1Scout};
     use tempfile::tempdir;
 
     #[test]

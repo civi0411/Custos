@@ -31,13 +31,6 @@ impl DesktopLifecycleManager {
     }
 }
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(caller: tauri::Webview, name: &str) -> Result<String, String> {
-    browser::authorize(&caller).map_err(|e| e.to_string())?;
-    Ok(format!("Hello, {}! You've been greeted from Rust!", name))
-}
-
 #[tauri::command]
 async fn custos_lifecycle_state(
     caller: tauri::Webview,
@@ -50,10 +43,11 @@ async fn custos_lifecycle_state(
 #[tauri::command]
 async fn custos_dispatch(
     caller: tauri::Webview,
-    client: tauri::State<'_, Arc<LocalApiClient>>,
+    client_state: tauri::State<'_, tokio::sync::RwLock<Arc<LocalApiClient>>>,
     raw_json: String,
 ) -> Result<String, String> {
     browser::authorize(&caller).map_err(|e| e.to_string())?;
+    let client = client_state.read().await.clone();
     let resp = client.dispatch_raw(&raw_json).await;
     Ok(resp)
 }
@@ -61,7 +55,7 @@ async fn custos_dispatch(
 #[tauri::command]
 async fn custos_request(
     caller: tauri::Webview,
-    client: tauri::State<'_, Arc<LocalApiClient>>,
+    client_state: tauri::State<'_, tokio::sync::RwLock<Arc<LocalApiClient>>>,
     lifecycle: tauri::State<'_, DesktopLifecycleManager>,
     method: String,
     params: serde_json::Value,
@@ -72,13 +66,14 @@ async fn custos_request(
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| custos_domain::new_id("ipc"));
+        .unwrap_or_else(|| custos_contracts::new_id("ipc"));
     let req = ApiRequest {
         id: req_id,
         method,
         params,
     };
-    let resp = match client.send_request(req.clone()).await {
+    let current_client = client_state.read().await.clone();
+    let resp = match current_client.send_request(req.clone()).await {
         Ok(r) => {
             lifecycle.set_state(DaemonLifecycleState::Ready).await;
             r
@@ -87,6 +82,7 @@ async fn custos_request(
             lifecycle.set_state(DaemonLifecycleState::Recovering).await;
             let profile = ProfileResolver::from_env();
             if let Ok(new_client) = ensure_daemon_client_async(&profile).await {
+                *client_state.write().await = new_client.clone();
                 let retry_resp = new_client.send_request(req).await.map_err(|e2| {
                     tokio::spawn({
                         let lc = lifecycle.inner().clone();
@@ -163,12 +159,11 @@ pub fn run() {
                 }
             }
         })
-        .manage(client)
+        .manage(tokio::sync::RwLock::new(client))
         .manage(lifecycle)
         .manage(browser::BrowserRegistry::default())
         .invoke_handler(tauri::generate_handler![
             browser::browser_command,
-            greet,
             custos_lifecycle_state,
             custos_http_endpoint,
             custos_dispatch,

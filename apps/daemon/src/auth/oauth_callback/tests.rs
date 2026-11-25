@@ -1,6 +1,6 @@
 use super::server::{OAuthCallbackServer, PendingOAuthContext};
 use super::utils::extract_query_param;
-use custos_persistence::SqliteTaskStore;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 #[test]
@@ -115,4 +115,3 @@ fn test_render_success_html() {
     assert!(html.contains("Authorization Received"));
     assert!(html.contains("Custos received the authorization callback"));
 }
-

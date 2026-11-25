@@ -1,8 +1,8 @@
 //! Environment application use cases (AEE lifecycle & verification).
 
 use super::*;
-use custos_core::contracts::EnvironmentPort;
-use custos_domain::environment::{EnvironmentProfile, EnvironmentSpec};
+use custos_contracts::environment::{EnvironmentProfile, EnvironmentSpec};
+use custos_engine::contracts::EnvironmentPort;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_environment(&self, req: ApiRequest) -> ApiResponse {
@@ -22,9 +22,10 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "Missing 'env_id' parameter"),
                 };
                 match env_coord.get_handle(env_id).await {
-                    Some(handle) => {
-                        ApiResponse::success(req.id, serde_json::to_value(handle).unwrap_or_default())
-                    }
+                    Some(handle) => ApiResponse::success(
+                        req.id,
+                        serde_json::to_value(handle).unwrap_or_default(),
+                    ),
                     None => ApiResponse::error(req.id, format!("Environment '{env_id}' not found")),
                 }
             }
@@ -36,9 +37,10 @@ impl LocalApiDispatcher {
                     }
                 };
                 match env_coord.provision(&spec).await {
-                    Ok(handle) => {
-                        ApiResponse::success(req.id, serde_json::to_value(handle).unwrap_or_default())
-                    }
+                    Ok(handle) => ApiResponse::success(
+                        req.id,
+                        serde_json::to_value(handle).unwrap_or_default(),
+                    ),
                     Err(e) => {
                         ApiResponse::error(req.id, format!("Failed to provision environment: {e}"))
                     }
@@ -51,7 +53,12 @@ impl LocalApiDispatcher {
                 };
                 let handle = match env_coord.get_handle(env_id).await {
                     Some(h) => h,
-                    None => return ApiResponse::error(req.id, format!("Environment '{env_id}' not found")),
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Environment '{env_id}' not found"),
+                        )
+                    }
                 };
                 let spec: EnvironmentSpec = match req.params.get("spec") {
                     Some(s) => match serde_json::from_value(s.clone()) {
@@ -60,15 +67,14 @@ impl LocalApiDispatcher {
                     },
                     None => EnvironmentSpec::new(
                         env_id,
-                        EnvironmentProfile::Assistant {
-                            project_id: None,
-                        },
+                        EnvironmentProfile::Assistant { project_id: None },
                     ),
                 };
                 match env_coord.verify(&handle, &spec).await {
-                    Ok(report) => {
-                        ApiResponse::success(req.id, serde_json::to_value(report).unwrap_or_default())
-                    }
+                    Ok(report) => ApiResponse::success(
+                        req.id,
+                        serde_json::to_value(report).unwrap_or_default(),
+                    ),
                     Err(e) => ApiResponse::error(req.id, format!("Verification failed: {e}")),
                 }
             }
@@ -79,7 +85,12 @@ impl LocalApiDispatcher {
                 };
                 let handle = match env_coord.get_handle(env_id).await {
                     Some(h) => h,
-                    None => return ApiResponse::error(req.id, format!("Environment '{env_id}' not found")),
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Environment '{env_id}' not found"),
+                        )
+                    }
                 };
                 match env_coord.teardown(&handle).await {
                     Ok(()) => ApiResponse::success(
@@ -93,4 +104,3 @@ impl LocalApiDispatcher {
         }
     }
 }
-

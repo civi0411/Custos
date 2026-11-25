@@ -5,35 +5,19 @@
 //! 2. `replan_record_crash_resilience`: ReplanBrief persistence and recovery across multiple crash/reboot cycles.
 //! 3. `decision_ledger_crash_resilience`: Audit trail recovery of DecisionRecord across store reboots.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_core::contracts::oi::OiPlannerPort;
-use custos_core::contracts::storage::{DecisionPort, ReplanPort, WorkflowRevisionPort};
-use custos_runtime::oi::DecisionSnapshotExtractor;
-use custos_runtime::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
-use custos_domain::{
+use custos_contracts::{
     DecisionRecord, ExecutionTopology, NodePlacement, ReplanBrief, ReplanRecord, ReplanTrigger,
     RevisionNode, Task, TaskContract, WorkflowRevision,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::oi::engine::OiEngine;
-use custos_runtime::workflow::graph_runtime::{GraphRuntime, StepExecutor};
-use custos_runtime::workflow::revision_loader::RevisionLoader;
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_engine::contracts::oi::OiPlannerPort;
+use custos_engine::contracts::storage::{DecisionPort, ReplanPort, WorkflowRevisionPort};
+use custos_engine::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
+use custos_engine::oi::engine::OiEngine;
+use custos_engine::oi::DecisionSnapshotExtractor;
+use custos_engine::workflow::graph_runtime::{GraphRuntime, StepExecutor};
+use custos_engine::workflow::revision_loader::RevisionLoader;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 /// This slice checks persisted graph recovery, not a live agent/model workload.
@@ -43,10 +27,10 @@ struct RecoveryFixtureExecutor;
 impl StepExecutor for RecoveryFixtureExecutor {
     async fn execute_step(
         &self,
-        ctx: &custos_runtime::workflow::ExecutionContext,
+        ctx: &custos_engine::workflow::ExecutionContext,
         _action_type: &str,
         _inputs: &serde_json::Value,
-    ) -> Result<serde_json::Value, custos_domain::DomainError> {
+    ) -> Result<serde_json::Value, custos_contracts::DomainError> {
         Ok(serde_json::json!({"fixture_node": ctx.node_id}))
     }
 }

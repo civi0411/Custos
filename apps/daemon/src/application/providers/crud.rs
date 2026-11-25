@@ -192,7 +192,7 @@ impl LocalApiDispatcher {
 
                 let now = chrono::Utc::now().timestamp_millis();
 
-                let cfg = custos_domain::ProviderConfig {
+                let cfg = custos_contracts::ProviderConfig {
                     id,
                     name,
                     service_type,
@@ -239,10 +239,10 @@ impl LocalApiDispatcher {
                     .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Client API Token");
-                let key = custos_domain::ClientApiKeyRecord {
-                    id: custos_domain::new_id("key"),
+                let key = custos_contracts::ClientApiKeyRecord {
+                    id: custos_contracts::new_id("key"),
                     name: name.to_string(),
-                    token: format!("custos_live_sec_{}", custos_domain::new_id("tok")),
+                    token: format!("custos_live_sec_{}", custos_contracts::new_id("tok")),
                     created_at: chrono::Utc::now().format("%Y-%m-%d").to_string(),
                     revoked: false,
                 };
@@ -334,9 +334,9 @@ impl LocalApiDispatcher {
                     ApiResponse::success(
                         req.id,
                         serde_json::json!({
-                            "configured": true,
-                            "active_provider": "Custos Sovereign (Local / Offline)",
-                            "message": "Custos Offline Sovereign runtime sẵn sàng",
+                            "configured": false,
+                            "active_provider": serde_json::Value::Null,
+                            "message": "No LLM provider configured",
                         }),
                     )
                 }

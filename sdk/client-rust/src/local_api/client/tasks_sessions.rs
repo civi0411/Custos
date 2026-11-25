@@ -2,7 +2,7 @@ use super::LocalApiClient;
 use crate::local_api::envelope::ApiRequest;
 use crate::local_api::methods::*;
 use crate::local_api::params::*;
-use custos_domain::{
+use custos_contracts::{
     Session, SessionJournalEntry, Task, TaskContract, TaskStatus, VerificationClaim,
 };
 use serde::Deserialize;
@@ -143,7 +143,7 @@ impl LocalApiClient {
         &self,
         req_id: &str,
         task_id: &str,
-    ) -> Result<Vec<custos_domain::Span>, String> {
+    ) -> Result<Vec<custos_contracts::Span>, String> {
         let params = serde_json::json!({ "task_id": task_id });
         let req = ApiRequest::new(req_id, METHOD_TASKS_SPANS, params);
         let resp = self.transport.send_request(req).await?;
@@ -327,7 +327,7 @@ impl LocalApiClient {
         &self,
         req_id: &str,
         request: ExplainPlanRequest,
-    ) -> Result<custos_domain::oi::ExplainReport, String> {
+    ) -> Result<custos_contracts::oi::ExplainReport, String> {
         let params = serde_json::to_value(request).map_err(|e| e.to_string())?;
         let req = ApiRequest::new(req_id, METHOD_OI_EXPLAIN, params);
         let resp = self.transport.send_request(req).await?;

@@ -14,9 +14,11 @@ function homeMode(session: Session): ActiveWorkbench {
     const home = session.openedLenses[0];
     if (home === 'research') return 'research';
     if (home === 'code') return 'engineering';
+    if (home === 'quant') return 'quant';
     return 'copilot';
   }
   if (session.pack === 'research') return 'research';
+  if (session.pack === 'quant') return 'quant';
   if (session.pack === 'engineering' || session.pack === 'coding') return 'engineering';
   return 'copilot';
 }
@@ -132,7 +134,7 @@ export function StudioPage() {
     if (!source) return;
     try {
       await daemonClient.openSessionInLens(source.sessionId || source.id,
-        targetMode === 'copilot' ? 'assistant' : targetMode === 'engineering' ? 'coding' : 'research');
+        targetMode === 'copilot' ? 'assistant' : targetMode === 'engineering' ? 'coding' : targetMode === 'quant' ? 'quant' : 'research');
     } catch (error) {
       showToast(`Could not save workbench opening: ${String(error)}`);
       return;
@@ -247,7 +249,10 @@ export function StudioPage() {
         onNewSession={() => { setSidebarView(mode, 'chats'); setActiveTaskId(null); setIsNewSessionOpen(true); }}
         onNewSessionForTask={async taskId => {
           try {
-            await handleCreateChatSession(mode === 'engineering' ? 'engineering' : mode === 'research' ? 'research' : 'assistant', taskId);
+            await handleCreateChatSession(
+              mode === 'engineering' ? 'engineering' : mode === 'research' ? 'research' : mode === 'quant' ? 'quant' : 'assistant',
+              taskId
+            );
             setSidebarView(mode, 'chats');
             setActiveTaskId(taskId);
           } catch { /* The shared action reports the daemon failure and preserves current selection. */ }
@@ -263,7 +268,10 @@ export function StudioPage() {
               [activeSessionId]: Array.from(new Set([...(previous[activeSessionId] || []), mode])),
             }));
           }
-          return handleSendMessage(message, mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : 'research');
+          return handleSendMessage(
+            message,
+            mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : mode === 'quant' ? 'quant' : 'research'
+          );
         }}
         onDeleteConversation={handleDeleteConversation}
         onAcceptAndRun={handleAcceptAndRun}

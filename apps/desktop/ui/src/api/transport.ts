@@ -3,6 +3,8 @@ export const isReadMethod = (method: string): boolean => {
   return (
     m === 'v1.ping' ||
     m === 'v1.health' ||
+    m === 'packages.list_inventory' ||
+    m === 'v1.packages.list_inventory' ||
     m.endsWith('.get') ||
     m.endsWith('.list') ||
     m.endsWith('.read') ||
@@ -18,7 +20,27 @@ export const isReadMethod = (method: string): boolean => {
     m.endsWith('.probe') ||
     m.endsWith('.catalog') ||
     m.endsWith('.snapshot') ||
-    m.endsWith('.screenshot')
+    m.endsWith('.screenshot') ||
+    m.endsWith('.metrics') ||
+    m.endsWith('.usage') ||
+    m.endsWith('.journal') ||
+    m.endsWith('.overview') ||
+    m.endsWith('.runs') ||
+    m.endsWith('.inspect') ||
+    m.endsWith('.logs') ||
+    m.endsWith('.findings') ||
+    m.endsWith('.errors') ||
+    m.endsWith('.profiles') ||
+    m.endsWith('.session_runs') ||
+    m.endsWith('.hardware') ||
+    m.endsWith('.instances') ||
+    m.endsWith('.preflight') ||
+    m.endsWith('.viewer') ||
+    m.endsWith('.auth_status') ||
+    m.endsWith('.lineage_graph') ||
+    m.endsWith('.capabilities') ||
+    m.endsWith('.compute') ||
+    m.endsWith('.assess')
   );
 };
 

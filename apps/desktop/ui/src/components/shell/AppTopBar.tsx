@@ -316,11 +316,12 @@ export const AppTopBar: React.FC = () => {
                 e.stopPropagation();
                 setIsWorkbenchLibraryOpen(true);
               }}
-              className="flex items-center justify-center size-6 rounded-md text-white/35 hover:text-white/85 hover:bg-white/8 transition cursor-pointer select-none"
-              title="Workbench Library (Manage / Install Workbenches)"
+              className="flex items-center gap-1 h-6 px-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition cursor-pointer select-none text-[11px] font-medium"
+              title="Install or enable specialized Workbenches (Coding, Research, Quant)"
               aria-label="Workbench Library"
             >
-              <Plus className="size-3.5 shrink-0" />
+              <Plus className="size-3 shrink-0" />
+              <span className="hidden sm:inline">Workbenches</span>
             </button>
           )}
         </div>
@@ -332,7 +333,7 @@ export const AppTopBar: React.FC = () => {
       {/* ── CENTER: Screen Tabs Bar (Strictly aligned with central workpane axis between the 2 side panels) ── */}
       <div
         data-tauri-drag-region
-        className="flex-1 min-w-0 h-full flex items-center justify-start overflow-hidden px-2 z-20 cursor-default"
+        className="flex-1 min-w-0 h-full flex items-center justify-start px-2 z-20 cursor-default"
       >
         <ScreenSwitcherBar
           screens={screens}
@@ -343,7 +344,7 @@ export const AppTopBar: React.FC = () => {
           onTogglePinScreen={togglePinScreen}
           onRenameScreen={renameScreen}
           currentWorkbench={activeWorkbench || 'engineering'}
-          className="flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar select-none text-xs"
+          className="flex items-center justify-start gap-1 max-w-full select-none text-xs"
         />
 
         {/* Draggable titlebar area between the screen tabs and right controls */}

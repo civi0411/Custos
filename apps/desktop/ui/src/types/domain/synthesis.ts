@@ -1,5 +1,5 @@
 // Research Synthesis, Lineage, Notes, Reviewers, and Notebook Types
-// Strictly mirrors platform/domain (custos-domain) and apps/daemon (custos-daemon) API
+// Strictly mirrors platform/contracts (custos-contracts) and apps/daemon (custos-daemon) API
 
 import type { WorkspaceFileContent } from './workspace';
 import type { ArtifactLineageNode, AnnotationRecord } from '../research';

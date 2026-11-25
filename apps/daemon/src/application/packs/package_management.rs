@@ -15,7 +15,8 @@ impl LocalApiDispatcher {
                         let json_items: Vec<_> = items
                             .into_iter()
                             .map(|item| {
-                                let is_enabled = (item.state == "builtin" || item.state == "installed")
+                                let is_enabled = (item.state == "builtin"
+                                    || item.state == "installed")
                                     && item.enabled_in_profile.as_deref() != Some("0");
                                 serde_json::json!({
                                     "component_id": item.component_id,
@@ -43,7 +44,20 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
                 };
                 let component_id = match req.params.get("component_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
+                    Some(id)
+                        if !id.is_empty()
+                            && id
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') =>
+                    {
+                        id
+                    }
+                    Some(_) => {
+                        return ApiResponse::error(
+                            req.id,
+                            "Invalid 'component_id': must match [A-Za-z0-9_-]+",
+                        )
+                    }
                     None => return ApiResponse::error(req.id, "Missing 'component_id' parameter"),
                 };
                 let version = req
@@ -51,6 +65,17 @@ impl LocalApiDispatcher {
                     .get("version")
                     .and_then(|v| v.as_str())
                     .unwrap_or("0.1.0");
+                if version.is_empty()
+                    || version == "."
+                    || version == ".."
+                    || version.contains('/')
+                    || version.contains('\\')
+                    || !version
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+                {
+                    return ApiResponse::error(req.id, "Invalid 'version' parameter");
+                }
                 let platform = req
                     .params
                     .get("platform")
@@ -61,7 +86,7 @@ impl LocalApiDispatcher {
                 let command_id = format!(
                     "cmd_install_{}_{}",
                     component_id,
-                    custos_domain::new_id("inst")
+                    custos_contracts::new_id("inst")
                 );
 
                 // 1. Record activation intent
@@ -86,8 +111,8 @@ impl LocalApiDispatcher {
                     (source_url, expected_digest)
                 {
                     let adapter =
-                        custos_adapters::host::packages::installer::LocalPackageTransferAdapter::new(&root_dir);
-                    use custos_core::contracts::packages::PackageTransferPort;
+                        custos_integrations::host::packages::installer::LocalPackageTransferAdapter::new(&root_dir);
+                    use custos_engine::contracts::packages::PackageTransferPort;
                     let staged = match adapter.download_to_staging(url, component_id, None).await {
                         Ok(staged) => staged,
                         Err(e) => {
@@ -209,7 +234,20 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
                 };
                 let component_id = match req.params.get("component_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
+                    Some(id)
+                        if !id.is_empty()
+                            && id
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') =>
+                    {
+                        id
+                    }
+                    Some(_) => {
+                        return ApiResponse::error(
+                            req.id,
+                            "Invalid 'component_id': must match [A-Za-z0-9_-]+",
+                        )
+                    }
                     None => return ApiResponse::error(req.id, "Missing 'component_id' parameter"),
                 };
                 let version = req
@@ -217,6 +255,17 @@ impl LocalApiDispatcher {
                     .get("version")
                     .and_then(|v| v.as_str())
                     .unwrap_or("0.1.0");
+                if version.is_empty()
+                    || version == "."
+                    || version == ".."
+                    || version.contains('/')
+                    || version.contains('\\')
+                    || !version
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+                {
+                    return ApiResponse::error(req.id, "Invalid 'version' parameter");
+                }
                 let platform = req
                     .params
                     .get("platform")
@@ -256,7 +305,7 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, e.to_string());
                 }
                 // SADE Zero-Footprint Dynamic Activation: register into memory pack_registry and attach storage repo lazily
-                if let Some(pack) = custos_packs::resolve_pack_by_id(component_id) {
+                if let Some(pack) = custos_engine::resolve_pack_by_id(component_id) {
                     self.workbenches.pack_registry.register(pack);
                 }
                 self.activate_workbench_resources(component_id);

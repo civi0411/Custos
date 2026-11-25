@@ -40,12 +40,11 @@ custos-contracts = { path = "platform/contracts" }
 custos-storage = { path = "platform/storage" }
 custos-integrations = { path = "platform/integrations" }
 custos-engine = { path = "platform/engine" }
-custos-domain = { package = "custos-contracts", path = "platform/contracts" }
 custos-protocol = { path = "sdk/protocol" }
 custos-sdk = { path = "sdk/client-rust" }
 custos-daemon = { path = "apps/daemon" }
-custos-cli = { path = "apps/cli" }
-custos-desktop = { path = "apps/desktop/native" }
+custos-app-cli = { path = "apps/cli" }
+custos-app-desktop = { path = "apps/desktop/native" }
 custos-workbench-quant = { path = "workbenches/quant" }
 custos-workbench-research = { path = "workbenches/research" }
 custos-workbench-coding = { path = "workbenches/coding" }

@@ -1,9 +1,9 @@
 use crate::api::tests::harness::*;
 use crate::api::*;
-use custos_core::TaskService;
-use custos_domain::*;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_contracts::*;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -157,7 +157,7 @@ async fn test_local_api_dispatcher_create_and_get() {
 
 #[tokio::test]
 async fn test_proof_closure_evidence_gating_via_local_api() {
-    use custos_domain::{ContractEvidence, EvidenceKind, TaskContract, VerificationClaim};
+    use custos_contracts::{ContractEvidence, EvidenceKind, TaskContract, VerificationClaim};
 
     let store = Arc::new(MockStore {
         tasks: Mutex::new(Vec::new()),
@@ -283,10 +283,7 @@ async fn test_proof_closure_evidence_gating_via_local_api() {
         })
         .await;
     assert!(fail_foreign.error.is_some());
-    assert!(fail_foreign
-        .error
-        .unwrap()
-        .contains("foreign task"));
+    assert!(fail_foreign.error.unwrap().contains("foreign task"));
 
     // 4c. Attempt completion with empty verifier_id -> MUST FAIL
     let mut invalid_claim = VerificationClaim::new(
@@ -309,10 +306,7 @@ async fn test_proof_closure_evidence_gating_via_local_api() {
         })
         .await;
     assert!(fail_invalid.error.is_some());
-    assert!(fail_invalid
-        .error
-        .unwrap()
-        .contains("missing verifier_id"));
+    assert!(fail_invalid.error.unwrap().contains("missing verifier_id"));
 
     // 5. Complete WITH passing claims for all required evidence -> MUST SUCCEED
     let test_claim = VerificationClaim::new(

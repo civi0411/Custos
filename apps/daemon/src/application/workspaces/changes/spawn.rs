@@ -1,7 +1,7 @@
 //! Candidate worktree spawning use case.
 
 use crate::api::*;
-use custos_runtime::workspace::CreateWorkspaceRequest;
+use custos_engine::workspace::CreateWorkspaceRequest;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_workspaces_candidates_spawn(&self, req: ApiRequest) -> ApiResponse {
@@ -29,10 +29,7 @@ impl LocalApiDispatcher {
         let coordinator = match self.env.workspace.as_ref() {
             Some(c) => c,
             None => {
-                return ApiResponse::error(
-                    req.id,
-                    "WorkspaceCoordinator not configured on daemon",
-                )
+                return ApiResponse::error(req.id, "WorkspaceCoordinator not configured on daemon")
             }
         };
 
@@ -52,9 +49,7 @@ impl LocalApiDispatcher {
 
         match self.kernel.task_service.get_task(&task_id).await {
             Ok(Some(_)) => {}
-            Ok(None) => {
-                return ApiResponse::error(req.id, format!("Task '{task_id}' not found"))
-            }
+            Ok(None) => return ApiResponse::error(req.id, format!("Task '{task_id}' not found")),
             Err(e) => return ApiResponse::error(req.id, e.to_string()),
         }
 
@@ -117,7 +112,7 @@ impl LocalApiDispatcher {
             req.params.get("base_workspace_id").and_then(|v| v.as_str())
         {
             match coordinator
-                .get_workspace(&custos_domain::WorkspaceId::new(base_ws_id))
+                .get_workspace(&custos_contracts::WorkspaceId::new(base_ws_id))
                 .await
             {
                 Ok(Some(ws)) if ws.is_ready() => ws.path,
@@ -128,8 +123,7 @@ impl LocalApiDispatcher {
                     )
                 }
             }
-        } else if let Some(repo_path) = req.params.get("repo_path").and_then(|v| v.as_str())
-        {
+        } else if let Some(repo_path) = req.params.get("repo_path").and_then(|v| v.as_str()) {
             repo_path.to_string()
         } else {
             return ApiResponse::error(
@@ -138,26 +132,20 @@ impl LocalApiDispatcher {
             );
         };
 
-        let base_branch = match custos_adapters::host::workspace::git_ops::current_branch(
+        let base_branch = match custos_integrations::host::workspace::git_ops::current_branch(
             std::path::Path::new(&base_repo_path),
         )
         .await
         {
             Ok(branch) => branch,
             Err(_) => {
-                return ApiResponse::error(
-                    req.id,
-                    "Candidate creation requires a Git checkout",
-                )
+                return ApiResponse::error(req.id, "Candidate creation requires a Git checkout")
             }
         };
         if base_branch.is_empty() {
-            return ApiResponse::error(
-                req.id,
-                "Candidate creation requires a named base branch",
-            );
+            return ApiResponse::error(req.id, "Candidate creation requires a named base branch");
         }
-        match custos_adapters::host::workspace::git_ops::is_working_tree_clean(
+        match custos_integrations::host::workspace::git_ops::is_working_tree_clean(
             std::path::Path::new(&base_repo_path),
         )
         .await
@@ -178,7 +166,7 @@ impl LocalApiDispatcher {
             if let Some(h) = req.params.get("base_commit_hash").and_then(|v| v.as_str()) {
                 Some(h.to_string())
             } else {
-                custos_adapters::host::workspace::git_ops::rev_parse(
+                custos_integrations::host::workspace::git_ops::rev_parse(
                     std::path::Path::new(&base_repo_path),
                     "HEAD",
                 )
@@ -189,12 +177,8 @@ impl LocalApiDispatcher {
         let mut failed_workspaces = Vec::new();
         let batch_command_id = command_id;
         let base_path = std::path::Path::new(&base_repo_path);
-        let (Some(parent), Some(repo_name)) = (base_path.parent(), base_path.file_name())
-        else {
-            return ApiResponse::error(
-                req.id,
-                "Candidate base must have a named parent directory",
-            );
+        let (Some(parent), Some(repo_name)) = (base_path.parent(), base_path.file_name()) else {
+            return ApiResponse::error(req.id, "Candidate base must have a named parent directory");
         };
         for i in 1..=count {
             let branch = format!("custos/candidate/{task_id}/{i}");
@@ -217,18 +201,18 @@ impl LocalApiDispatcher {
 
             let create_req = CreateWorkspaceRequest {
                 name: format!("candidate-{}-{}", task_id, i),
-                kind: custos_domain::WorkspaceKind::Git {
+                kind: custos_contracts::WorkspaceKind::Git {
                     repo_path: base_repo_path.clone(),
                     branch: branch.clone(),
                     base_commit: base_commit_hash.clone(),
                 },
                 path: candidate_path,
-                lineage: Some(custos_domain::WorkspaceLineage {
+                lineage: Some(custos_contracts::WorkspaceLineage {
                     parent_workspace_id: req
                         .params
                         .get("base_workspace_id")
                         .and_then(|v| v.as_str())
-                        .map(custos_domain::WorkspaceId::new),
+                        .map(custos_contracts::WorkspaceId::new),
                     base_commit: base_commit_hash.clone(),
                     target_branch: Some(base_branch.clone()),
                     head_commit: None,

@@ -1,7 +1,7 @@
 //! Android and mobile emulator device control handlers.
 
 use crate::api::*;
-use custos_adapters::host::binaries::resolve_agent_browser_binary;
+use custos_integrations::host::binaries::resolve_agent_browser_binary;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_integrations_emulator(&self, req: ApiRequest) -> ApiResponse {
@@ -86,13 +86,13 @@ impl LocalApiDispatcher {
                     let w = width.to_string();
                     let h = height.to_string();
                     let s = scale.to_string();
-                    let _ = custos_adapters::integrations::run_agent_browser(
+                    let _ = custos_integrations::integrations::run_agent_browser(
                         &agent_bin,
                         &session_id,
                         &["set", "viewport", &w, &h, &s],
                     )
                     .await;
-                    let _ = custos_adapters::integrations::run_agent_browser(
+                    let _ = custos_integrations::integrations::run_agent_browser(
                         &agent_bin,
                         &session_id,
                         &["open", url],
@@ -126,7 +126,7 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, format!("Invalid URL: {e}"));
                 }
                 if let Some(agent_bin) = resolve_agent_browser_binary() {
-                    let _ = custos_adapters::integrations::run_agent_browser(
+                    let _ = custos_integrations::integrations::run_agent_browser(
                         &agent_bin,
                         session_id,
                         &["open", url],
@@ -154,7 +154,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                match custos_adapters::integrations::run_agent_browser_json(
+                match custos_integrations::integrations::run_agent_browser_json(
                     &agent_bin,
                     session_id,
                     &["snapshot", "-i", "--urls"],
@@ -195,7 +195,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                match custos_adapters::integrations::run_agent_browser_json(
+                match custos_integrations::integrations::run_agent_browser_json(
                     &agent_bin,
                     session_id,
                     &["screenshot"],
@@ -209,7 +209,7 @@ impl LocalApiDispatcher {
                             .and_then(|p| p.as_str())
                         {
                             let image_base64 =
-                                custos_adapters::integrations::read_screenshot_base64(p);
+                                custos_integrations::integrations::read_screenshot_base64(p);
                             return ApiResponse::success(
                                 req.id,
                                 serde_json::json!({
@@ -251,7 +251,7 @@ impl LocalApiDispatcher {
                     format!("@{ref_key}")
                 };
 
-                match custos_adapters::integrations::run_agent_browser(
+                match custos_integrations::integrations::run_agent_browser(
                     &agent_bin,
                     session_id,
                     &["click", &selector],

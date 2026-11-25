@@ -3,7 +3,7 @@
 //! Pure-Rust CLI entrypoint communicating with `custos-daemon` via `custos_sdk::LocalApiClient`.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use custos_domain::TaskStatus;
+use custos_contracts::TaskStatus;
 use custos_sdk::local_api::{ApiRequest, LocalApiClient, METHOD_CAPABILITIES_LIST};
 use custos_sdk::profile::{ensure_daemon_client_async, ProfileResolver};
 use serde_json::{json, Value};
@@ -284,7 +284,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::Task;
+    use custos_contracts::Task;
     use custos_sdk::local_api::{
         ApiResponse, FnTransport, METHOD_TASKS_ADVANCE, METHOD_TASKS_CANCEL, METHOD_TASKS_CREATE,
         METHOD_TASKS_GET, METHOD_TASKS_LIST,
@@ -326,14 +326,8 @@ mod tests {
         assert_eq!(parsed.profile.as_deref(), Some("dev"));
         assert!(matches!(parsed.command, CliCommand::Ping));
 
-        let parsed = CliArgs::try_parse_from([
-            "custos",
-            "tasks",
-            "advance",
-            "task_1",
-            "running",
-        ])
-        .unwrap();
+        let parsed =
+            CliArgs::try_parse_from(["custos", "tasks", "advance", "task_1", "running"]).unwrap();
         assert!(matches!(
             parsed.command,
             CliCommand::Tasks {
@@ -346,7 +340,9 @@ mod tests {
     async fn headless_cli_dispatches_all_commands_without_tauri() {
         let client = mock_client();
 
-        let ping = execute_with_client(&client, CliCommand::Ping).await.unwrap();
+        let ping = execute_with_client(&client, CliCommand::Ping)
+            .await
+            .unwrap();
         assert_eq!(ping["status"], "ok");
 
         let caps = execute_with_client(&client, CliCommand::Capabilities)

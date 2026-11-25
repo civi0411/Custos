@@ -1,5 +1,5 @@
 use crate::api::*;
-use custos_domain::{RecordReviewParams, ReviewerRecord};
+use custos_contracts::{RecordReviewParams, ReviewerRecord};
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_shared_reviews(&self, req: ApiRequest) -> ApiResponse {
@@ -95,7 +95,9 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown reviews record method: {unknown}")),
+            unknown => {
+                ApiResponse::error(req.id, format!("Unknown reviews record method: {unknown}"))
+            }
         }
     }
 }

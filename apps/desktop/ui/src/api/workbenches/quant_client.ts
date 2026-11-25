@@ -8,10 +8,18 @@ export class QuantClient {
   async submitQuantBacktest(params: {
     strategy_id: string;
     task_id: string;
+    symbol?: string;
+    timeframe?: string;
     formula?: string;
-    annualized_sharpe: number;
-    max_drawdown: number;
-    total_return: number;
+    fast_period?: number;
+    slow_period?: number;
+    target_weight?: number;
+    stop_loss_pct?: number;
+    take_profit_pct?: number;
+    trailing_stop_pct?: number;
+    annualized_sharpe?: number;
+    max_drawdown?: number;
+    total_return?: number;
     trials_count?: number;
     sample_length?: number;
     volatility?: number;
@@ -30,6 +38,16 @@ export class QuantClient {
     win_rate: number;
     profit_factor: number;
     turnover: number;
+    sortino_ratio?: number;
+    downside_deviation?: number;
+    omega_ratio?: number;
+    cvar_95?: number;
+    lookahead_clean?: boolean;
+    start_timestamp?: number | null;
+    end_timestamp?: number | null;
+    bar_count?: number;
+    monthly_returns?: Array<{ year: number; month: number; return_pct: number }>;
+    equity_curve?: Array<{ timestamp: number; equity: number; drawdown: number }>;
   }> {
     return this.transport.request('v1.quant.backtest.submit', params);
   }
@@ -46,6 +64,16 @@ export class QuantClient {
     win_rate: number;
     profit_factor: number;
     turnover: number;
+    sortino_ratio?: number;
+    downside_deviation?: number;
+    omega_ratio?: number;
+    cvar_95?: number;
+    lookahead_clean?: boolean;
+    start_timestamp?: number | null;
+    end_timestamp?: number | null;
+    bar_count?: number;
+    monthly_returns?: Array<{ year: number; month: number; return_pct: number }>;
+    equity_curve?: Array<{ timestamp: number; equity: number; drawdown: number }>;
   }> {
     return this.transport.request('v1.quant.tearsheet.get', { strategy_id });
   }
@@ -97,17 +125,39 @@ export class QuantClient {
     order_id: string;
     permit_id: string;
     task_id?: string;
+    execute_paper?: boolean;
+    execution_price?: number;
   }): Promise<{
     status: string;
     permit_id: string;
+    idempotency_key?: string;
     outbox_action_id?: string;
+    fill?: any;
   }> {
     return this.transport.request('v1.quant.orders.approve', params);
+  }
+
+  async closeQuantPosition(params: {
+    strategy_id: string;
+    task_id: string;
+    symbol: string;
+    direction: string;
+    quantity: number;
+    mark_price: number;
+    permit_id?: string;
+    execute_paper?: boolean;
+  }): Promise<{
+    gate_outcome: { status: string; details: { reason: string } };
+    ticket: any;
+    fill?: any;
+  }> {
+    return this.transport.request('v1.quant.orders.close_position', params);
   }
 
   async discoverQuantFactors(params?: {
     symbol?: string;
     timeframe?: string;
+    formulas?: string[];
   }): Promise<{
     symbol: string;
     timeframe: string;
@@ -384,6 +434,7 @@ export class QuantClient {
     spread_bps: number;
     microprice: number;
     imbalance_pct: number;
+    data_mode?: string;
     asks: Array<{ price: number; size: number; total: number }>;
     bids: Array<{ price: number; size: number; total: number }>;
     timestamp: number;
@@ -404,5 +455,62 @@ export class QuantClient {
     status: string;
   }> {
     return this.transport.request('v1.quant.pbo.compute', params);
+  }
+
+  async listQuantStrategies(): Promise<{
+    strategies: Array<{
+      id: string;
+      name: string;
+      market: string;
+      venue: string;
+      symbol: string;
+      timeframe: string;
+      formula: string;
+      direction_mode: string;
+      status: string;
+      latest_sharpe?: number | null;
+      latest_ic_mean?: number | null;
+      source_hash: string;
+      created_at: number;
+      updated_at: number;
+    }>;
+  }> {
+    return this.transport.request('v1.quant.strategies.list', {});
+  }
+
+  async listQuantPositions(params?: { strategy_id?: string }): Promise<{
+    positions: Array<{
+      id: string;
+      strategy_id: string;
+      symbol: string;
+      market: string;
+      direction: 'long' | 'short';
+      quantity: number;
+      avg_entry_price: number;
+      realized_pnl: number;
+      updated_at: number;
+    }>;
+  }> {
+    return this.transport.request('v1.quant.positions.list', params || {});
+  }
+
+  async listQuantFills(params?: {
+    strategy_id?: string;
+    symbol?: string;
+    limit?: number;
+  }): Promise<{
+    fills: Array<{
+      fill_id: string;
+      order_id: string;
+      symbol: string;
+      direction: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover';
+      price: number;
+      quantity: number;
+      commission: number;
+      timestamp: number;
+      exit_reason?: string | null;
+    }>;
+  }> {
+    return this.transport.request('v1.quant.fills.list', params || {});
   }
 }

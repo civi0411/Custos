@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use custos_domain::{
+use custos_contracts::{
     digest, CheckpointCommitStatus, CheckpointFileEntry, DomainError, TrainingCheckpointManifest,
 };
 

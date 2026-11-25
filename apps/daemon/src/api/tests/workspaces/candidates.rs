@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use custos_core::contracts::WorkspaceRepository;
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::contracts::WorkspaceRepository;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 
 use crate::api::*;
 
@@ -45,7 +45,7 @@ async fn candidate_creation_and_integration_replay_use_recorded_workspace_state(
     git(&repo, &["config", "user.email", "test@example.invalid"]);
     git(&repo, &["config", "commit.gpgsign", "false"]);
     let store = Arc::new(
-        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+        custos_storage::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
             .unwrap(),
     );
     let service = Arc::new(TaskService::new(store.clone()));
@@ -60,21 +60,21 @@ async fn candidate_creation_and_integration_replay_use_recorded_workspace_state(
         .0;
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
-    let mut base = custos_domain::ExecutionWorkspace::new(
-        custos_domain::WorkspaceId::new("base"),
+    let mut base = custos_contracts::ExecutionWorkspace::new(
+        custos_contracts::WorkspaceId::new("base"),
         "base",
-        custos_domain::WorkspaceKind::Git {
+        custos_contracts::WorkspaceKind::Git {
             repo_path: repo.to_string_lossy().into(),
             branch: "main".into(),
             base_commit: None,
         },
         repo.to_string_lossy().to_string(),
     );
-    base.status = custos_domain::WorkspaceStatus::Ready;
+    base.status = custos_contracts::WorkspaceStatus::Ready;
     store.save_workspace(&base).await.unwrap();
     let make_dispatcher = || {
         LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone())
@@ -157,7 +157,7 @@ async fn candidate_creation_and_integration_replay_use_recorded_workspace_state(
     assert_eq!(repeated.result.unwrap()["merge_success"], true);
     assert_eq!(git(&repo, &["rev-parse", "HEAD"]), merged_head);
     let mut interrupted = store
-        .get_workspace(&custos_domain::WorkspaceId::new(&winner_id))
+        .get_workspace(&custos_contracts::WorkspaceId::new(&winner_id))
         .await
         .unwrap()
         .unwrap();
@@ -226,7 +226,7 @@ async fn two_worktree_concurrent_isolation_and_stale_base_rejection() {
     git(&repo, &["config", "commit.gpgsign", "false"]);
 
     let store = Arc::new(
-        custos_persistence::SqliteTaskStore::new(&temp.path().join("two_wt.db").to_string_lossy())
+        custos_storage::SqliteTaskStore::new(&temp.path().join("two_wt.db").to_string_lossy())
             .unwrap(),
     );
     let service = Arc::new(TaskService::new(store.clone()));
@@ -241,21 +241,21 @@ async fn two_worktree_concurrent_isolation_and_stale_base_rejection() {
         .0;
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
-    let mut base = custos_domain::ExecutionWorkspace::new(
-        custos_domain::WorkspaceId::new("base"),
+    let mut base = custos_contracts::ExecutionWorkspace::new(
+        custos_contracts::WorkspaceId::new("base"),
         "base",
-        custos_domain::WorkspaceKind::Git {
+        custos_contracts::WorkspaceKind::Git {
             repo_path: repo.to_string_lossy().into(),
             branch: "main".into(),
             base_commit: None,
         },
         repo.to_string_lossy().to_string(),
     );
-    base.status = custos_domain::WorkspaceStatus::Ready;
+    base.status = custos_contracts::WorkspaceStatus::Ready;
     store.save_workspace(&base).await.unwrap();
 
     let dispatcher = LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone())
@@ -382,27 +382,27 @@ async fn two_worktree_concurrent_isolation_and_stale_base_rejection() {
 
 #[tokio::test]
 async fn candidate_comparison_rejects_mixed_scope_and_reports_inspection_failure() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
     let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_workspace(coordinator);
     let make = |id: &str, task: &str, base: &str, repo: &str| {
-        let mut workspace = custos_domain::ExecutionWorkspace::new(
-            custos_domain::WorkspaceId::new(id),
+        let mut workspace = custos_contracts::ExecutionWorkspace::new(
+            custos_contracts::WorkspaceId::new(id),
             id.to_string(),
-            custos_domain::WorkspaceKind::Git {
+            custos_contracts::WorkspaceKind::Git {
                 repo_path: repo.into(),
                 branch: id.into(),
                 base_commit: Some(base.into()),
             },
             format!("/missing/candidate/{id}"),
         );
-        workspace.status = custos_domain::WorkspaceStatus::Ready;
+        workspace.status = custos_contracts::WorkspaceStatus::Ready;
         workspace.owner_task_id = Some(task.into());
         workspace.base_commit_hash = Some(base.into());
         workspace

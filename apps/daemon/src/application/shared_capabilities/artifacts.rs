@@ -2,8 +2,8 @@
 
 use crate::api::*;
 use base64::Engine;
-use custos_domain::{AnnotationStatus, AnnotationTarget};
-use custos_domain::{ArtifactLineageNode, NoteRecord};
+use custos_contracts::{AnnotationStatus, AnnotationTarget};
+use custos_contracts::{ArtifactLineageNode, NoteRecord};
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_shared_artifacts(&self, req: ApiRequest) -> ApiResponse {
@@ -11,7 +11,12 @@ impl LocalApiDispatcher {
             "v1.research.annotations.list" => {
                 let shared = match self.workbenches.shared_capabilities.as_ref() {
                     Some(s) => s,
-                    None => return ApiResponse::error(req.id, "SharedCapabilitiesRepository not configured on daemon"),
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "SharedCapabilitiesRepository not configured on daemon",
+                        )
+                    }
                 };
                 let artifact_id = req
                     .params
@@ -34,18 +39,23 @@ impl LocalApiDispatcher {
             "v1.research.annotations.save" => {
                 let shared = match self.workbenches.shared_capabilities.as_ref() {
                     Some(s) => s,
-                    None => return ApiResponse::error(req.id, "SharedCapabilitiesRepository not configured on daemon"),
-                };
-                let anno: custos_domain::AnnotationRecord = match serde_json::from_value(req.params)
-                {
-                    Ok(a) => a,
-                    Err(e) => {
+                    None => {
                         return ApiResponse::error(
                             req.id,
-                            format!("Invalid annotation payload: {e}"),
+                            "SharedCapabilitiesRepository not configured on daemon",
                         )
                     }
                 };
+                let anno: custos_contracts::AnnotationRecord =
+                    match serde_json::from_value(req.params) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Invalid annotation payload: {e}"),
+                            )
+                        }
+                    };
                 if anno.id.trim().is_empty()
                     || anno.note.trim().is_empty()
                     || anno.note.len() > 16_384
@@ -145,8 +155,7 @@ impl LocalApiDispatcher {
                     Ok(v) => v,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let annotations = match shared.list_annotations_for_artifact(artifact_path, None)
-                {
+                let annotations = match shared.list_annotations_for_artifact(artifact_path, None) {
                     Ok(a) => a,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
@@ -201,7 +210,8 @@ impl LocalApiDispatcher {
                         artifact_path.to_string()
                     };
                     let current = match self
-                        .env.files
+                        .env
+                        .files
                         .read_file(&workspace, &relative, Some(10 * 1024 * 1024))
                         .await
                     {
@@ -476,7 +486,7 @@ impl LocalApiDispatcher {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use custos_persistence::SqliteTaskStore;
+    use custos_storage::SqliteTaskStore;
 
     #[tokio::test]
     async fn artifacts_group_test_without_dispatcher() {

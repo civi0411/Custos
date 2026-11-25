@@ -2,7 +2,7 @@ use super::LocalApiClient;
 use crate::local_api::envelope::ApiRequest;
 use crate::local_api::methods::*;
 use crate::local_api::params::*;
-use custos_domain::{
+use custos_contracts::{
     ExecutionWorkspace, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileTree,
 };

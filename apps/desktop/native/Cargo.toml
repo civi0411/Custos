@@ -22,7 +22,7 @@ tauri-plugin-opener = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 custos-sdk = { workspace = true }
-custos-domain = { workspace = true }
+custos-contracts = { workspace = true }
 tokio = { workspace = true }
 
 thiserror = { workspace = true }

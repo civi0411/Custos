@@ -1,10 +1,10 @@
 use super::*;
-use custos_persistence::SqliteTaskStore;
-use custos_provider::routing::router::CredentialResolver;
+use custos_integrations::routing::router::CredentialResolver;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
-fn token(oauth: bool) -> custos_domain::OAuthTokenRecord {
-    custos_domain::OAuthTokenRecord {
+fn token(oauth: bool) -> custos_contracts::OAuthTokenRecord {
+    custos_contracts::OAuthTokenRecord {
         provider_id: "openai".into(),
         service_type: "openai".into(),
         access_token: if oauth { "opaque-oauth" } else { "eyJ-api-key" }.into(),
@@ -81,7 +81,7 @@ async fn account_pool_priority_rotation_catalog_binding_and_delete() {
     ));
     let repo = store.providers();
     for id in ["A", "B", "C"] {
-        let config = custos_domain::ProviderConfig {
+        let config = custos_contracts::ProviderConfig {
             id: id.into(),
             name: id.into(),
             service_type: "openai".into(),
@@ -103,7 +103,7 @@ async fn account_pool_priority_rotation_catalog_binding_and_delete() {
             "verified-probe:{id}:https://api.openai.com/v1:api_key:{}",
             meta.created_at
         );
-        let model = custos_domain::ModelCatalogOption {
+        let model = custos_contracts::ModelCatalogOption {
             id: if id == "C" { "gpt-other" } else { "gpt-test" }.into(),
             label: id.into(),
             provider_type: "openai".into(),
@@ -182,7 +182,7 @@ async fn account_pool_concurrent_reservations_are_balanced_and_locked_selection_
     ));
     let repo = store.providers();
     for id in ["A", "B"] {
-        let config = custos_domain::ProviderConfig {
+        let config = custos_contracts::ProviderConfig {
             id: id.into(),
             name: id.into(),
             service_type: "copilot".into(),
@@ -206,7 +206,7 @@ async fn account_pool_concurrent_reservations_are_balanced_and_locked_selection_
             "verified-probe:{id}:https://api.githubcopilot.com:oauth:{}",
             tok.created_at
         );
-        let model = custos_domain::ModelCatalogOption {
+        let model = custos_contracts::ModelCatalogOption {
             id: "copilot/claude-test".into(),
             label: "Claude".into(),
             provider_type: "copilot".into(),
@@ -265,14 +265,14 @@ async fn reasoning_admission_uses_the_selected_account_catalog_and_scope() {
         Arc::new(store.providers().clone()),
         Arc::new(crate::credential_tests::FakeVault::default()),
     ));
-    let availability = custos_provider::routing::availability::ModelAvailability::default();
+    let availability = custos_integrations::routing::availability::ModelAvailability::default();
     let resolver = DaemonCredentialResolver {
         store: store.clone(),
         credentials: credentials.clone(),
         availability: availability.clone(),
     };
     for account in ["A", "B"] {
-        let config = custos_domain::ProviderConfig {
+        let config = custos_contracts::ProviderConfig {
             id: account.into(),
             name: account.into(),
             service_type: "openai".into(),
@@ -290,7 +290,7 @@ async fn reasoning_admission_uses_the_selected_account_catalog_and_scope() {
             .await
             .unwrap();
         let scope = provider_catalog_scope(store.providers(), account).unwrap();
-        let model = custos_domain::ModelCatalogOption {
+        let model = custos_contracts::ModelCatalogOption {
             id: "gpt-6.1-sol".into(),
             label: "GPT-6.1 Sol".into(),
             provider_type: "openai".into(),

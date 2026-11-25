@@ -3,6 +3,7 @@ import { Layers } from 'lucide-react';
 
 export interface OrderBookLadderProps {
   ticketSymbol: string;
+  dataMode?: string;
   orderBook: {
     asks: Array<{ price: number; size: number; depth: number; depthPct: number }>;
     bids: Array<{ price: number; size: number; depth: number; depthPct: number }>;
@@ -15,6 +16,7 @@ export interface OrderBookLadderProps {
 
 export const OrderBookLadder: React.FC<OrderBookLadderProps> = ({
   ticketSymbol,
+  dataMode,
   orderBook,
   onSelectPrice,
 }) => {
@@ -26,6 +28,11 @@ export const OrderBookLadder: React.FC<OrderBookLadderProps> = ({
           <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg)]">
             L2 Order Book ({ticketSymbol})
           </span>
+          {dataMode === 'live' && (
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+              LIVE
+            </span>
+          )}
         </div>
         <span className="text-[10px] font-mono text-[var(--color-fg-muted)]">Click level to quote</span>
       </div>
@@ -34,7 +41,7 @@ export const OrderBookLadder: React.FC<OrderBookLadderProps> = ({
       <div className="space-y-0.5 text-xs font-mono">
         {orderBook.asks.length === 0 && orderBook.bids.length === 0 && (
           <div className="px-2 py-3 text-center text-[11px] text-[var(--color-fg-muted)]">
-            No market bars ingested for {ticketSymbol}. Ingest OHLCV data to compute L2 depth.
+            Live L2 exchange order book not connected for {ticketSymbol}. Execute orders using verified OHLCV close or connect a live feed.
           </div>
         )}
         {orderBook.asks.map((ask, idx) => (

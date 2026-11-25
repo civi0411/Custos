@@ -31,7 +31,7 @@ impl LocalApiDispatcher {
                     Some(c) if !c.trim().is_empty() => c,
                     _ => return ApiResponse::error(req.id, "Missing or empty 'content' parameter"),
                 };
-                match custos_domain::pipeline::TabularStructureDetector::detect(content) {
+                match custos_contracts::pipeline::TabularStructureDetector::detect(content) {
                     Ok(detected) => ApiResponse::success(
                         req.id,
                         serde_json::to_value(detected).unwrap_or(serde_json::Value::Null),
@@ -52,13 +52,13 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str())
                     .unwrap_or("Market");
                 let modality = match modality_str {
-                    "Science" => custos_domain::pipeline::DataModality::Science,
-                    "Code" => custos_domain::pipeline::DataModality::Code,
-                    "Agent" => custos_domain::pipeline::DataModality::Agent,
-                    _ => custos_domain::pipeline::DataModality::Market,
+                    "Science" => custos_contracts::pipeline::DataModality::Science,
+                    "Code" => custos_contracts::pipeline::DataModality::Code,
+                    "Agent" => custos_contracts::pipeline::DataModality::Agent,
+                    _ => custos_contracts::pipeline::DataModality::Market,
                 };
                 let detected =
-                    match custos_domain::pipeline::TabularStructureDetector::detect(content) {
+                    match custos_contracts::pipeline::TabularStructureDetector::detect(content) {
                         Ok(d) => d,
                         Err(e) => {
                             return ApiResponse::error(
@@ -69,9 +69,9 @@ impl LocalApiDispatcher {
                     };
 
                 let now_ms = chrono::Utc::now().timestamp_millis();
-                let run_id = custos_domain::new_id("pipe_run");
+                let run_id = custos_contracts::new_id("pipe_run");
 
-                let bronze_record = custos_domain::pipeline::PipelineRecord::new_bronze(
+                let bronze_record = custos_contracts::pipeline::PipelineRecord::new_bronze(
                     &run_id,
                     modality,
                     serde_json::json!({
@@ -87,10 +87,10 @@ impl LocalApiDispatcher {
 
                 let mut invariants_verified = vec!["TabularStructureInvariant".to_string()];
                 let silver_res: Result<
-                    custos_domain::pipeline::PipelineRecord<serde_json::Value>,
-                    custos_domain::DomainError,
+                    custos_contracts::pipeline::PipelineRecord<serde_json::Value>,
+                    custos_contracts::DomainError,
                 > = match modality {
-                    custos_domain::pipeline::DataModality::Market => {
+                    custos_contracts::pipeline::DataModality::Market => {
                         #[cfg(feature = "custos-workbench-quant")]
                         {
                             let inv = custos_workbench_quant::ClosedBarInvariant::new(
@@ -103,12 +103,12 @@ impl LocalApiDispatcher {
                         }
                         #[cfg(not(feature = "custos-workbench-quant"))]
                         {
-                            Err(custos_domain::DomainError::Validation(
+                            Err(custos_contracts::DomainError::Validation(
                                 "Market pipeline requires the 'quant' workbench feature".into(),
                             ))
                         }
                     }
-                    custos_domain::pipeline::DataModality::Science => {
+                    custos_contracts::pipeline::DataModality::Science => {
                         #[cfg(feature = "custos-workbench-research")]
                         {
                             let inv = custos_workbench_research::EvidenceGroundingInvariant::new(
@@ -123,12 +123,12 @@ impl LocalApiDispatcher {
                         }
                         #[cfg(not(feature = "custos-workbench-research"))]
                         {
-                            Err(custos_domain::DomainError::Validation(
+                            Err(custos_contracts::DomainError::Validation(
                                 "Science pipeline requires the 'research' workbench feature".into(),
                             ))
                         }
                     }
-                    custos_domain::pipeline::DataModality::Code => {
+                    custos_contracts::pipeline::DataModality::Code => {
                         #[cfg(feature = "custos-workbench-coding")]
                         {
                             let inv = custos_workbench_coding::AstSyntaxInvariant::new(
@@ -140,12 +140,12 @@ impl LocalApiDispatcher {
                         }
                         #[cfg(not(feature = "custos-workbench-coding"))]
                         {
-                            Err(custos_domain::DomainError::Validation(
+                            Err(custos_contracts::DomainError::Validation(
                                 "Code pipeline requires the 'coding' workbench feature".into(),
                             ))
                         }
                     }
-                    custos_domain::pipeline::DataModality::Agent => {
+                    custos_contracts::pipeline::DataModality::Agent => {
                         #[cfg(feature = "custos-workbench-assistant")]
                         {
                             let inv = custos_workbench_assistant::GovernedOutboxInvariant::new(
@@ -159,7 +159,7 @@ impl LocalApiDispatcher {
                         }
                         #[cfg(not(feature = "custos-workbench-assistant"))]
                         {
-                            Err(custos_domain::DomainError::Validation(
+                            Err(custos_contracts::DomainError::Validation(
                                 "Agent pipeline requires the 'assistant' workbench feature".into(),
                             ))
                         }
@@ -216,4 +216,3 @@ impl LocalApiDispatcher {
         }
     }
 }
-
