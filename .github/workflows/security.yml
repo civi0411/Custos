@@ -1,0 +1,28 @@
+name: Security & Architecture CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  security-audit:
+    name: Security & Dependency Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify Architecture Boundaries
+        run: |
+          bash xtask/scripts/check_deps.sh
+          bash xtask/scripts/check_layering.sh
+          bash xtask/scripts/check_naming.sh
+
+      - name: Install cargo-deny
+        continue-on-error: true
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features

@@ -1,0 +1,12 @@
+id: "read-only.v1"
+name: "Read-Only Inspection Policy"
+description: "Disallows any write modifications to filesystem or network calls."
+rules:
+  - capability: "repo.edit"
+    effect: "deny"
+    message: "Write operations forbidden under read-only policy"
+  - capability: "network.egress"
+    effect: "deny"
+    message: "Network egress forbidden"
+  - capability: "repo.read"
+    effect: "allow"

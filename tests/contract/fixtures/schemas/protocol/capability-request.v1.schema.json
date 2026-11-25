@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/capability-request.v1.schema.json",
+  "title": "CapabilityRequest",
+  "description": "Request to invoke a tool, sandbox operation, or external capability",
+  "type": "object",
+  "required": ["request_id", "permit_id", "capability", "action", "parameters"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "permit_id": { "type": "string" },
+    "capability": { "type": "string" },
+    "action": { "type": "string" },
+    "parameters": { "type": "object" },
+    "timeout_ms": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

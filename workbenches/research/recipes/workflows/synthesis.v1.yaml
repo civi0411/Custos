@@ -1,0 +1,12 @@
+id: "synthesis.v1"
+name: "Evidence Synthesis Workflow"
+version: "1.0.0"
+steps:
+  - id: "synthesize"
+    action: "provider.prompt"
+    prompt: "prompts/synthesis.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/citation-coverage.v1.yaml"
+policy: "policies/source-grounded.v1.yaml"
+verifier: "verifiers/citation-coverage.v1.yaml"

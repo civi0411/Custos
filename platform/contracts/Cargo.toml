@@ -1,0 +1,28 @@
+[package]
+name = "custos-contracts"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Custos Canonical Zero-I/O Domain Models, Contracts, and SPI Trait Ports"
+
+[dependencies]
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
+hex = "0.4.3"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = "0.11.0"
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+test-case = { workspace = true }
+

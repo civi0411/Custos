@@ -1,0 +1,25 @@
+name: research
+version: "0.1.0"
+display_name: "Research & Open Science Domain Pack"
+description: "Workflows, prompts, recipes, and verifiers for literature synthesis, claims extraction, and citation verification."
+author: "Custos Team"
+capabilities:
+  - id: "research.literature"
+    description: "Search and fetch scientific literature"
+  - id: "research.extract"
+    description: "Extract verifiable claims and passages"
+  - id: "research.verify"
+    description: "Verify citation coverage and ALCE benchmarks"
+workflows:
+  - id: "literature-search.v1"
+    path: "workflows/literature-search.v1.yaml"
+  - id: "claim-extract.v1"
+    path: "workflows/claim-extract.v1.yaml"
+  - id: "synthesis.v1"
+    path: "workflows/synthesis.v1.yaml"
+policies:
+  - id: "source-grounded.v1"
+    path: "policies/source-grounded.v1.yaml"
+verifiers:
+  - id: "citation-coverage.v1"
+    path: "verifiers/citation-coverage.v1.yaml"

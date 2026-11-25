@@ -1,0 +1,16 @@
+id: "task.assistant.draft-message"
+name: "Draft Communication Message"
+description: "Draft communication with explicit contact resolution and human approval checkpoint."
+default_workflow: "draft-message.v1"
+required_capabilities:
+  - "assistant.draft"
+budget:
+  max_spans: 15
+  max_tokens: 40000
+  max_cost_cents: 80
+risk_level: "medium"
+evidence_requirements:
+  - kind: "draft_staged"
+    required: true
+  - kind: "user_approval_granted"
+    required: true

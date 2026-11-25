@@ -1,0 +1,28 @@
+[package]
+name = "custos-tests-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+custos-contracts = { workspace = true }
+custos-storage = { workspace = true }
+custos-integrations = { workspace = true, features = ["test-support"] }
+custos-engine = { workspace = true }
+custos-workbench-quant = { workspace = true }
+custos-workbench-research = { workspace = true }
+custos-workbench-coding = { workspace = true }
+custos-workbench-assistant = { workspace = true }
+custos-daemon = { workspace = true }
+custos-protocol = { workspace = true }
+custos-sdk = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+tempfile = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
+custos-testkit = { path = "../testkit" }

@@ -1,0 +1,12 @@
+id: "claim-extract.v1"
+name: "Claim Extraction Workflow"
+version: "1.0.0"
+steps:
+  - id: "extract"
+    action: "provider.prompt"
+    prompt: "prompts/literature.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/citation-coverage.v1.yaml"
+policy: "policies/source-grounded.v1.yaml"
+verifier: "verifiers/citation-coverage.v1.yaml"

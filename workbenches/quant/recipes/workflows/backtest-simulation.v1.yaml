@@ -1,0 +1,12 @@
+id: "backtest-simulation.v1"
+name: "Backtest Simulation Workflow"
+version: "1.0.0"
+steps:
+  - id: "simulate"
+    action: "provider.prompt"
+    prompt: "prompts/alpha.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/pbo-cscv.v1.yaml"
+policy: "policies/zero-lookahead.v1.yaml"
+verifier: "verifiers/pbo-cscv.v1.yaml"

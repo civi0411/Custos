@@ -1,0 +1,7 @@
+id: "zero-lookahead.v1"
+name: "Zero Lookahead Bias Policy"
+rules:
+  - rule: "strictly_causal_bars"
+    description: "Features at timestamp T can only observe information strictly preceding or equal to T."
+  - rule: "execution_lag"
+    description: "Orders generated at bar close execute at the subsequent bar open."

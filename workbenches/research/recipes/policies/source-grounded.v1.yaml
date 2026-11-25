@@ -1,0 +1,7 @@
+id: "source-grounded.v1"
+name: "Source Grounding & Anti-Hallucination Policy"
+rules:
+  - rule: "mandatory_doi"
+    description: "Every cited paper must have a valid DOI or arXiv identifier."
+  - rule: "verifiable_passage"
+    description: "Extracted claims must quote or point to specific passage bounds."

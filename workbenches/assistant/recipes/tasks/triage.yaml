@@ -1,0 +1,14 @@
+id: "task.assistant.triage"
+name: "Agenda & Inbox Triage"
+description: "Inspect inbound requests, classify priority, and propose structured agenda actions."
+default_workflow: "triage.v1"
+required_capabilities:
+  - "assistant.triage"
+budget:
+  max_spans: 10
+  max_tokens: 30000
+  max_cost_cents: 50
+risk_level: "low"
+evidence_requirements:
+  - kind: "agenda_classified"
+    required: true

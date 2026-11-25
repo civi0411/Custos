@@ -1,0 +1,14 @@
+id: "task.quant.alpha-discovery"
+name: "Predictive Alpha Factor Discovery"
+description: "Formulate statistical signals and predictive alpha factors from normalized market features."
+default_workflow: "alpha-discovery.v1"
+required_capabilities:
+  - "quant.alpha"
+budget:
+  max_spans: 20
+  max_tokens: 60000
+  max_cost_cents: 120
+risk_level: "low"
+evidence_requirements:
+  - kind: "factor_expression_valid"
+    required: true

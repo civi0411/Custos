@@ -1,0 +1,12 @@
+id: "triage.v1"
+name: "Inbox & Agenda Triage Workflow"
+version: "1.0.0"
+steps:
+  - id: "triage"
+    action: "provider.prompt"
+    prompt: "prompts/triage.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/acceptance.v1.yaml"
+policy: "policies/user-confirmation.v1.yaml"
+verifier: "verifiers/acceptance.v1.yaml"

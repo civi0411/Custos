@@ -1,0 +1,10 @@
+id: "deflated-sharpe.v1"
+name: "Deflated Sharpe Ratio Verifier"
+checks:
+  - id: "tearsheet_schema"
+    type: "schema_validation"
+    target: "tearsheet.json"
+  - id: "dsr_pvalue"
+    type: "statistical_threshold"
+    metric: "dsr_pvalue"
+    max_value: 0.05

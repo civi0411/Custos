@@ -1,0 +1,461 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
+import React, { useState, useRef } from 'react';
+import {
+  Code,
+  Terminal,
+  MessageSquare,
+  Cpu,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Copy,
+  Check,
+  X,
+  Maximize2,
+  Minimize2,
+  FileCode2,
+  GitCompare,
+  Send,
+  RotateCcw,
+} from 'lucide-react';
+import type { ArtifactDetailResponse } from '@/types/domain';
+import { CompanionFileViewer } from '@/components/viewer';
+import { FigureAnnotator } from './FigureAnnotator';
+import { ArtifactInspectorData, ArtifactTab, AnnotationRecord } from '@/types/research';
+import { ArtifactEnvironmentTab, ArtifactReviewTab } from './ArtifactInspectorReviewTab';
+
+const TABS: ArtifactTab[] = ['Code', 'Execution Log', 'Messages', 'Environment', 'Review'];
+
+interface ArtifactInspectorProps {
+  data: ArtifactInspectorData;
+  detail?: ArtifactDetailResponse;
+  onSaveAnnotation?: (annotation: AnnotationRecord) => Promise<void>;
+  onClose?: () => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
+  onAskAgent?: (draft: string) => void;
+}
+
+function computeSimpleLineDiff(oldText: string, newText: string) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const result: { type: 'same' | 'added' | 'removed'; text: string; lineNum?: number }[] = [];
+  let i = 0;
+  let j = 0;
+
+  while (i < oldLines.length || j < newLines.length) {
+    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+      result.push({ type: 'same', text: oldLines[i] });
+      i++;
+      j++;
+    } else if (j < newLines.length && (i >= oldLines.length || !oldLines.slice(i, i + 5).includes(newLines[j]))) {
+      result.push({ type: 'added', text: newLines[j] });
+      j++;
+    } else if (i < oldLines.length) {
+      result.push({ type: 'removed', text: oldLines[i] });
+      i++;
+    } else {
+      result.push({ type: 'added', text: newLines[j] });
+      j++;
+    }
+  }
+  return result;
+}
+
+export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
+  data,
+  detail,
+  onSaveAnnotation,
+  onClose,
+  isMaximized,
+  onToggleMaximize,
+  onAskAgent,
+}) => {
+  const [activeTab, setActiveTab] = useState<ArtifactTab>('Code');
+  const [versionIdx, setVersionIdx] = useState<number>(() => {
+    const idx = data.versions.findIndex((v) => v.label === data.activeVersion);
+    return idx >= 0 ? idx : Math.max(0, data.versions.length - 1);
+  });
+  const [compareIdx, setCompareIdx] = useState<number>(() => Math.max(0, versionIdx - 1));
+  const [diffMode, setDiffMode] = useState<boolean>(false);
+  const [copied, setCopied] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [note, setNote] = useState('');
+  const [selection, setSelection] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const versionNumber = Number((data.versions[versionIdx]?.label || data.activeVersion).replace(/^v/, ''));
+  const annotations = (detail?.annotations || []).filter(annotation => annotation.artifactVersion === versionNumber);
+  const file = detail?.file;
+  const image = !!file && /\.(png|jpe?g|gif|webp|avif)$/i.test(data.filename);
+  const versionAvailable = data.versions[versionIdx]?.contentAvailable !== false;
+  const saveAnnotation = async (annotation: AnnotationRecord) => {
+    if (!onSaveAnnotation) throw new Error('Annotation persistence is unavailable');
+    setSavingAnnotation(true); setAnnotationError(null);
+    try { await onSaveAnnotation(annotation); }
+    catch (reason) { setAnnotationError(String(reason)); throw reason; }
+    finally { setSavingAnnotation(false); }
+  };
+
+
+  const currentVersion = data.versions[versionIdx] ?? {
+    label: data.activeVersion || 'v1',
+    code: data.code,
+    executionLog: data.executionLog,
+    environment: data.environment,
+    reviewPassed: data.reviewPassed,
+  };
+
+  const activeCode = currentVersion.code;
+  const activeLog = currentVersion.executionLog;
+  const activeEnv = currentVersion.environment;
+  const reviewStatus = currentVersion.reviewPassed;
+  const isPassed = reviewStatus === true;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(activeCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([activeCode], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.filename || 'artifact.py';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans relative">
+      {/* 48px Standard Pane Header */}
+      <header className="wb-pane-toolbar flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+        <div className="flex items-center gap-3 min-w-0">
+          <FileCode2 className="w-4 h-4 workbench-accent shrink-0" />
+          <span className="truncate text-xs font-semibold text-[var(--color-editor-fg)]">
+            {data.title || data.filename}
+          </span>
+
+          {/* Version Stepper */}
+          <div className="flex items-center gap-1 ml-3 bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] rounded-lg px-1.5 py-0.5">
+            <button
+              onClick={() => { setVersionIdx(i => Math.max(0, i-1)); setSelection(null); }}
+              disabled={versionIdx <= 0}
+              className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] disabled:opacity-30 transition rounded"
+              title="Previous version"
+            >
+              <ChevronLeft size={12} />
+            </button>
+            <span className="font-mono text-[10px] text-[var(--color-editor-fg)] px-1.5 font-bold uppercase tracking-wider">
+              {currentVersion.label}
+            </span>
+            <button
+              onClick={() => { setVersionIdx(i => Math.min(data.versions.length-1, i+1)); setSelection(null); }}
+              disabled={versionIdx >= data.versions.length - 1}
+              className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] disabled:opacity-30 transition rounded"
+              title="Next version"
+            >
+              <ChevronRight size={12} />
+            </button>
+          </div>
+
+          {/* Diff Mode Toggle */}
+          {data.versions.length > 1 && (
+            <div className="flex items-center gap-1.5 ml-2">
+              <button
+                disabled={!versionAvailable || !data.versions.some((version, index) => index !== versionIdx && version.contentAvailable !== false)}
+                onClick={() => setDiffMode(!diffMode)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                  diffMode
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                    : 'bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] border-[var(--color-border-muted)] hover:text-[var(--color-editor-fg)]'
+                }`}
+                title="Toggle Diff comparison mode"
+              >
+                <GitCompare size={12} />
+                Diff
+              </button>
+
+              {diffMode && (
+                <div className="flex items-center gap-1 text-[11px] font-mono text-[var(--color-fg-muted)] bg-[var(--color-surface-2)] px-2 py-0.5 rounded-lg border border-[var(--color-border-muted)]">
+                  <span>vs</span>
+                  <NativeSelect
+                    value={compareIdx}
+                    onChange={(e) => setCompareIdx(Number(e.target.value))}
+                    className="bg-transparent text-[var(--color-editor-fg)] font-semibold focus:outline-none cursor-pointer"
+                  >
+                    {data.versions.map((v, i) => (
+                      <option key={v.label} value={i} disabled={i === versionIdx || v.contentAvailable === false} className="bg-[var(--color-surface-1)] text-[var(--color-editor-fg)]">
+                        {v.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Header Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onAskAgent && activeCode && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const envNote = data.environment
+                    ? ` Environment: ${typeof data.environment === 'string' ? data.environment : JSON.stringify(data.environment)}.`
+                    : '';
+                  const prompt = `Reproduce artifact \`${data.filename}\` (${currentVersion.label}).${envNote} Re-run its recorded generating code below in this workspace, then compare the newly generated output with current \`${data.filename}\` and report whether they match:\n\n\`\`\`${data.language || 'python'}\n${activeCode}\n\`\`\``;
+                  onAskAgent(prompt);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition shadow-xs cursor-pointer"
+                title="Draft reproduction prompt into chat composer (reviewed by user before execution)"
+              >
+                <RotateCcw size={12} />
+                <span>Reproduce</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const snippet = `Context Artifact [${data.title || data.filename} (${currentVersion.label})]:\n\`\`\`${data.language || 'text'}\n${activeCode}\n\`\`\``;
+                  onAskAgent(snippet);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm cursor-pointer"
+                title="Insert artifact code into chat input"
+              >
+                <Send size={12} />
+                <span>Insert to Chat</span>
+              </button>
+            </>
+          )}
+          <button
+            onClick={handleCopy}
+            disabled={!activeCode}
+            className="p-1.5 rounded-lg text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+            title="Copy Code"
+          >
+            {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!activeCode}
+            className="p-1.5 rounded-lg text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+            title="Download Script"
+          >
+            <Download size={14} />
+          </button>
+          {onToggleMaximize && (
+            <button
+              onClick={onToggleMaximize}
+              className="p-1.5 rounded-lg text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+              title={isMaximized ? 'Restore Pane' : 'Maximize Pane'}
+            >
+              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          )}
+          {onClose && (
+            <div className="w-px h-4 bg-[var(--color-border-muted)] mx-1" />
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-[var(--color-fg-muted)] hover:text-rose-500 hover:bg-[var(--color-surface-2)] transition"
+              title="Close Inspector"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* 5 Tabs Navigation Bar */}
+      <nav className="flex items-center gap-1 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 pt-2 z-10">
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab;
+          let Icon = Code;
+          if (tab === 'Execution Log') Icon = Terminal;
+          if (tab === 'Messages') Icon = MessageSquare;
+          if (tab === 'Environment') Icon = Cpu;
+          if (tab === 'Review') Icon = ShieldCheck;
+
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`group flex items-center gap-2 pb-2.5 px-3 text-xs font-medium border-b-2 transition relative ${
+                isActive
+                  ? 'border-[var(--workbench-accent)] text-[var(--color-editor-fg)]'
+                  : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+              }`}
+            >
+              <Icon size={13} className={isActive ? 'workbench-accent' : 'text-[var(--color-fg-subtle)] group-hover:text-[var(--color-editor-fg)]'} />
+              <span>{tab}</span>
+              {tab === 'Review' && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ml-1 ${
+                    isPassed ? 'bg-emerald-500' : 'bg-rose-500'
+                  }`}
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Tab Contents Viewport */}
+      <div ref={contentRef} onMouseUp={() => {
+        const selected = window.getSelection();
+        if (!selected || selected.isCollapsed || !selected.anchorNode || !contentRef.current?.contains(selected.anchorNode)) return;
+        const text = selected.toString(); const start = activeCode.indexOf(text);
+        if (text && start >= 0 && activeCode.indexOf(text, start+1) < 0) setSelection({ start, end: start+text.length, text });
+      }} className="flex-1 overflow-y-auto p-5 select-text max-w-5xl mx-auto w-full">
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+          {file && <button type="button" className="canvas-open-button" onClick={() => setPreview(value => !value)}>{preview ? 'Show recorded content' : 'Preview current workspace file'}</button>}
+          {detail?.content_version !== versionNumber && <span className="text-fg-muted">Archived bytes for this version are unavailable. Current workspace bytes are shown separately.</span>}
+        </div>
+        {annotationError && <p role="alert" className="text-xs text-rose-500 mb-3">{annotationError}</p>}
+        {preview && file ? <div className="h-[500px] min-h-80 relative border border-border-default rounded overflow-hidden">
+          {image && !file.truncated && detail?.content_version === versionNumber && onSaveAnnotation
+            ? <FigureAnnotator key={`${data.filename}:${versionNumber}`} imageUrl={`data:image/${data.filename.split('.').pop() === 'jpg' ? 'jpeg' : data.filename.split('.').pop()};base64,${file.content}`} artifactPath={data.filename} artifactVersion={versionNumber} initialAnnotations={annotations} onSaveAnnotation={saveAnnotation}
+                onStartSideChat={onAskAgent ? (annotation, prompt) => onAskAgent(`Artifact ${annotation.artifactPath}, version ${annotation.artifactVersion}, pin (${annotation.target.xRatio}, ${annotation.target.yRatio}): ${prompt}`) : undefined} />
+            : <CompanionFileViewer path={data.filename} content={file.content} isBinary={file.is_binary} truncated={file.truncated} isReadOnly />}
+        </div> : <>
+        {/* TAB 1: CODE */}
+        {activeTab === 'Code' && (
+          <div className="space-y-4">
+            {!activeCode && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">Artifact content is not available from the daemon. Version metadata is shown without a code preview.</p>}
+            {data.inputs && data.inputs.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-xs bg-[var(--color-surface-1)] p-3 rounded-xl border border-[var(--color-border-muted)]">
+                <span className="text-[var(--color-fg-subtle)] font-semibold uppercase tracking-wider text-[10px]">Inputs</span>
+                {data.inputs.map((inp) => (
+                  <span
+                    key={inp}
+                    className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] text-[var(--color-fg-muted)]"
+                  >
+                    {inp}
+                  </span>
+                ))}
+              </div>
+            )}
+            {diffMode ? (
+              <div className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+                <div className="flex items-center justify-between pb-2.5 border-b border-[var(--color-border-muted)] mb-3 text-xs text-[var(--color-fg-muted)]">
+                  <span className="font-semibold text-[var(--color-editor-fg)]">
+                    Comparing {currentVersion.label} with {data.versions[compareIdx]?.label ?? 'v1'}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-emerald-500 font-medium">+ Additions</span>
+                    <span className="text-rose-500 font-medium">- Deletions</span>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  {computeSimpleLineDiff(data.versions[compareIdx]?.code ?? '', activeCode).map((line, idx) => (
+                    <div
+                      key={idx}
+                      className={`px-2 py-0.5 rounded flex items-start gap-3 ${
+                        line.type === 'added'
+                          ? 'bg-emerald-500/10 text-emerald-500 font-medium'
+                          : line.type === 'removed'
+                          ? 'bg-rose-500/10 text-rose-500 line-through opacity-80'
+                          : 'text-[var(--color-fg-muted)]'
+                      }`}
+                    >
+                      <span className="w-4 select-none opacity-50 text-center font-bold">
+                        {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                      </span>
+                      <pre className="font-mono text-xs flex-1 whitespace-pre-wrap">{line.text || ' '}</pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-canvas-inset)] p-4 font-mono text-xs leading-relaxed overflow-x-auto text-[var(--color-editor-fg)]">
+                <pre>
+                  <code>{activeCode}</code>
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: EXECUTION LOG */}
+        {activeTab === 'Execution Log' && (
+          <div className="h-full">
+            <div className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-canvas-inset)] font-mono text-xs leading-relaxed overflow-hidden h-full flex flex-col">
+              <div className="bg-[var(--color-surface-2)] px-4 py-2 border-b border-[var(--color-border-muted)] text-[10px] text-[var(--color-fg-muted)] font-semibold uppercase tracking-wider flex items-center gap-2">
+                <Terminal size={13} />
+                Captured Terminal Log (SHA-256 CAS)
+              </div>
+              <div className="p-4 overflow-auto flex-1 text-[var(--color-fg-muted)]">
+                <pre className="whitespace-pre-wrap">{activeLog || 'No execution log captured.'}</pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: MESSAGES */}
+        {activeTab === 'Messages' && (
+          <div className="space-y-3 max-w-3xl mx-auto">
+            {(data.messages ?? [
+              'Agent generated initial analysis script based on literature findings.',
+              'User requested optimization of hyperparameter scan rate.',
+              'Agent refined code and recorded provenance v2 with lockfile.',
+            ]).map((msg, i) => {
+              const isUser = msg.startsWith('User:');
+              const text = msg.replace(/^(User|Assistant):\s*/, '');
+              
+              return (
+                <div
+                  key={i}
+                  className={`p-4 rounded-xl border flex gap-3 ${
+                    isUser ? 'bg-[var(--color-surface-1)] border-[var(--color-border-default)]' : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)]'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                    isUser ? 'bg-[var(--color-surface-3)] text-[var(--color-editor-fg)]' : 'bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]'
+                  }`}>
+                    {isUser ? 'ME' : 'AI'}
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)] mb-1">
+                      Turn #{i + 1}
+                    </div>
+                    <div className="text-xs text-[var(--color-editor-fg)] leading-relaxed">
+                      {text}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* TAB 4: ENVIRONMENT */}
+        {activeTab === 'Environment' && <ArtifactEnvironmentTab activeEnv={activeEnv} />}
+
+        {/* TAB 5: REVIEW & INVARIANTS */}
+        {activeTab === 'Review' && (
+          <ArtifactReviewTab reviewStatus={reviewStatus} reviewFindings={data.reviewFindings} />
+        )}
+        </>}
+        {activeTab === 'Code' && !preview && versionAvailable && activeCode && onSaveAnnotation && <div className="mt-4 border border-border-default rounded p-3 space-y-2 text-xs">
+          <p className="text-fg-muted">Select text in the recorded content, then add a version-bound note.</p>
+          {selection && <blockquote className="border-l-2 border-accent pl-2 whitespace-pre-wrap">{selection.text}</blockquote>}
+          <textarea aria-label="Artifact annotation note" value={note} onChange={event => setNote(event.target.value)} className="w-full p-2 bg-surface-1 rounded border border-border-default" placeholder="What should be checked or changed?" />
+          <button type="button" className="canvas-open-button" disabled={!selection || !note.trim() || savingAnnotation} onClick={async () => {
+            if (!selection) return;
+            try { await saveAnnotation({ id: crypto.randomUUID(), artifactPath: data.filename, artifactVersion: versionNumber, target: { type: 'text', startOffset: selection.start, endOffset: selection.end, exactText: selection.text }, note: note.trim(), actor: 'researcher', status: 'pending', createdAt: Date.now() }); setNote(''); setSelection(null); } catch { /* Error stays visible for retry. */ }
+          }}>{savingAnnotation ? 'Saving…' : 'Save annotation'}</button>
+          {onAskAgent && selection && <button type="button" className="canvas-open-button ml-2" onClick={() => onAskAgent(`Review ${data.filename} (${currentVersion.label}), selected passage:\n${selection.text}\n\n${note}`)}>Ask about selection</button>}
+        </div>}
+        {annotations.length > 0 && <div className="mt-4 space-y-2 text-xs"><h4 className="font-medium">Version annotations</h4>{annotations.map(annotation => <div key={annotation.id} className="rounded border border-border-default p-3"><p>{annotation.note}</p><p className="text-fg-muted mt-1">{annotation.status} · {annotation.actor}</p></div>)}</div>}
+      </div>
+    </div>
+  );
+};

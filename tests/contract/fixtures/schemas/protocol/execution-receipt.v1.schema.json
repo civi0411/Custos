@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/execution-receipt.v1.schema.json",
+  "title": "ExecutionReceipt",
+  "description": "Cryptographic receipt proving execution of an action and its outcome",
+  "type": "object",
+  "required": ["receipt_id", "permit_id", "action_id", "status", "output_digest", "executed_at"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "permit_id": { "type": "string" },
+    "action_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failure", "timeout", "rejected"]
+    },
+    "output_digest": { "type": "string" },
+    "output_data": { "type": ["object", "null"] },
+    "error_message": { "type": ["string", "null"] },
+    "duration_ms": { "type": "integer" },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

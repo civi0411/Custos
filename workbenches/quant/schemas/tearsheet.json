@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BacktestTearsheet",
+  "type": "object",
+  "required": ["strategy_id", "sharpe_ratio", "max_drawdown"],
+  "properties": {
+    "strategy_id": { "type": "string" },
+    "task_id": { "type": ["string", "null"] },
+    "sharpe_ratio": { "type": "number" },
+    "max_drawdown": { "type": "number" },
+    "annual_return": { "type": "number" },
+    "metrics": { "type": "object" }
+  }
+}

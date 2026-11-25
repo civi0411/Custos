@@ -1,0 +1,7 @@
+id: "pbo-cscv.v1"
+name: "Probability of Backtest Overfitting (PBO / CSCV) Verifier"
+checks:
+  - id: "pbo_threshold"
+    type: "statistical_threshold"
+    metric: "pbo_probability"
+    max_value: 0.25

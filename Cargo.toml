@@ -1,0 +1,158 @@
+[workspace]
+resolver = "2"
+members = [
+    "platform/contracts",
+    "platform/storage",
+    "platform/integrations",
+    "platform/engine",
+    "apps/daemon",
+    "apps/cli",
+    "apps/desktop/native",
+    "sdk/protocol",
+    "sdk/client-rust",
+    "tests/contract",
+    "tests/e2e",
+    "tests/testkit",
+    "workbenches/quant",
+    "workbenches/research",
+    "workbenches/coding",
+    "workbenches/assistant",
+    "xtask"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Custos Team"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/civi0411/Custos"
+rust-version = "1.80"
+description = "Custos Sovereign Agentic Operating System"
+
+[workspace.lints.rust]
+[workspace.lints.clippy]
+
+[workspace.dependencies]
+# ═══════════════════════════════════════════════════════════════════════
+# Custos Workspace Packages (Inward Dependency Boundaries)
+# ═══════════════════════════════════════════════════════════════════════
+custos-contracts = { path = "platform/contracts" }
+custos-storage = { path = "platform/storage" }
+custos-integrations = { path = "platform/integrations" }
+custos-engine = { path = "platform/engine" }
+custos-protocol = { path = "sdk/protocol" }
+custos-sdk = { path = "sdk/client-rust" }
+custos-daemon = { path = "apps/daemon" }
+custos-app-cli = { path = "apps/cli" }
+custos-app-desktop = { path = "apps/desktop/native" }
+custos-workbench-quant = { path = "workbenches/quant" }
+custos-workbench-research = { path = "workbenches/research" }
+custos-workbench-coding = { path = "workbenches/coding" }
+custos-workbench-assistant = { path = "workbenches/assistant" }
+tiktoken-rs = { version = "0.12", default-features = false }
+blake3 = { version = "1", default-features = false, features = ["std"] }
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
+similar = { version = "2.4", features = ["inline"] }
+viuer = "0.11.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9.32"
+serde_path_to_error = "0.1.8"
+jsonschema = "0.55"
+
+# Async & Concurrency
+tokio = { version = "1.36", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Error Handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Config & Env
+dotenvy = "0.15"
+config = "0.14"
+
+# Utilities
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rmcp = { version = "3.2", features = ["server", "macros"] }
+async-stream = "0.3"
+base64 = "0.21"
+once_cell = "1.18"
+rand = "0.8"
+regex = "1.10"
+reqwest = { version = "0.13", features = ["json", "multipart", "stream"] }
+strum = { version = "0.28", features = ["derive"] }
+tokio-stream = "0.1"
+schemars = "1.0.2"
+indoc = "2.0"
+etcetera = "0.11"
+tracing-appender = "0.2.1"
+include_dir = "0.7"
+shell-words = "1.1"
+tokio-util = { version = "0.7", features = ["compat"] }
+tracing-futures = { version = "0.2" }
+url = { version = "2.5" }
+urlencoding = { version = "2.1" }
+http = { version = "1.1" }
+lru = { version = "0.12" }
+dirs = { version = "5" }
+clap = { version = "4.4", features = ["derive"] }
+sha2 = { version = "0.10" }
+arboard = { version = "3" }
+shellexpand = { version = "3" }
+which = { version = "6" }
+bytes = { version = "1.5" }
+keyring = { version = "2" }
+libc = "0.2"
+
+# llama.cpp for local inference (exact version pin - has breaking changes in patch releases)
+llama-cpp-2 = { version = "=0.1.146", default-features = false, features = ["sampler", "mtmd"] }
+llama-cpp-sys-2 = { version = "=0.1.146", default-features = false }
+
+# ACP (Agent Client Protocol) — required by custos-protocol (`sdk/protocol`) and roaming
+agent-client-protocol = { version = "2.2.0", default-features = false }
+agent-client-protocol-schema = { version = "=1.9.1", default-features = false }
+agent-client-protocol-http = { version = "2.2.0", default-features = false }
+
+# iroh P2P transport — required by platform/adapters roaming connector
+iroh = { version = "1.2.0", default-features = false }
+iroh-relay = { version = "1", default-features = false }
+fs2 = "0.4"
+
+# Dev dependencies
+env-lock = "1.0"
+tempfile = "3.8"
+test-case = "3.2"
+wiremock = "0.6"
+
+# ═══════════════════════════════════════════════════════════════════════
+# Build Profiles — Disk Space & Compilation Optimization
+# ═══════════════════════════════════════════════════════════════════════
+[profile.dev]
+# Giảm mức debug info từ 2 (full) xuống 1 (line-tables):
+# Vẫn giữ 100% stack trace và file/line khi panic/lỗi, nhưng giảm 60-80% dung lượng dSYM và binary.
+debug = 1
+
+# Tắt debuginfo cho các thư viện bên thứ 3 (tokio, serde, tauri, reqwest...):
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test]
+debug = 1
+
+[profile.test.package."*"]
+debug = 0
+

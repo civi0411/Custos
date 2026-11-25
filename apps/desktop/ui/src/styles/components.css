@@ -1,0 +1,280 @@
+/* ============================================================
+   TOOLTIP SYSTEM
+   ============================================================ */
+
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip:hover {
+  z-index: 60;
+}
+
+.has-tooltip:hover .tooltip-label {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.tooltip-label {
+  opacity: 0;
+  visibility: hidden;
+  z-index: 9999;
+  transition: opacity 0.1s ease, transform 0.1s ease;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  color: var(--color-editor-fg);
+  padding: 3px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Tooltip directions */
+.tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
+  transform: translateX(-4px);
+}
+
+.has-tooltip:hover .tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
+  transform: translateX(0) !important;
+}
+
+.tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(-4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(0) !important;
+}
+
+.tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(0) !important;
+}
+
+.tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(0) !important;
+}
+
+.tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(0) !important;
+}
+
+
+/* ============================================================
+   DIFF LINES — used in DiffSection / engineering workbench
+   ============================================================ */
+
+.diff-line {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.diff-line-add {
+  background: rgba(86, 211, 100, 0.08);
+  color: #56d364;
+}
+
+.diff-line-del {
+  background: rgba(248, 81, 73, 0.08);
+  color: #ffa198;
+}
+
+.diff-line-ctx {
+  color: #6e7681;
+}
+
+.diff-gutter {
+  user-select: none;
+  color: #6e7681;
+  padding: 0 12px;
+  min-width: 48px;
+  text-align: right;
+  border-right: 1px solid #21262d;
+}
+
+
+/* ============================================================
+   FILE TREE — VS Code-style
+   ============================================================ */
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 0.8125rem;
+  color: var(--color-editor-fg);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.08s;
+  user-select: none;
+  min-width: 0;
+}
+
+.file-tree-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.file-tree-item.active {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--color-research);
+}
+
+.file-tree-item .file-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--color-fg-muted);
+}
+
+
+/* ============================================================
+   BUTTON VARIANTS
+   ============================================================ */
+
+/* Primary button */
+.btn-primary {
+  background: var(--color-editor-fg);
+  color: var(--color-canvas);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-editor-fg);
+  transition: opacity 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Ghost button */
+.btn-ghost {
+  background: transparent;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-ghost:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+  border-color: var(--color-border-default);
+}
+
+/* Danger button */
+.btn-danger {
+  background: transparent;
+  color: var(--color-task-failed);
+  font-size: 0.8125rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  transition: background-color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-danger:hover {
+  background: rgba(248, 81, 73, 0.10);
+  border-color: rgba(248, 81, 73, 0.6);
+}
+
+/* Icon button — used in toolbars */
+.btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color 0.08s, color 0.08s, border-color 0.08s;
+}
+
+.btn-icon:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+  border-color: var(--color-border-default);
+}
+
+/* ============================================================
+   TERMINAL OUTPUT — dense, monospaced
+   ============================================================ */
+
+.terminal-output {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #cdd9e5;
+  background: var(--color-canvas-inset);
+  padding: 8px 12px;
+}
+
+.terminal-prompt {
+  color: var(--color-coding);
+}
+
+.terminal-error {
+  color: var(--color-task-failed);
+}
+
+.terminal-warning {
+  color: var(--color-task-blocked);
+}
+
+.terminal-success {
+  color: var(--color-coding);
+}
+
+.terminal-comment {
+  color: var(--color-fg-subtle);
+}
+
+
+/* Provider authorization actions remain visible in every workbench theme. */
+.provider-oauth-action {
+  background: #c98970;
+  font-weight: 600;
+  color: #171717;
+}
+
+.provider-oauth-action:hover {
+  filter: brightness(1.12);
+}
+
+.provider-oauth-action:focus-visible {
+  outline: 2px solid #f3d7cb;
+  outline-offset: 2px;
+}
+

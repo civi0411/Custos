@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/judgment-request.v1.schema.json",
+  "title": "JudgmentRequest",
+  "description": "Request sent from Rust core to judgment sidecar or evaluator",
+  "type": "object",
+  "required": ["judgment_id", "task_id", "criteria", "candidate"],
+  "properties": {
+    "judgment_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "criteria": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "candidate": { "type": "object" },
+    "context": { "type": "object" }
+  },
+  "additionalProperties": false
+}

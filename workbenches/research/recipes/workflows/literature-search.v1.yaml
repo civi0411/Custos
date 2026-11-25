@@ -1,0 +1,12 @@
+id: "literature-search.v1"
+name: "Literature Search & Acquisition Workflow"
+version: "1.0.0"
+steps:
+  - id: "search"
+    action: "provider.prompt"
+    prompt: "prompts/literature.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/citation-coverage.v1.yaml"
+policy: "policies/source-grounded.v1.yaml"
+verifier: "verifiers/citation-coverage.v1.yaml"

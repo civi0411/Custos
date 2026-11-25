@@ -1,0 +1,12 @@
+id: "draft-message.v1"
+name: "Draft Message Workflow"
+version: "1.0.0"
+steps:
+  - id: "draft"
+    action: "provider.prompt"
+    prompt: "prompts/draft.v1.md"
+  - id: "verify"
+    action: "verifier.run"
+    profile: "verifiers/acceptance.v1.yaml"
+policy: "policies/user-confirmation.v1.yaml"
+verifier: "verifiers/acceptance.v1.yaml"

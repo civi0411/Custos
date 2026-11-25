@@ -1,0 +1,23 @@
+name: engineering
+version: "1.0.0"
+display_name: "Software Engineering Domain Pack"
+description: "Workflows, prompts, recipes, and verifiers for software engineering, architecture, bug fixing, and codebase explanation."
+author: "Custos Team"
+capabilities:
+  - id: "repo.read"
+    description: "Read workspace files, git status, symbols, and diagnostics"
+  - id: "repo.edit"
+    description: "Apply atomic patch modifications to files"
+  - id: "compiler.check"
+    description: "Run cargo check, clippy, test suites and parse compiler diagnostics"
+workflows:
+  - id: "repo-explain.v1"
+    path: "workflows/repo-explain.v1.yaml"
+  - id: "bug-fix.v1"
+    path: "workflows/bug-fix.v1.yaml"
+policies:
+  - id: "read-only.v1"
+    path: "policies/read-only.v1.yaml"
+verifiers:
+  - id: "rust.v1"
+    path: "verifiers/rust.v1.yaml"

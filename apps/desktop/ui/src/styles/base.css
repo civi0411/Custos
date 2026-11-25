@@ -1,0 +1,184 @@
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  /* 13px — same as VS Code */
+  line-height: 1.5;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Inter optical features */
+  font-variation-settings: normal;
+  background-color: var(--color-canvas);
+  color: var(--color-editor-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html[data-reduce-motion='true'] *,
+html[data-reduce-motion='true'] *::before,
+html[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+
+/* ============================================================
+   CURSOR POLICY
+   ============================================================ */
+
+button,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="switch"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+summary,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled,
+button[disabled],
+[role="button"][aria-disabled="true"],
+[role="tab"][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ============================================================
+   FOCUS RING
+   ============================================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--color-border-emphasis);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.workbench-composer textarea:focus,
+.workbench-composer textarea:focus-visible,
+textarea.composer-textarea:focus,
+textarea.composer-textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   SCROLLBARS — minimal, Claude Code style
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444c56;
+}
+
+/* Hide scrollbar for Chrome, Safari, Opera, Edge and Firefox */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ============================================================
+   TEXT SELECTION
+   ============================================================ */
+
+::selection {
+  background-color: rgba(88, 166, 255, 0.35);
+  color: #e6edf3;
+}
+
+
+/* ============================================================
+   RESIZER
+   ============================================================ */
+
+.resizer-active {
+  user-select: none;
+  cursor: col-resize;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-reveal {
+  animation: fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Agent working state — subtle opacity pulse, no rotation flash */
+@keyframes agent-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.agent-working-spinner {
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-working-spinner {
+    animation: none;
+  }
+
+  .animate-reveal {
+    animation: none;
+  }
+}
+
+
+.app-viewport {
+  width: calc(100vw / var(--app-browser-zoom, 1));
+  height: calc(100dvh / var(--app-browser-zoom, 1));
+}
+

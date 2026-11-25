@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AssistantDraft",
+  "type": "object",
+  "required": ["id", "session_id", "body_markdown"],
+  "properties": {
+    "id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "recipient": { "type": ["string", "null"] },
+    "subject": { "type": ["string", "null"] },
+    "body_markdown": { "type": "string" },
+    "status": { "type": "string", "enum": ["draft", "approved", "rejected", "sent"] }
+  }
+}

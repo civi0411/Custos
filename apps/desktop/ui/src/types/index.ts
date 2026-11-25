@@ -1,0 +1,140 @@
+export type WorkspacePaneType = 'chat' | 'engineering' | 'research' | 'assistant' | 'diff' | 'browser' | 'markdown';
+export type WorkbenchLens = 'copilot' | 'coding' | 'research';
+export type MainTab = 'studio' | 'providers' | 'chains' | 'telemetry' | 'cache' | 'dashboard' | 'docs' | 'settings';
+
+export type WorkflowKind = 'session' | 'task' | 'hybrid';
+export type WorkflowStatus = 'idle' | 'running' | 'active' | 'blocked' | 'done' | 'failed' | 'draft';
+
+export interface WorkflowCard {
+  id: string;
+  title: string;
+  preview?: string;
+  pack?: string;
+  workbench?: 'copilot' | 'engineering' | 'research';
+  kind: WorkflowKind;
+  status: WorkflowStatus;
+  hasChat: boolean;
+  hasTask: boolean;
+  taskId?: string;
+  parentId?: string; // for sub-agent children
+  subAgents?: WorkflowCard[];
+  costTokens?: number; // cumulative token usage
+  needsAttention?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  session?: Session;
+}
+
+export interface ChatMessage {
+  recordedAt?: string;
+  runId?: string;
+  liveError?: string;
+  runStatus?: string;
+  activities?: import('./domain').LiveRunSnapshot['activities'];
+  id?: string;
+  role: 'user' | 'assistant';
+  author: string;
+  badge?: string;
+  text: string;
+  stepName?: string;
+  duration?: string;
+}
+
+export interface DiffLine {
+  type: 'context' | 'add' | 'del';
+  text: string;
+}
+
+export interface Session {
+  modelAccountId?: string;
+  reasoningEffort?: string;
+  nativeHarnessId?: string;
+  workspaceId?: string;
+  id: string;
+  openedLenses?: Array<'chat' | 'code' | 'research' | 'quant'>;
+  taskId?: string;
+  task_id?: string;
+  taskTitle?: string;
+  source?: 'daemon';
+  taskStatus?: string;
+  sessionId?: string;
+  pack?: string;
+  title: string;
+  time: string;
+  created_at?: string;
+  preview: string;
+  model: string;
+  fileName: string;
+  diffHunk: string;
+  diffLinesCount: string;
+  summary: string;
+  messages: ChatMessage[];
+  diffCode: DiffLine[];
+}
+
+export interface ProjectData {
+  [projectName: string]: Session[];
+}
+
+export interface ProviderItem {
+  id: string;
+  name: string;
+  model: string;
+  status: 'primary' | 'standby' | 'failover' | 'offline';
+  statusLabel: string;
+  badgeColor: string;
+  apiKey: string;
+  quotaUsed?: string;
+  quotaTotal?: string;
+  quotaPercent?: number;
+  rateLimit?: string;
+  vram?: string;
+  endpoint?: string;
+  defaultModel?: string;
+  contextWindow?: number;
+  fastMode?: boolean;
+  latency: string;
+  iconType: 'anthropic' | 'openai' | 'gemini' | 'deepseek';
+  authType?: 'oauth' | 'api_key';
+  accountName?: string;
+  oauthEmail?: string;
+  oauthTier?: string;
+}
+
+export interface ClientApiKey {
+  id: string;
+  name: string;
+  token: string;
+  created: string;
+  icon: 'laptop' | 'terminal';
+}
+
+export * from './provider_types';
+export * from './research';
+export type {
+  Task,
+  TaskStatus,
+  TaskContract,
+  SessionMode,
+  SessionJournalEntry,
+  Run,
+  RunStatus,
+  WorkerRun,
+  ExecutionWorkspace,
+  WorkspaceKind,
+  WorkspaceStatus,
+  WorkspaceLineage,
+  CreateTaskParams,
+  StartRunParams,
+  AttachSessionParams,
+  CancelRunParams,
+  CreateWorkspaceParams,
+  ProbedModel,
+  ModelPricing,
+  ModelCatalogOption,
+  ModelCatalogResult,
+  ProviderConfigRecord,
+} from './domain';
+export type { Session as DomainSession } from './domain';
+export * from './canvas';
+export * from './screen';

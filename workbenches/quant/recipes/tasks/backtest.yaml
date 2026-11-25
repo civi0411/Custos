@@ -1,0 +1,16 @@
+id: "task.quant.backtest"
+name: "Historical Strategy Backtest Simulation"
+description: "Simulate strategy execution across historical bars and produce performance tearsheets."
+default_workflow: "backtest-simulation.v1"
+required_capabilities:
+  - "quant.backtest"
+budget:
+  max_spans: 25
+  max_tokens: 80000
+  max_cost_cents: 200
+risk_level: "medium"
+evidence_requirements:
+  - kind: "tearsheet_generated"
+    required: true
+  - kind: "zero_lookahead_verified"
+    required: true

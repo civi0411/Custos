@@ -1,0 +1,16 @@
+id: "task.quant.risk-audit"
+name: "Overfitting & PBO Statistical Risk Audit"
+description: "Audit backtest results for data mining overfitting via Deflated Sharpe and PBO/CSCV analysis."
+default_workflow: "risk-audit.v1"
+required_capabilities:
+  - "quant.risk"
+budget:
+  max_spans: 20
+  max_tokens: 50000
+  max_cost_cents: 150
+risk_level: "high"
+evidence_requirements:
+  - kind: "pbo_cscv_computed"
+    required: true
+  - kind: "deflated_sharpe_computed"
+    required: true

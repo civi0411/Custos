@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/judgment-result.v1.schema.json",
+  "title": "JudgmentResult",
+  "description": "Result returned from judgment sidecar to Rust core",
+  "type": "object",
+  "required": ["judgment_id", "passed", "score", "confidence", "rationale"],
+  "properties": {
+    "judgment_id": { "type": "string" },
+    "passed": { "type": "boolean" },
+    "score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "rationale": { "type": "string" },
+    "violations": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

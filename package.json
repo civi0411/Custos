@@ -1,0 +1,11 @@
+{
+  "name": "custos-workspace",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix apps/desktop/ui run build",
+    "dev": "npm --prefix apps/desktop/ui run dev",
+    "cli": "cargo run -p custos-app-cli --",
+    "tauri:desktop:dev": "npm --prefix apps/desktop/ui run tauri:dev --",
+    "tauri:desktop:build": "npm --prefix apps/desktop/ui run tauri:build --"
+  }
+}

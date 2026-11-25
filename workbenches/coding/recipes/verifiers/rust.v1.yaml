@@ -1,0 +1,16 @@
+id: "rust.v1"
+name: "Rust Compiler and Verification Suite"
+commands:
+  - id: "format"
+    cmd: "cargo fmt --all -- --check"
+    required: true
+  - id: "clippy"
+    cmd: "cargo clippy --workspace --all-targets -- -D warnings"
+    required: true
+  - id: "check"
+    cmd: "cargo check --workspace --all-targets"
+    required: true
+  - id: "test"
+    cmd: "cargo test --workspace"
+    required: true
+timeout_seconds: 300

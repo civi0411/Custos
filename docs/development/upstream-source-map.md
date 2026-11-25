@@ -1,0 +1,202 @@
+# Upstream Source Inventory
+
+> **Status:** Audit in progress. This inventory records observations in the Custos checkout, not a license-compliance conclusion. Do not claim upstream SHA pinning or production integration until the missing evidence is filled in.
+
+**Three-workbench follow-up:** [workbench controls inventory](../development/workbench-control-inventory-panels.md) adds source-traced installation/admission and domain evidence findings. QuantDinger's local backend snapshot is `e75f0cfa9cd47de9259844fefbf20c2fa1464d45`; its main checkout supplies backend/jobs/command/lifecycle references. The Vue client is a [separate repository](https://github.com/OpenByteInc/QuantDinger-Vue) with separate source-available terms; only its official README/router were inspected remotely in this follow-up. No QuantDinger source was copied, no frontend dependency installed, and no permission to reuse frontend code is inferred from the backend license.
+
+## Goose-derived source
+
+| Custos path | Observed content | Runtime status | Upstream revision / attribution |
+|---|---|---|---|
+| Historical `platform/runtime/src/engine/agents/` | Earlier unmounted Goose-style agent/extension tree | Directory absent in the current follow-up checkout; do not count it as current code or propose deleting it again | Historical source SHA and file-level mapping **unknown** |
+| `platform/runtime/src/agent/` | Extracted machine, inference, tool and conversation primitives | Compiled module; no daemon-composed `StateMachine` call path found at audit commit `3e4dac4` | File-level origin and divergence **unverified** |
+| `platform/ai/src/contracts/types/` | Goose-style provider, conversation and model types coexist with `ModelProvider` | Compiled; two model interfaces require a conformance mapping | File-level origin and divergence **unverified** |
+| `sdk/client-rust/` | Bindings and wire types retain Goose identifiers | Present; runtime usage not established by this inventory | File-level origin and divergence **unverified** |
+
+[Goose's upstream license](https://github.com/aaif-goose/goose/blob/main/LICENSE) is Apache 2.0. Custos's root `LICENSE` now declares AGPL-3.0; that project-level declaration does not fill the missing file-level origin, modification and notice records for Goose-derived source. Complete those records and obtain a human-maintained license review before a release or reuse claim; this inventory is not a legal conclusion.
+
+## External gateway candidates, not imported Custos code
+
+[upstream source map](../development/upstream-source-map.md) inspects local upstream commit `3f6225deeb08a82448c5f0b0725073401629d462` (MIT, Lovecast Inc.) as an **architecture/UX reference**, not as code imported into Custos. Its Electron/Node runtime, SQLite orchestration tables and React state are not Custos's Task Kernel or DB. Before any selective copy, record exact original path, preserve the applicable MIT copyright/license notice, audit dependencies, behavior parity, platform assumptions and tests; the presence of an MIT license alone is not an integration decision or a blanket compatibility conclusion.
+
+[upstream source map](../development/upstream-source-map.md) inspects local `ai4s-research/open-science` commit `04b64817c12e7fdbe0e052bfa1aeaf8802feecde` as a Research Workbench reference. Its OpenCode sidecar, Tauri commands, file/JSONL provenance, notebook kernels and React pane tree are not Custos canonical Task, authority, evidence or session state. Selective reuse must preserve its license and dependency provenance and must enter Custos through the same ports, IDs and realization gates as every other adapter or resource.
+
+| Upstream | Narrow reason to inspect | Custos integration boundary | Current audit state |
+|---|---|---|---|
+| [upstream source map](../development/upstream-source-map.md) places selected behavior into the Rust platform core (`custos-integrations`, `custos-engine`); it never delegates Task authority externally. | Local source inspected at `ce4460ef79382bfddb4aa5fc0ff9f3cb0d5f95a8` (MIT). Extracts catalog, pricing, RTK, and fallback cascade into native Rust. |
+| [upstream source map](../development/upstream-source-map.md): Absorbs crates/llm conversion, MCP Federation Hub (streamable HTTP/SSE/mergestream) and Google A2A protocol into `custos-integrations`. | Apache 2.0. Analyzed crates/llm, mcp/handler.rs, a2a/mod.rs; instead of running as an external blind proxy, translates design patterns into native modules in Custos. |
+| [rsclaw-ai/cap-protocol](https://cap-protocol.org/) | Draft PTY/structured driver for CLI agents | Optional `AgentRuntimePort` adapter, not Custos's internal protocol | Watchlist; no CAP conformance or first-party manifest established for this checkout |
+
+Before copying source or launching a sidecar, pin upstream repository and commit, inspect license/notices/dependencies, document one real user job, compare against a direct adapter on the same fixture, and verify that no proxy can claim Custos-mediated effects it cannot intercept. A vendor/provider marketing claim is not proof of Custos integration.
+
+## Required audit fields per reused module
+
+Record upstream repository URL and commit SHA, original path, Custos path, whether copied or substantially modified, license and notice requirements, active call path, test coverage, and whether its tools can bypass Custos authorization. Classify each module `active`, `compiled-unwired`, `dormant`, or `duplicate`. A path name or comment alone is not proof of provenance or assurance.
+
+## Integration gates
+
+1. Choose one internal agent loop using replay fixtures and provider/tool parity tests; do not mount the entire legacy engine merely because the files exist.
+2. Keep source attribution and file-level provenance with the retained code.
+3. Verify each physical effect path independently. Goose CLI, Goose-derived in-process code, and a model endpoint have different loop ownership and assurance.
+4. Update this inventory when upstream revisions or Custos call paths change.
+
+## Cross-source Nexus audit: OrCa and Open Science
+
+The local Nexus index was rebuilt in a disposable database for this audit so that observations were not mixed with an older shared index. It indexed the three local checkouts as follows:
+
+| Checkout | Indexed files | AST symbols | Call references | Search chunks | Important limitation |
+|---|---:|---:|---:|---:|---|
+| Custos | 1,185 | 10,696 | 71,037 | 12,683 | Rust structure is queryable; generated and dormant source must still be separated from active call paths. |
+| OrCa | 33,117 | 124 | 608 | 133,165 | OrCa is primarily TypeScript, while this Nexus build only provides structural AST indexing for Rust and Python. TypeScript findings therefore require path-targeted source inspection, not symbol counts. |
+| Open Science | 784 | 1,782 | 13,937 | 5,195 | Rust and Python cores are structurally visible; UI behavior still requires direct TypeScript inspection. |
+
+These numbers measure discoverability, not integration progress. A large matching file set does not mean that the corresponding behavior is compiled, composed, reachable, or correct in Custos.
+
+### One realization ladder for code, documentation, and UI
+
+Every imported, reimplemented, or upstream-inspired capability must use the same five-level status vocabulary:
+
+| Level | Meaning | Evidence required |
+|---|---|---|
+| `inventory` | Source, design, or candidate behavior has been located. | Pinned repository/revision/path, license note, and a stated Custos user job. |
+| `compiled` | Custos code for the capability is included in a built target. | Mounted module and a successful package/build check. Dormant source does not qualify. |
+| `composed` | The daemon composition root binds the implementation to a stable port and Local API operation. | Active construction path, capability advertisement, and no parallel owner of canonical state. |
+| `exercised` | A real client can reach the path with production-shaped input and honest failure behavior. | Contract or end-to-end fixture through the same API used by Desktop/CLI. A mock-only path does not qualify. |
+| `verified` | The behavior meets its domain criterion, authority boundary, recovery semantics, and UI truth contract. | Acceptance, failure, restart/reconcile, and relevant security/evidence tests. |
+
+Documentation may say `target` in addition to these levels, but `target` means no implementation claim. UI capability discovery must derive from the composed backend and must not infer a higher level from a route, component, or feature flag.
+
+### Thematic placement: absorb behavior, not upstream folder trees
+
+OrCa and Open Science solve different parts of the same supervised environment. Custos should not create an `orca/` subsystem and an `open-science/` subsystem. Their useful behaviors belong to five existing themes:
+
+| Theme | Custos owner | OrCa behavior to absorb | Open Science behavior to absorb |
+|---|---|---|---|
+| Workspace host | `custos-integrations::{filesystem,terminal}`, `custos-engine` | Isolated workspace lifecycle, terminal/process ownership, file/diff/browser resources, local/remote host affinity | Project environment, kernel working directory, dataset and artifact locations |
+| Agent execution | `custos-integrations`, runtime agent execution in `custos-engine` | Structured launch, native agent sessions, continuation, cancellation, unknown launch reconciliation | OpenCode/ACP-style runtime as an optional harness, not as the Task Kernel |
+| Coordination | `custos-contracts` Task/Run contracts, `custos-engine::orchestration`, `custos-storage` | Dispatch claims, mailbox, worker lease, attention and Kanban projections | Experiment/run lifecycle, review barriers, negative and uncertain runs |
+| Research provenance | `workbenches/research`, research persistence and verification | No separate scientific truth model; reuse workspace/run primitives | Sources, methods, executions, artifacts, trajectory, provenance, annotation, reviewer assessment |
+| Experience projection | `sdk/protocol`, `custos-sdk`, `apps/desktop`, `ui/desktop` | Resource tabs, agent/workspace attention, terminal/diff/browser views | Pane tree, notebook, run/trajectory/provenance/artifact inspectors and selection-driven actions |
+
+The invariant is one set of canonical identities: Task and Session have many-to-many bindings; Run/Node, Resource, Attempt, Artifact and Evidence records carry stable references back to that work. A pane, terminal, notebook kernel, agent harness, browser, or remote host is a resource or execution backend attached to these identities; it is never a second task database.
+
+## OrCa matching ledger
+
+| Behavior inspected in OrCa | Current Custos evidence | Realization level | Required correction or next gate |
+|---|---|---|---|
+| Workspace and worktree lifecycle | `workspace` and workflow lease modules exist; the current lease implementation creates/copies directories and tracks ownership in memory. | `composed` only for the narrower local workspace behavior; Git-worktree parity is `target`. | Define `ExecutionWorkspace` lifecycle and host affinity, use real repository/base revisions where required, persist lease ownership, and test crash cleanup and stale-base behavior. |
+| Structured agent launch and continuation | Provider/harness registries and native harness adapters are daemon-composed. | `composed`; individual harnesses vary between `exercised` and `target`. | Persist `LaunchAttempt`, capability snapshot, native session reference, continuation mode, cancellation and `unknown` reconciliation. Never equate a provider response with Task completion. |
+| Dispatch claim, worker ownership and mailbox | `WorkflowDispatcher` consults persisted WorkerRuns but keeps active dispatch claims in a process-local map. | `compiled` and partially `composed`. | Move claim/epoch/idempotency to a transactional repository before calling it atomic; add durable mailbox/event delivery and restart contention fixtures. |
+| Attention board and Kanban | Desktop has task/run/workspace projections but no single durable attention model equivalent to an acknowledged event stream. | UI fragments are `exercised`; the unified behavior is `target`. | Project attention from canonical events with reason, severity, reveal target, acknowledge actor and cursor; do not store a separate board truth. |
+| Terminal, file, diff and agent resources | Engineering panes and runtime resource APIs exist. | Mixed `composed`/`exercised`. | Make every resource advertise operations and assurance; use stable `ResourceId`; preserve the same Task/Run context across pane changes. |
+| Browser, remote fleet and headless automation | Metadata/listing paths and panes exist; important effect paths intentionally fail closed or remain degraded. | `composed` for discovery; effects are `target` unless a real adapter proves otherwise. | UI must disable unavailable operations. Add connector-specific attempt, authority, receipt and reconcile tests before upgrading status. |
+| Legacy Goose-derived runtime engine | `custos-engine/src/agent/` provides governed agent loops. | `composed`/canonical. | Replaces legacy Goose loop with canonical topic-driven engine loop. |
+
+## Open Science matching ledger
+
+| Behavior inspected in Open Science | Current Custos evidence | Realization level | Required correction or next gate |
+|---|---|---|---|
+| Pane tree and scientific resources | Research panes exist for literature, claims, notebook, methods, runs, synthesis, artifacts and inspectors; the shared container still behaves mostly as a tab strip. | `exercised` UI projection. | Introduce a persisted, versioned layout projection with stable resource identities and optional split/nesting; layout restoration must not resume execution. |
+| Source, claim and method ledger | Research repository/API/UI paths exist. | `composed`, with selected flows `exercised`. | Bind every claim and method to source revisions, selection spans and assessment versions; expose provenance completeness rather than treating a link as support. |
+| Runs and provenance | Research executions and artifacts are represented, but lineage completeness and criterion linkage are uneven. | `compiled`/partially `composed`. | Make `ResearchRun` an execution projection over Task/Run/Attempt IDs; record environment, inputs, outputs, metrics, negative/uncertain results and artifact edges. |
+| Notebook kernel | The coordinator executes cells through a newly spawned Python process and a temporary script; UI language currently suggests persistent cell state. | `exercised` as isolated cell execution, not as a persistent kernel. | Either label it truthfully as isolated execution or add a supervised kernel/session with epoch, admission policy, cwd/data scope, resource budget, interrupt/restart and provenance receipts. |
+| Artifact inspection | Several research viewers and artifact panels exist. | Mixed `compiled`/`exercised`. | Add an artifact renderer registry by media/schema, immutable artifact revision, source/run lineage, unsupported fallback, and export/handoff policy. |
+| Trajectory and reviewer | Types and UI fragments exist, but review decisions are not consistently connected to completion criteria. | `inventory` to partial `composed`. | Project trajectory from canonical events; store typed reviewer assessments separately from evidence facts; completion remains criterion-specific. |
+| OpenCode/ACP integration pattern | A native CLI harness is registered and can execute a bounded provider-governed turn; the HTTP/SSE event model has typed parsing and mock conformance tests, but no production server transport is connected. | Native CLI path is `composed`/locally `exercised`; server continuation, steering and cancellation remain `target`. | Keep OpenCode behind `AgentRuntimePort`. Advertise lifecycle and cost capabilities only after real transport conformance; it must not own Custos Task state, authority, memory, research provenance, or UI session truth. |
+
+## Canonical ownership and dependency direction
+
+| Concern | Canonical owner | May depend on | Must not own |
+|---|---|---|---|
+| IDs, contracts, FSM and authority/evidence decisions | `custos-contracts` | Pure domain types and ports | React state, provider SDKs, SQLite implementations |
+| Model inference semantics and autonomous harness contract | `custos-contracts` for `ModelPort` & `AgentRuntimePort` | Domain values and core-facing ports | Workflow scheduling, pack acceptance, UI layout |
+| Scheduling, workspace, terminal, context and execution coordination | `custos-engine` | Platform contracts and workbench traits | Provider-specific wire details, canonical DB implementation |
+| LLM, agent, MCP, browser, kernel and platform edges | `custos-integrations` | Declared ports | Task success, grants, canonical projections |
+| Coding, Research, Assistant, and Quant semantics | `workbenches/*` | Platform contracts and engine interfaces | Protocol transport and direct canonical writes |
+| SQLite/CAS/projections | `custos-storage` | Core storage contracts | Product routing and UI decisions |
+| Local API and generated clients | `sdk/protocol`, `custos-sdk` | Versioned application commands/events | New domain truth or adapter behavior |
+| Composition and process lifecycle | `custos-daemon` | Every concrete implementation needed to wire the app | Domain policy hidden in bootstrap code |
+| Desktop host and workbench UI | `apps/desktop/native`, `apps/desktop/ui` | Local API capability/resource projections | Direct DB access, fabricated success, implicit grants |
+
+No feature earns a new crate merely because it came from an upstream product. Split a crate only when dependency direction, platform compilation, independent release/conformance, or security isolation demands it.
+
+### Target module shape inside the canonical blocks
+
+```text
+Custos/
+ platform/
+ contracts/src/ # Ring 0: Pure domain entities, port traits, schemas
+ storage/src/ # Ring 1: SQLite WAL, CAS, Outbox, migrations
+ integrations/src/ # Ring 1: Model providers, harnesses, sandboxes, relays
+ engine/src/ # Ring 2: Governed loop, S1/S2 OI, verifiers, FSM
+ workbenches/ # Ring 3: Specialized vertical domains
+ assistant/
+ coding/
+ quant/
+ research/
+ apps/ # Ring 4: Applications
+ daemon/ # Sole composition root
+ cli/ # Pure Rust headless CLI
+ desktop/ # Tauri v2 native host & React 19 UI
+ sdk/ # SDK and Wire Protocols
+ protocol/ # Neutral wire envelopes and RPC schemas
+ client-rust/ # Strongly typed LocalApiClient
+```
+
+ui/desktop/src/
+ components/shell/ # navigation, conversation and Task anchor
+ components/views/ # resource catalog and pane-layout projection
+ components/workspaces/engineering/
+ components/research/
+ components/assistant/
+ api/ # generated/typed Local API client; no domain truth
+```
+
+The immediate structural pressure is in `custos-daemon/src/api/mod.rs` and `local_api/lib.rs`, not in the number of crates. Extract handlers and typed client groups mechanically while preserving one dispatcher, one schema surface and identical contract fixtures. Do not combine this move with semantic redesign of Task, Run or authority.
+
+## Dependency-ordered realization plan
+
+The current packet definitions and acceptance gates live in the [delivery blueprint](../development/delivery-blueprint.md). The source-matching dependency is:
+
+1. **Ingress and UI truth.** Restrict Local API and physical execution to admitted callers/scopes; capability operations drive pane controls. An isolated Python script is labelled as such.
+2. **One live conversation.** A real provider or native harness receives source-backed context and returns a persisted answer, attempt and usage status. This supplies the baseline for cost and quality.
+3. **Coding and Research vertical slices.** Use one workspace owner and a trusted patch/test gate for Coding; validate source/claim/run/reviewer links and transactional handoff for Research.
+4. **Cross-lens continuity and Assistant effects.** Reopen the same work across three lenses, with selected-context receipt; add exact outbound permits/outbox before real send.
+5. **Delegated orchestration.** Persist claim/lease epochs, mailbox and uncertain launch reconciliation before parallel worker dispatch. A direct read-only query does not wait for full multiworker parity.
+6. **Measured optimization and optional adapters.** Evaluate S1/OI against the strong single-worker baseline, then add browser/fleet/automation/protocol connectors by user job and independent physical-effect gates.
+
+### Upstream Browser & Mobile Emulator (Phone Simulator) Absorption
+
+In OrCa upstream, the **Browser** (`src/main/browser`) and **Mobile Emulator** (`src/main/emulator`, `skills/orca-emulator`, `skills/orca-emulator-android`) serve two core operational roles that Custos absorbs:
+
+1. **Coding Loop Visual Feedback & Mobile Responsiveness:**
+ - **Dual Execution Surfaces**: Coding agents require both Desktop Browser and Mobile Phone Simulator (iPhone 15 Pro, Pixel 8, iPad Mini) preview canvases to detect responsive layout breaks, viewport clipping, and mobile touch targets.
+ - **Accessibility Tree (AX Tree) Extraction**: Rather than guessing raw coordinates, OrCa normalizes the accessibility tree (`snapshot-ax-tree-walk`, `serve-sim-accessibility-tree`), allowing Coding LLMs to perceive headings, buttons, and inputs as structured nodes for accurate UI generation and debugging.
+ - **Visual Proof Closure**: Simulator and browser render receipts feed into Custos invariant evidence (`ProofClosure`).
+2. **Searching & Research Agent Runtime:**
+ - Live browser navigation enables deep web search, documentation exploration (MDN, GitHub, arXiv), and structured scraping that standard text-only search endpoints cannot deliver.
+3. **Custos Architecture Mapping:**
+ - In Custos, these are projected in `ui/desktop` as `BrowserWorkbenchPane` and `MobileSimulatorWorkbenchPane` under Engineering and Shared resources, governed by `custos-integrations/src/platform/` (CDP and `simctl`/`adb` bridges).
+
+## Native GGUF loader references
+
+The local checkouts examined for the native-load path are `llama.cpp` at
+`a0e6dc7`, `ollama` at `d10d106`, and `jan` at `2ff2c4f`. These are source
+references, not code imported into Custos or proof that a given GGUF runs.
+
+| Source behavior | Custos owner | Required gate |
+|---|---|---|
+| `llama.cpp` parses GGUF tensors and executes inference | `custos-integrations/local_inference/llamacpp` | Pin the version actually bundled by `llama-cpp-sys-2`, then load and generate with a real fixture. A separate clone does not upgrade the Rust binary. |
+| Ollama's `llama/compat` rewrites some published GGUF metadata/tensors at load time | Adapter compatibility investigation only | Identify the exact model format and failing tensor before selectively porting any translation; audit license, upstream version, memory mapping and tests. Do not copy the whole patch layer. |
+| Jan's synchronous load endpoint and engine smoke tests report load failure and require a nonempty chat completion | Existing daemon `v1.local_models.load` and local inference tests | Keep load synchronous and preserve its actual error. Add a real-file generation fixture before calling a model usable; scanning and memory preflight are estimates only. |
+
+The desktop native model inventory and selector do not auto-probe LM Studio.
+User-configured model servers continue through the separate provider route.
+
+## What must not be copied
+
+- Do not copy OrCa's Electron process ownership, SQLite schema, global stores or mock/demo data into Custos canonical state.
+- Do not copy Open Science's run/provenance files as a second event log or let a notebook kernel become the research truth owner.
+- Do not retain two agent loops, two resource registries or three transcript stores for the three workbenches.
+- Do not expose a pane merely because a component exists; expose it only when the backend advertises its resource and allowed operations.
+- Do not label an observed native-agent effect `custos-mediated`, or a provider response `verified`, without the corresponding interception and criterion evidence.

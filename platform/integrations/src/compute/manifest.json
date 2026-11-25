@@ -1,0 +1,7 @@
+{
+  "id": "compute",
+  "name": "Compute & Training Targets Capability",
+  "version": "0.1.0",
+  "description": "Colab, Kaggle, rented GPU compute targets and checkpoint store",
+  "category": "compute_capability"
+}

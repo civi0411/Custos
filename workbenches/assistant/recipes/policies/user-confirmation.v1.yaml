@@ -1,0 +1,7 @@
+id: "user-confirmation.v1"
+name: "Require User Confirmation for Outbox Egress"
+rules:
+  - rule: "no_direct_send"
+    description: "Assistant cannot execute outbox transmission without explicit user approval."
+  - rule: "payload_integrity"
+    description: "Modifying staged draft invalidates previous approval."
