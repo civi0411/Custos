@@ -9,15 +9,10 @@ use super::compat::{
 use super::context_limit::{
     parse_model_ids, parse_n_ctx_from_models, CachedContextLimit, N_CTX_PROBE_TIMEOUT,
 };
-use crate::cloud::transport::api_client::ApiClient;
 use crate::base::{
     known_models_from_registry, ConfigKey, MessageStream, ModelInfo, Provider, ProviderDescriptor,
     ProviderMetadata,
 };
-use crate::retry::ProviderRetry;
-use crate::conversation::message::Message;
-use crate::conversation::token_usage::{CostSource, ProviderUsage};
-use crate::errors::ProviderError;
 use crate::cloud::codecs::openai::{
     create_request_with_options, extract_reasoning_effort, get_cost, get_usage,
     is_openai_responses_model, record_response_metadata, response_to_message, OpenAiFormatOptions,
@@ -26,13 +21,18 @@ use crate::cloud::codecs::openai_responses::{
     create_responses_request_for_model, get_responses_usage, responses_api_to_message,
     ResponsesApiResponse,
 };
+use crate::cloud::transport::api_client::ApiClient;
 use crate::cloud::transport::http_status::read_json_response;
-use crate::images::ImageFormat;
-use crate::model::ModelConfig;
 use crate::cloud::transport::openai_compatible::{
     handle_response_openai_compat, handle_status, stream_openai_compat, stream_responses_compat,
 };
+use crate::conversation::message::Message;
+use crate::conversation::token_usage::{CostSource, ProviderUsage};
+use crate::errors::ProviderError;
+use crate::images::ImageFormat;
+use crate::model::ModelConfig;
 use crate::request_log::{start_log, LoggerHandleExt};
+use crate::retry::ProviderRetry;
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::StatusCode;
@@ -232,12 +232,7 @@ impl OpenAiProvider {
         payload: serde_json::Value,
         model_config: &ModelConfig,
     ) -> serde_json::Value {
-        sanitize_request_for_compat(
-            &self.name,
-            payload,
-            model_config,
-            Self::is_responses_model,
-        )
+        sanitize_request_for_compat(&self.name, payload, model_config, Self::is_responses_model)
     }
 
     pub(crate) fn should_use_responses_api_for_provider(&self, model_name: &str) -> bool {
@@ -387,7 +382,7 @@ impl Provider for OpenAiProvider {
             .iter()
             .flatten()
             .filter_map(|model| model.context_limit.map(|limit| (model.name.clone(), limit)));
-        let resolver = custos_provider::context_limit::ContextLimitResolver::new(&self.name)
+        let resolver = crate::context_limit::ContextLimitResolver::new(&self.name)
             .with_configured_limits(configured_limits);
 
         resolver
@@ -459,8 +454,7 @@ impl Provider for OpenAiProvider {
         tools: &[Tool],
     ) -> Result<MessageStream, ProviderError> {
         if self.should_use_responses_api_for_provider(&model_config.model_name) {
-            let (wire_model, _) =
-                extract_reasoning_effort(&model_config.model_name);
+            let (wire_model, _) = extract_reasoning_effort(&model_config.model_name);
             self.stream_for_model(
                 model_config,
                 &wire_model,

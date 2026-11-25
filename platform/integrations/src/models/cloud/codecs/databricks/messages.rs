@@ -1,10 +1,10 @@
+use crate::cloud::codecs::anthropic::thinking_block_is_stale;
+use crate::cloud::codecs::openai::sanitize_function_name;
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::documents::{
     convert_document, document_media_type_is_supported, unsupported_document_text, DocumentFormat,
     ASSISTANT_ROLE_REASON, UNSUPPORTED_MEDIA_TYPE_REASON,
 };
-use crate::cloud::codecs::anthropic::thinking_block_is_stale;
-use crate::cloud::codecs::openai::sanitize_function_name;
 use crate::images::{convert_image, detect_image_path, load_image_file, ImageFormat};
 use crate::mcp_utils::extract_text_from_resource;
 use rmcp::model::{ContentBlock, Role};

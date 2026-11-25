@@ -11,6 +11,7 @@ pub mod azure_foundry;
 pub mod codecs;
 pub mod databricks;
 pub mod declarative;
+#[cfg(any(test, feature = "test-support"))]
 pub mod fake;
 pub mod google;
 pub mod google_codeassist;

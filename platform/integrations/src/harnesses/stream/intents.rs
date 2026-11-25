@@ -1,6 +1,6 @@
 //! Extraction of structured ActionIntents from raw stream logs or events.
 
-use custos_domain::{new_id, ActionIntent, Assurance, RiskLevel};
+use custos_contracts::{new_id, ActionIntent, Assurance, RiskLevel};
 use serde_json::Value;
 
 /// Unified normalization of raw process output or stream lines into structured `ActionIntent`s.

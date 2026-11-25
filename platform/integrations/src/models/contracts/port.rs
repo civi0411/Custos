@@ -5,7 +5,7 @@
 use crate::events::ProviderEvent;
 use crate::request::{ModelResponse, ProviderRequest};
 use async_trait::async_trait;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use tokio::sync::mpsc;
 
 #[async_trait]
@@ -167,4 +167,3 @@ pub trait ModelProvider: Send + Sync {
 
 /// Canonical Hexagonal Architecture alias for ModelProvider
 pub use ModelProvider as ModelPort;
-

@@ -1,11 +1,11 @@
+use super::messages::format_messages_with_options;
+use super::options::*;
+use super::tools::{format_system, format_tools};
+use crate::conversation::message::Message;
 use crate::model::ModelConfig;
 use anyhow::{anyhow, Result};
 use rmcp::model::Tool;
 use serde_json::{json, Value};
-use crate::conversation::message::Message;
-use super::messages::format_messages_with_options;
-use super::options::*;
-use super::tools::{format_system, format_tools};
 
 pub fn create_request(
     provider_name: &str,

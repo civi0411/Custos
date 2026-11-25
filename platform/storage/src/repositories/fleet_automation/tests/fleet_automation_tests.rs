@@ -1,4 +1,4 @@
-use custos_domain::{
+use custos_contracts::{
     BrowserConsoleEntry, BrowserSession, BrowserTab, BrowserTabStatus, FleetExecReceipt,
     HeadlessAutomationJob, HeadlessJobStatus, HeadlessTaskSpec, HeadlessTrigger, RemoteHostNode,
     SshAuthMethod,
@@ -106,4 +106,3 @@ fn test_headless_automation_jobs_persistence() {
     assert_eq!(fetched.status, HeadlessJobStatus::Completed);
     assert_eq!(fetched.exit_code, Some(0));
 }
-

@@ -1,15 +1,15 @@
-use std::collections::VecDeque;
 use anyhow::{bail, Result};
+use std::collections::VecDeque;
 use tokio::{
     sync::{broadcast, broadcast::error::RecvError},
     time::timeout,
 };
 
-use crate::cloud::realtime::live::{LiveSessionEvent, LIVE_EVENT_CHANNEL_CAPACITY};
 use super::types::{
     OpenAiLiveCommand, OpenAiLiveConnectionKind, OpenAiLiveEvent, OpenAiLiveEventKind,
     OpenAiLiveSession, OpenAiLiveSessionEvent, OpenAiLiveSessionId, SESSION_START_TIMEOUT,
 };
+use crate::cloud::realtime::live::{LiveSessionEvent, LIVE_EVENT_CHANNEL_CAPACITY};
 
 pub struct StartingOpenAiLiveSession {
     pub(crate) session: OpenAiLiveSession,

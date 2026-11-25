@@ -248,4 +248,3 @@ fn test_parse_streaming_chunk_returns_none_for_metadata_frames() {
         "`choices: []` is a real chunk, not metadata"
     );
 }
-

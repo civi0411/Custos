@@ -5,7 +5,7 @@ use tokio::fs;
 use tokio::process::Command;
 use tracing::info;
 
-use custos_domain::{
+use custos_contracts::{
     DomainError, ExecutionWorkspace, WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileDiff,
 };
 
@@ -288,10 +288,7 @@ pub async fn discard_file(
     Ok(())
 }
 
-pub async fn commit(
-    workspace: &ExecutionWorkspace,
-    message: &str,
-) -> Result<String, DomainError> {
+pub async fn commit(workspace: &ExecutionWorkspace, message: &str) -> Result<String, DomainError> {
     let base_dir = Path::new(&workspace.path);
     if message.trim().is_empty() {
         return Err(DomainError::Validation(

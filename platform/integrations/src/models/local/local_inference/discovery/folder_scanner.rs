@@ -4,7 +4,7 @@
 //! inspector. External applications should be queried through their APIs.
 
 use super::gguf_inspector::inspect_gguf_file;
-use custos_domain::{LocalHardwareProfile, LocalModelDescriptor, LocalModelFolder};
+use custos_contracts::{LocalHardwareProfile, LocalModelDescriptor, LocalModelFolder};
 use std::fs;
 use std::path::Path;
 use tracing::{debug, info, warn};

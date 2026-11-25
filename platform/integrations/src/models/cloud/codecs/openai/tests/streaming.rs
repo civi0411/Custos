@@ -410,8 +410,7 @@ data: [DONE]"#;
 }
 
 #[tokio::test]
-async fn test_streaming_length_rejects_tool_calls_regardless_of_arguments() -> anyhow::Result<()>
-{
+async fn test_streaming_length_rejects_tool_calls_regardless_of_arguments() -> anyhow::Result<()> {
     let response_lines = r#"data: {"model":"test-model","choices":[{"delta":{"role":"assistant","tool_calls":[{"id":"call_empty","function":{"name":"empty_tool","arguments":""},"type":"function","index":0},{"id":"call_valid","function":{"name":"valid_tool","arguments":"{\"value\":"},"type":"function","index":1}]},"index":0,"finish_reason":null}],"object":"chat.completion.chunk","id":"test-id","created":1234567890}
 data: {"model":"test-model","choices":[{"delta":{"tool_calls":[{"function":{"arguments":""},"index":0},{"function":{"arguments":"true}"},"index":1}]},"index":0,"finish_reason":"length"}],"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110},"object":"chat.completion.chunk","id":"test-id","created":1234567890}
 data: [DONE]"#;
@@ -451,4 +450,3 @@ data: [DONE]"#;
     assert_eq!(usage_count, 1);
     Ok(())
 }
-

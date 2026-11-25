@@ -1,4 +1,4 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 pub(crate) async fn cloud_call(
     service: &str,

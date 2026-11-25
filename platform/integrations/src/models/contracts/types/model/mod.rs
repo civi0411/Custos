@@ -13,4 +13,3 @@ pub use self::types::{
     is_custos_internal_request_param, is_goose_internal_request_param, ModelConfig,
     DEFAULT_CONTEXT_LIMIT,
 };
-

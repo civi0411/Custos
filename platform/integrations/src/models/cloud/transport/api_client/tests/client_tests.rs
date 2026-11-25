@@ -274,12 +274,12 @@ fn test_model_headers_applied_and_override_static_headers() {
         .with_header("queue_threshold", "1000")
         .unwrap();
 
-        let model_config = crate::model::ModelConfig::new("test-model").with_request_headers(
-            Some(std::collections::HashMap::from([
+        let model_config = crate::model::ModelConfig::new("test-model").with_request_headers(Some(
+            std::collections::HashMap::from([
                 ("queue_threshold".to_string(), "500".to_string()),
                 ("Idempotency-Key".to_string(), "abc-123".to_string()),
-            ])),
-        );
+            ]),
+        ));
 
         let request = client
             .request("/test")
@@ -347,4 +347,3 @@ fn test_request_builder_decorator() {
         assert_eq!(actual, Some("test-session_id-456"));
     });
 }
-

@@ -13,7 +13,7 @@ pub use process::{run_observed_process, run_observed_process_with_protocol};
 pub use usage::emit_usage;
 
 use super::spec::StreamProtocol;
-use custos_core::contracts::harness::RunObserver;
+use custos_contracts::contracts::harness::RunObserver;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1,6 +1,4 @@
-use crate::base::{
-    MessageStream, ModelInfo, Provider, ThinkingPreservationFormat,
-};
+use crate::base::{MessageStream, ModelInfo, Provider, ThinkingPreservationFormat};
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
 use crate::model::ModelConfig;

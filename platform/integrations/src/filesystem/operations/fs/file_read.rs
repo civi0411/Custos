@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use std::path::Path;
 
-use custos_core::contracts::skill::{
+use custos_contracts::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 
@@ -117,7 +117,7 @@ impl Skill for FileReadSkill {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core::contracts::skill::WorkspaceScope;
+    use custos_contracts::contracts::skill::WorkspaceScope;
     use tempfile::NamedTempFile;
 
     #[tokio::test]

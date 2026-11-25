@@ -3,9 +3,9 @@
 //! This provider implements `ModelProvider` (`custos-provider`)
 //! to provide deterministic, offline responses for testing workflows and CI.
 
+use crate::{ModelProvider, ModelResponse, ProviderEvent, ProviderRequest, TokenUsage};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::{ModelProvider, ModelResponse, ProviderEvent, ProviderRequest, TokenUsage};
+use custos_contracts::DomainError;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -102,41 +102,41 @@ impl ModelProvider for FakeProvider {
 }
 
 #[async_trait]
-impl custos_domain::inference::ModelPort for FakeProvider {
+impl custos_contracts::inference::ModelPort for FakeProvider {
     fn provider_id(&self) -> &str {
         &self.name
     }
 
     async fn generate(
         &self,
-        req: &custos_domain::inference::ProviderRequest,
-    ) -> Result<custos_domain::inference::ModelResponse, DomainError> {
-        let json_val = serde_json::to_value(req)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let internal_req: ProviderRequest = serde_json::from_value(json_val)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        req: &custos_contracts::inference::ProviderRequest,
+    ) -> Result<custos_contracts::inference::ModelResponse, DomainError> {
+        let json_val =
+            serde_json::to_value(req).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let internal_req: ProviderRequest =
+            serde_json::from_value(json_val).map_err(|e| DomainError::Validation(e.to_string()))?;
         let resp = <Self as ModelProvider>::generate(self, &internal_req).await?;
-        let resp_json = serde_json::to_value(&resp)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        serde_json::from_value(resp_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))
+        let resp_json =
+            serde_json::to_value(&resp).map_err(|e| DomainError::Validation(e.to_string()))?;
+        serde_json::from_value(resp_json).map_err(|e| DomainError::Validation(e.to_string()))
     }
 
     async fn stream(
         &self,
-        req: &custos_domain::inference::ProviderRequest,
-    ) -> Result<mpsc::Receiver<custos_domain::inference::ProviderEvent>, DomainError> {
-        let json_val = serde_json::to_value(req)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let internal_req: ProviderRequest = serde_json::from_value(json_val)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        req: &custos_contracts::inference::ProviderRequest,
+    ) -> Result<mpsc::Receiver<custos_contracts::inference::ProviderEvent>, DomainError> {
+        let json_val =
+            serde_json::to_value(req).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let internal_req: ProviderRequest =
+            serde_json::from_value(json_val).map_err(|e| DomainError::Validation(e.to_string()))?;
         let mut internal_rx = <Self as ModelProvider>::stream(self, &internal_req).await?;
         let (tx, rx) = mpsc::channel(4);
         tokio::spawn(async move {
             while let Some(ev) = internal_rx.recv().await {
-                if let Ok(mapped) = serde_json::from_value::<custos_domain::inference::ProviderEvent>(
-                    serde_json::to_value(&ev).unwrap_or_default(),
-                ) {
+                if let Ok(mapped) = serde_json::from_value::<
+                    custos_contracts::inference::ProviderEvent,
+                >(serde_json::to_value(&ev).unwrap_or_default())
+                {
                     if tx.send(mapped).await.is_err() {
                         break;
                     }
@@ -176,12 +176,9 @@ mod tests {
 
         let mut rx = provider.stream(&req).await.unwrap();
         let chunk = rx.recv().await.unwrap();
-        assert_eq!(chunk.event_type, custos_provider::ProviderEventType::Chunk);
+        assert_eq!(chunk.event_type, crate::ProviderEventType::Chunk);
 
         let completed = rx.recv().await.unwrap();
-        assert_eq!(
-            completed.event_type,
-            custos_provider::ProviderEventType::Completed
-        );
+        assert_eq!(completed.event_type, crate::ProviderEventType::Completed);
     }
 }

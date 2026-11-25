@@ -1,13 +1,13 @@
+use crate::codecs::openai;
+use crate::conversation::message::Message;
+use crate::errors::ProviderError;
+use crate::images::ImageFormat;
+use crate::local_inference::extract_text_content;
 use crate::local_inference::native_tool_parsing::message_from_native_tool_text;
 use crate::local_inference::provider_utils::filter_extensions_from_system_prompt;
 use crate::local_inference::tool_emulation::{
     build_emulator_tool_description, load_tiny_model_prompt,
 };
-use crate::local_inference::extract_text_content;
-use custos_provider::conversation::message::Message;
-use custos_provider::errors::ProviderError;
-use custos_provider::codecs::openai;
-use custos_provider::images::ImageFormat;
 use safemlx_lm::models::LoadedModel;
 use safemlx_lm_utils::tokenizer::{Chat, Conversation, Role};
 use serde_json::json;
@@ -106,7 +106,10 @@ pub(crate) fn gemma4_messages(
     gemma4_messages_with_optional_system(system.as_deref(), messages)
 }
 
-pub(crate) fn gemma4_messages_with_system(system: &str, messages: &[Message]) -> Vec<serde_json::Value> {
+pub(crate) fn gemma4_messages_with_system(
+    system: &str,
+    messages: &[Message],
+) -> Vec<serde_json::Value> {
     gemma4_messages_with_optional_system(Some(system), messages)
 }
 
@@ -190,7 +193,10 @@ pub(crate) fn openai_messages(system: &str, messages: &[Message]) -> Vec<serde_j
     values
 }
 
-pub(crate) fn chat_conversations(system: &str, messages: &[Message]) -> Vec<Conversation<Role, String>> {
+pub(crate) fn chat_conversations(
+    system: &str,
+    messages: &[Message],
+) -> Vec<Conversation<Role, String>> {
     let mut conversations = Vec::new();
     if !system.trim().is_empty() {
         conversations.push(Conversation {

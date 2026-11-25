@@ -12,4 +12,3 @@ pub use self::types::{
     ApiClient, ApiResponse, AuthMethod, AuthProvider, RequestBuilderDecorator,
     DEFAULT_CONNECT_TIMEOUT_SECS, DEFAULT_PROVIDER_TIMEOUT_SECS,
 };
-

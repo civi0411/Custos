@@ -1,5 +1,5 @@
+use crate::errors::ProviderError;
 use anyhow::Result;
-use custos_provider::errors::ProviderError;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, Notify};
@@ -73,7 +73,8 @@ pub struct InferenceRuntime {
     mlx: Arc<dyn LocalInferenceBackend>,
     #[cfg(feature = "local-inference-native")]
     llamacpp: std::sync::OnceLock<Arc<dyn LocalInferenceBackend>>,
-    admission: StdMutex<Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>>>,
+    admission:
+        StdMutex<Option<Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>>>,
 }
 
 pub fn builtin_chat_template_names() -> Vec<String> {
@@ -97,7 +98,7 @@ pub(crate) fn current_runtime() -> Option<Arc<InferenceRuntime>> {
 }
 
 pub fn set_admission_coordinator(
-    admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+    admission: Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>,
 ) {
     if let Ok(runtime) = InferenceRuntime::get_or_init() {
         runtime.set_admission_coordinator(admission);
@@ -129,7 +130,7 @@ impl InferenceRuntime {
 
     /// Explicit dependency injection constructor wiring WorkloadAdmissionPort (SADE R8)
     pub fn with_admission(
-        admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+        admission: Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>,
     ) -> Result<Arc<Self>> {
         let runtime = Self::get_or_init()?;
         runtime.set_admission_coordinator(admission);
@@ -138,7 +139,7 @@ impl InferenceRuntime {
 
     pub fn set_admission_coordinator(
         &self,
-        admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+        admission: Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>,
     ) {
         let mut guard = match self.admission.lock() {
             Ok(g) => g,
@@ -149,7 +150,7 @@ impl InferenceRuntime {
 
     pub fn get_admission_coordinator(
         &self,
-    ) -> Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>> {
+    ) -> Option<Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>> {
         let guard = match self.admission.lock() {
             Ok(g) => g,
             Err(p) => p.into_inner(),
@@ -164,8 +165,7 @@ impl InferenceRuntime {
                 return Ok(backend.clone());
             }
             let backend: Arc<dyn LocalInferenceBackend> = Arc::new(
-                LlamaCppBackend::new()
-                    .map_err(|e| ProviderError::ExecutionError(e.to_string()))?,
+                LlamaCppBackend::new().map_err(|e| ProviderError::ExecutionError(e.to_string()))?,
             );
             let _ = self.llamacpp.set(backend.clone());
             Ok(self.llamacpp.get().cloned().unwrap_or(backend))
@@ -314,7 +314,7 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
 }
 
 pub async fn list_loaded_instances(
-) -> Result<Vec<custos_domain::LoadedModelInstance>, ProviderError> {
+) -> Result<Vec<custos_contracts::LoadedModelInstance>, ProviderError> {
     let mut instances = Vec::new();
     if let Some(sidecar_inst) = sidecar::get_loaded_sidecar_instance().await {
         instances.push(sidecar_inst);
@@ -340,9 +340,11 @@ pub async fn list_loaded_instances(
                 ..
             } = &*state
             {
-                let instance_id =
-                    format!("inst_{}", &custos_domain::digest(model_id.as_bytes())[..12]);
-                instances.push(custos_domain::LoadedModelInstance {
+                let instance_id = format!(
+                    "inst_{}",
+                    &custos_contracts::digest(model_id.as_bytes())[..12]
+                );
+                instances.push(custos_contracts::LoadedModelInstance {
                     instance_id,
                     model_name: resolved
                         .model_path

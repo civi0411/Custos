@@ -1,3 +1,4 @@
+use super::options::{merge_reasoning_text, sanitize_function_name, OpenAiFormatOptions};
 use crate::base::ThinkingPreservationFormat;
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::documents::{
@@ -8,7 +9,6 @@ use crate::images::{convert_image, detect_image_path, load_image_file, ImageForm
 use crate::mcp_utils::extract_text_from_resource;
 use rmcp::model::{ContentBlock, Role};
 use serde_json::{json, Value};
-use super::options::{merge_reasoning_text, sanitize_function_name, OpenAiFormatOptions};
 
 pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<Value> {
     format_messages_with_options(
@@ -474,4 +474,3 @@ fn is_image_only_user_message(msg: &Value) -> bool {
                         .all(|item| item.get("type") == Some(&json!("image_url")))
             })
 }
-

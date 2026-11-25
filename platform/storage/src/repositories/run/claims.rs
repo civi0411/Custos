@@ -1,4 +1,4 @@
-use custos_domain::{ClaimStatus, DispatchClaim, DomainError};
+use custos_contracts::{ClaimStatus, DispatchClaim, DomainError};
 use rusqlite::{params, OptionalExtension};
 
 use super::RunRepository;

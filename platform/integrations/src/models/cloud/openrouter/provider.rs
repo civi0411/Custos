@@ -1,14 +1,14 @@
 use super::gemini_compat::apply_gemini_compatibility;
-use crate::cloud::transport::api_client::ApiClient;
 use crate::base::{ConfigKey, MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
 use crate::cache_semantics::{apply_chat_payload_breakpoints, CacheSemantics};
+use crate::cloud::codecs::openai::create_request;
+use crate::cloud::codecs::openrouter as openrouter_format;
+use crate::cloud::transport::api_client::ApiClient;
+use crate::cloud::transport::openai_compatible::{handle_status, stream_openai_compat};
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
-use crate::cloud::codecs::openai::create_request;
 use crate::images::ImageFormat;
 use crate::model::ModelConfig;
-use crate::cloud::transport::openai_compatible::{handle_status, stream_openai_compat};
-use crate::cloud::codecs::openrouter as openrouter_format;
 use crate::request_log::{start_log, LoggerHandleExt};
 use crate::retry::ProviderRetry;
 use anyhow::Result;

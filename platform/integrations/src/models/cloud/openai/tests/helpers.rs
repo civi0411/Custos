@@ -1,8 +1,8 @@
 use super::super::builder::from_declarative_config;
 use super::super::provider::OpenAiProvider;
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::base::ModelInfo;
 use crate::cloud::declarative::{DeclarativeProviderConfig, KeyResolver};
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

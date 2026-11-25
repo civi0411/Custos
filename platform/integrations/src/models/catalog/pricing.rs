@@ -3,7 +3,7 @@
 //! Synthesized from 9Router (pricing.js) and Custos Domain economics.
 //! Rates are stored in USD per 1 Million tokens.
 
-use custos_domain::ModelPricing;
+use custos_contracts::ModelPricing;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,7 +1,9 @@
 use crate::harness::spec::StreamProtocol;
 
-use custos_core::contracts::harness::{HarnessExecutionResult, RunObserver, ToolMediationLevel};
-use custos_domain::DomainError;
+use custos_contracts::contracts::harness::{
+    HarnessExecutionResult, RunObserver, ToolMediationLevel,
+};
+use custos_contracts::DomainError;
 use serde_json::Value;
 use std::{collections::HashMap, process::Stdio, sync::Arc, time::Duration};
 use tokio::{

@@ -5,7 +5,7 @@ pub use pool::{PooledReader, ReaderPool, DEFAULT_POOL_MAX_SIZE};
 pub use pragmas::{apply_reader_pragmas, apply_writer_pragmas};
 
 use crate::migrations::run_migrations;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::{Connection, OpenFlags};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -127,7 +127,11 @@ impl DbConnection {
     /// Attaches an auxiliary SQLite database file under a schema alias (e.g. "quant", "research").
     pub fn attach_partition(&self, schema_alias: &str, file_path: &str) -> Result<(), DomainError> {
         let conn = self.lock()?;
-        if !schema_alias.chars().all(|c| c.is_alphanumeric() || c == '_') || schema_alias.is_empty() {
+        if !schema_alias
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_')
+            || schema_alias.is_empty()
+        {
             return Err(DomainError::Validation(format!(
                 "Invalid SQLite schema alias: '{schema_alias}'. Must be non-empty alphanumeric.",
             )));
@@ -144,7 +148,11 @@ impl DbConnection {
     /// Detaches an auxiliary SQLite database schema alias.
     pub fn detach_partition(&self, schema_alias: &str) -> Result<(), DomainError> {
         let conn = self.lock()?;
-        if !schema_alias.chars().all(|c| c.is_alphanumeric() || c == '_') || schema_alias.is_empty() {
+        if !schema_alias
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_')
+            || schema_alias.is_empty()
+        {
             return Err(DomainError::Validation(format!(
                 "Invalid SQLite schema alias: '{schema_alias}'.",
             )));
@@ -276,7 +284,9 @@ mod tests {
             let mut stmt = conn
                 .prepare("SELECT id FROM aux.aux_records WHERE id = 'rec_1'")
                 .expect("prepare attached query");
-            let id: String = stmt.query_row([], |row| row.get(0)).expect("query attached row");
+            let id: String = stmt
+                .query_row([], |row| row.get(0))
+                .expect("query attached row");
             assert_eq!(id, "rec_1");
         }
 
@@ -284,4 +294,3 @@ mod tests {
         db.detach_partition("aux").expect("detach aux");
     }
 }
-

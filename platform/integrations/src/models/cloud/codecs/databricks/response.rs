@@ -1,5 +1,5 @@
-use crate::conversation::message::{Message, MessageContentBlock};
 use crate::cloud::codecs::openai::is_valid_function_name;
+use crate::conversation::message::{Message, MessageContentBlock};
 use rmcp::model::{object, CallToolRequestParams, ErrorCode, ErrorData, Role};
 use serde_json::Value;
 use std::borrow::Cow;

@@ -1,10 +1,10 @@
 use rmcp::model::Tool;
 use std::any::Any;
 
+use crate::conversation::message::Message;
+use crate::errors::ProviderError;
 use crate::local_inference::model::ModelSettings;
-use custos_provider::conversation::message::Message;
-use custos_provider::errors::ProviderError;
-use custos_provider::request_log::RequestLogHandle;
+use crate::request_log::RequestLogHandle;
 
 use super::resolution::ResolvedModelPaths;
 use crate::local_inference::StreamSender;

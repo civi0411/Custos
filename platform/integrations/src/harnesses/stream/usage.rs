@@ -1,6 +1,6 @@
 //! Structured token usage emission to observers.
 
-use custos_core::contracts::harness::RunObserver;
+use custos_contracts::contracts::harness::RunObserver;
 use serde_json::Value;
 use std::sync::Arc;
 

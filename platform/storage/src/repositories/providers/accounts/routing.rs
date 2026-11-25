@@ -1,5 +1,5 @@
 use super::super::ProviderRepository;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::params;
 
 impl ProviderRepository {
@@ -146,4 +146,3 @@ impl ProviderRepository {
         Ok(Some(selected))
     }
 }
-

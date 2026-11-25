@@ -7,13 +7,15 @@
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::Arc;
+#[cfg(any(test, feature = "test-support"))]
 use tokio::sync::Mutex;
 
-use custos_core::contracts::compute::{
+use custos_contracts::contracts::compute::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
-use custos_domain::{
+use custos_contracts::{
     DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef, ProgressTriplet,
     ResourceState,
 };
@@ -22,8 +24,11 @@ use custos_domain::{
 pub struct ColabTargetAdapter {
     colab_bin: PathBuf,
     work_dir: PathBuf,
+    #[cfg(any(test, feature = "test-support"))]
     mock_mode: bool,
+    #[cfg(any(test, feature = "test-support"))]
     mock_status: Arc<Mutex<String>>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_resource_released: Arc<Mutex<bool>>,
 }
 
@@ -32,8 +37,11 @@ impl ColabTargetAdapter {
         Self {
             colab_bin: PathBuf::from("colab"),
             work_dir: work_dir.into(),
+            #[cfg(any(test, feature = "test-support"))]
             mock_mode: false,
+            #[cfg(any(test, feature = "test-support"))]
             mock_status: Arc::new(Mutex::new("running".to_string())),
+            #[cfg(any(test, feature = "test-support"))]
             mock_resource_released: Arc::new(Mutex::new(false)),
         }
     }
@@ -47,18 +55,33 @@ impl ColabTargetAdapter {
         which::which(&self.colab_bin).is_ok()
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn with_mock_mode(mut self) -> Self {
         self.mock_mode = true;
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn set_mock_status(&self, status: impl Into<String>) {
         let mut guard = self.mock_status.lock().await;
         *guard = status.into();
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn is_resource_released(&self) -> bool {
         *self.mock_resource_released.lock().await
+    }
+
+    #[inline(always)]
+    fn is_mock(&self) -> bool {
+        #[cfg(any(test, feature = "test-support"))]
+        {
+            self.mock_mode
+        }
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            false
+        }
     }
 }
 
@@ -78,7 +101,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         let mut blockers = Vec::new();
         let mut warnings = Vec::new();
 
-        if !self.mock_mode {
+        if !self.is_mock() {
             let has_colab = which::which(&self.colab_bin).is_ok();
             let config_dir = dirs::config_dir().map(|c| c.join("colab-cli"));
             let home_config = dirs::home_dir().map(|h| h.join(".config").join("colab-cli"));
@@ -146,6 +169,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
 
         let entrypoint = attempt_dir.join("run.py");
         if !entrypoint.exists() {
+            #[cfg(any(test, feature = "test-support"))]
             if self.mock_mode {
                 tokio::fs::write(
                     &entrypoint,
@@ -159,9 +183,14 @@ impl ExecutionTargetPort for ColabTargetAdapter {
                     entrypoint.display()
                 )));
             }
+            #[cfg(not(any(test, feature = "test-support")))]
+            return Err(DomainError::Validation(format!(
+                "Colab execution entrypoint '{}' does not exist; stage your script before submitting",
+                entrypoint.display()
+            )));
         }
 
-        if self.mock_mode {
+        if self.is_mock() {
             return ExternalJobRef::new(account, session_id, "v1");
         }
 
@@ -208,6 +237,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         &self,
         external_ref: &ExternalJobRef,
     ) -> Result<AttemptObservation, DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         let (raw_status, exit_code) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
             (guard.clone(), None)
@@ -222,12 +252,28 @@ impl ExecutionTargetPort for ColabTargetAdapter {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
             (stdout, output.status.code())
         };
+        #[cfg(not(any(test, feature = "test-support")))]
+        let (raw_status, exit_code) = {
+            let mut cmd = tokio::process::Command::new(&self.colab_bin);
+            cmd.arg("status").arg("-s").arg(&external_ref.job_id);
 
+            let output = cmd.output().await.map_err(|e| {
+                DomainError::Validation(format!("Failed to query Colab status: {e}"))
+            })?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            (stdout, output.status.code())
+        };
+
+        #[cfg(any(test, feature = "test-support"))]
         let released = if self.mock_mode {
             *self.mock_resource_released.lock().await
         } else {
             raw_status.contains("not found") || raw_status.contains("no active sessions")
         };
+        #[cfg(not(any(test, feature = "test-support")))]
+        let released =
+            raw_status.contains("not found") || raw_status.contains("no active sessions");
 
         let resource_state = if released {
             ResourceState::ReleaseConfirmed
@@ -264,6 +310,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
     }
 
     async fn stop_job(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let mut guard = self.mock_status.lock().await;
             *guard = "stopped".to_string();
@@ -278,6 +325,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
 
     async fn release_compute(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
         // colab stop terminates kernel and unassigns the server-side VM session
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let mut guard = self.mock_resource_released.lock().await;
             *guard = true;
@@ -315,7 +363,8 @@ impl ExecutionTargetPort for ColabTargetAdapter {
             DomainError::Validation(format!("Failed to create Colab output dir: {e}"))
         })?;
 
-        if !self.mock_mode {
+        #[cfg(any(test, feature = "test-support"))]
+        if !self.is_mock() {
             let mut cmd = tokio::process::Command::new(&self.colab_bin);
             cmd.arg("download")
                 .arg("-s")
@@ -326,6 +375,16 @@ impl ExecutionTargetPort for ColabTargetAdapter {
         } else {
             let dummy = dest.join("model_checkpoint.pt");
             let _ = tokio::fs::write(&dummy, b"colab weights checkpoint").await;
+        }
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            let mut cmd = tokio::process::Command::new(&self.colab_bin);
+            cmd.arg("download")
+                .arg("-s")
+                .arg(&external_ref.job_id)
+                .arg("content")
+                .arg(&dest);
+            let _ = cmd.output().await;
         }
 
         let mut artifacts = Vec::new();
@@ -354,7 +413,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::ComputeBackendKind;
+    use custos_contracts::ComputeBackendKind;
 
     #[tokio::test]
     async fn colab_capabilities_and_preflight() {

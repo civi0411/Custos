@@ -1,5 +1,5 @@
-use custos_domain::DomainError;
-use custos_provider::ProviderRequest;
+use crate::ProviderRequest;
+use custos_contracts::DomainError;
 
 use super::catalog::find_by_model;
 

@@ -1,4 +1,4 @@
-use custos_provider::errors::ProviderError;
+use crate::errors::ProviderError;
 
 use super::resolution::resolve_model_path;
 use super::runtime::{InferenceRuntime, ModelCacheKey, ModelSlotState};
@@ -8,8 +8,8 @@ pub async fn preload_model(
     model_name: &str,
     context_size: Option<usize>,
     gpu_layers: Option<u32>,
-) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
-    let profile = custos_domain::LocalModelLoadProfile {
+) -> Result<custos_contracts::LoadedModelInstance, ProviderError> {
+    let profile = custos_contracts::LocalModelLoadProfile {
         model_path: model_name
             .strip_prefix("native:")
             .unwrap_or(model_name)
@@ -36,8 +36,8 @@ pub async fn preload_model(
 
 pub async fn preload_model_with_profile(
     model_name: &str,
-    profile: &custos_domain::LocalModelLoadProfile,
-) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
+    profile: &custos_contracts::LocalModelLoadProfile,
+) -> Result<custos_contracts::LoadedModelInstance, ProviderError> {
     let runtime = InferenceRuntime::get_or_init()
         .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
 
@@ -94,9 +94,9 @@ pub async fn preload_model_with_profile(
         if *profile_revision == profile.revision {
             let instance_id = format!(
                 "inst_{}",
-                &custos_domain::digest(clean_model.as_bytes())[..12]
+                &custos_contracts::digest(clean_model.as_bytes())[..12]
             );
-            return Ok(custos_domain::LoadedModelInstance {
+            return Ok(custos_contracts::LoadedModelInstance {
                 instance_id,
                 model_name: resolved
                     .model_path
@@ -118,30 +118,30 @@ pub async fn preload_model_with_profile(
     }
 
     if let Some(ref admission) = runtime.get_admission_coordinator() {
-        let admission_req = custos_domain::WorkloadAdmissionRequest {
-            workload_kind: custos_domain::ComputeWorkloadKind::LocalInference,
+        let admission_req = custos_contracts::WorkloadAdmissionRequest {
+            workload_kind: custos_contracts::ComputeWorkloadKind::LocalInference,
             owner_id: format!("infer_{}", clean_model),
             preferred_device_id: None,
             require_exclusive: false,
             required_memory_mb: Some(4096),
-            lane: Some(custos_domain::ExecutionLane::Interactive),
+            lane: Some(custos_contracts::ExecutionLane::Interactive),
         };
         let verdict = admission
             .admit_workload(&admission_req)
             .await
             .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
         match verdict {
-            custos_domain::WorkloadAdmissionVerdict::Admitted { lease } => {
+            custos_contracts::WorkloadAdmissionVerdict::Admitted { lease } => {
                 let mut l_guard = model_slot.lease_id.lock().unwrap();
                 *l_guard = Some(lease.lease_id);
             }
-            custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. } => {
+            custos_contracts::WorkloadAdmissionVerdict::Queued { reason, .. } => {
                 drop(cold_load_guard);
                 return Err(ProviderError::ExecutionError(format!(
                     "Local inference queued: accelerator busy - {reason}"
                 )));
             }
-            custos_domain::WorkloadAdmissionVerdict::Rejected { reason } => {
+            custos_contracts::WorkloadAdmissionVerdict::Rejected { reason } => {
                 drop(cold_load_guard);
                 return Err(ProviderError::ExecutionError(format!(
                     "Local inference rejected: {reason}"
@@ -247,9 +247,9 @@ pub async fn preload_model_with_profile(
 
     let instance_id = format!(
         "inst_{}",
-        &custos_domain::digest(clean_model.as_bytes())[..12]
+        &custos_contracts::digest(clean_model.as_bytes())[..12]
     );
-    Ok(custos_domain::LoadedModelInstance {
+    Ok(custos_contracts::LoadedModelInstance {
         instance_id,
         model_name: resolved
             .model_path

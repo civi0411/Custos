@@ -1,5 +1,5 @@
 use super::ProviderRepository;
-use custos_domain::{DomainError, ModelCatalogOption, ModelPricing};
+use custos_contracts::{DomainError, ModelCatalogOption, ModelPricing};
 use rusqlite::params;
 
 impl ProviderRepository {
@@ -20,7 +20,7 @@ impl ProviderRepository {
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("catalog"),
+                custos_contracts::new_id("catalog"),
                 "provider.models.probed",
                 payload,
                 now

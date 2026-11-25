@@ -219,4 +219,3 @@ pub async fn list_git_worktrees(git_bin: &Path, repo_path: &str) -> Vec<serde_js
 
     worktrees
 }
-

@@ -1,9 +1,9 @@
 use super::helpers::{
     anthropic_stream, chat_stream, project_provider, raw_model_config, responses_stream,
 };
-use crate::cloud::transport::api_client::AuthMethod;
 use crate::base::Provider;
 use crate::cloud::azure_foundry::provider::AzureFoundryProvider;
+use crate::cloud::transport::api_client::AuthMethod;
 use crate::model::ModelConfig;
 use serde_json::json;
 use wiremock::matchers::{body_partial_json, method, path};
@@ -119,8 +119,8 @@ async fn suffixed_deployment_alias_is_preserved_on_the_wire() {
         .await;
 
     let provider = project_provider(&server);
-    let config = raw_model_config("gpt-5-high")
-        .with_thinking_effort(crate::thinking::ThinkingEffort::Off);
+    let config =
+        raw_model_config("gpt-5-high").with_thinking_effort(crate::thinking::ThinkingEffort::Off);
     assert_eq!(config.model_name, "gpt-5-high");
     provider
         .complete(&config, "system", &[], &[])

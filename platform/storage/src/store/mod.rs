@@ -6,13 +6,13 @@ use crate::repositories::{
     SharedCapabilitiesRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
     WorkspaceRepository,
 };
-pub use custos_core::contracts::storage::{
+pub use custos_contracts::contracts::storage::{
     CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort,
     OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort, WorkflowRevisionPort,
 };
-pub use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
-pub use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
-pub use custos_domain::{
+pub use custos_contracts::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
+pub use custos_contracts::kernel::{SessionStore, TaskEvent, TaskStore};
+pub use custos_contracts::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
     ExecutionWorkspace, LaunchAttempt, NodePlacement, ReplanRecord, Run, Session, SessionId,
     SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
@@ -159,13 +159,16 @@ impl SqliteTaskStore {
     /// Reconciles all in-flight entities across outbox, runs, and attempts on daemon startup/recovery.
     pub fn reconcile_all_on_startup(
         &self,
-    ) -> Result<custos_domain::ReconciliationSummary, DomainError> {
+    ) -> Result<custos_contracts::ReconciliationSummary, DomainError> {
+        let _ = self
+            .command_ledger_repo
+            .reconcile_orphaned_inflight_commands(0)?;
         let outbox_reconciled = self.outbox_repo.reconcile_on_startup()?;
         let runs_reconciled = self.run_repo.reconcile_runs_on_startup()?;
         let attempts_reconciled = self
             .experiment_attempt_repo
             .reconcile_attempts_on_startup()?;
-        Ok(custos_domain::ReconciliationSummary {
+        Ok(custos_contracts::ReconciliationSummary {
             outbox_reconciled,
             runs_reconciled,
             attempts_reconciled,

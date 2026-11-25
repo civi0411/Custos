@@ -1,8 +1,6 @@
 use llama_cpp_2::model::ChatTemplateResult;
 
-use super::hardware::{
-    check_cpu_supports_local_inference, unsupported_cpu_features_error_message,
-};
+use super::hardware::{check_cpu_supports_local_inference, unsupported_cpu_features_error_message};
 use super::templates::{
     is_legacy_builtin_template_name, should_use_native_tool_calling,
     template_result_supports_native_tool_calling,

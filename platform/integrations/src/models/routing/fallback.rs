@@ -3,11 +3,11 @@
 //! Implements multi-tier provider failover and rate-limit backoff.
 //! Absorbs 9Router's `accountFallback.js` routing logic into native Custos Rust.
 
+use crate::port::ModelProvider;
+use crate::request::{ModelResponse, ProviderRequest};
+use crate::turn::{ModelTurnEvent, ModelTurnRequest};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::port::ModelProvider;
-use custos_provider::request::{ModelResponse, ProviderRequest};
-use custos_provider::turn::{ModelTurnEvent, ModelTurnRequest};
+use custos_contracts::DomainError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -1,6 +1,6 @@
+use crate::{ModelProvider, ModelResponse, ProviderRequest};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::{ModelProvider, ModelResponse, ProviderRequest};
+use custos_contracts::DomainError;
 use std::sync::Arc;
 
 use super::classification::classify_provider;
@@ -11,7 +11,7 @@ pub struct RouterModelProvider {
     pub(crate) resolver: Arc<dyn CredentialResolver>,
     pub(crate) http_client: reqwest::Client,
     pub(crate) codex_endpoint: String,
-    pub(crate) native_local: Option<Arc<dyn custos_provider::ModelPort>>,
+    pub(crate) native_local: Option<Arc<dyn crate::ModelPort>>,
 }
 
 impl RouterModelProvider {
@@ -27,7 +27,7 @@ impl RouterModelProvider {
         }
     }
 
-    pub fn with_native_local(mut self, native_local: Arc<dyn custos_provider::ModelPort>) -> Self {
+    pub fn with_native_local(mut self, native_local: Arc<dyn crate::ModelPort>) -> Self {
         self.native_local = Some(native_local);
         self
     }
@@ -56,7 +56,7 @@ impl ModelProvider for RouterModelProvider {
     async fn stream(
         &self,
         req: &ProviderRequest,
-    ) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<crate::ProviderEvent>, DomainError> {
         let mut routed = req.clone();
         let service = Self::classify_provider(&routed.model);
         let candidate_service = if service == "gemini-oauth" {
@@ -172,9 +172,8 @@ impl ModelProvider for RouterModelProvider {
 
     async fn execute_turn(
         &self,
-        req: custos_provider::turn::ModelTurnRequest,
-    ) -> Result<tokio::sync::mpsc::Receiver<custos_provider::turn::ModelTurnEvent>, DomainError>
-    {
+        req: crate::turn::ModelTurnRequest,
+    ) -> Result<tokio::sync::mpsc::Receiver<crate::turn::ModelTurnEvent>, DomainError> {
         let service = Self::classify_provider(&req.requested_model);
         if service == "native-local" {
             let local = self.native_local.as_ref().ok_or_else(|| {
@@ -192,7 +191,7 @@ impl ModelProvider for RouterModelProvider {
                 m.content
                     .iter()
                     .filter_map(|c| match c {
-                        custos_provider::conversation::message::MessageContentBlock::Text(t) => {
+                        crate::conversation::message::MessageContentBlock::Text(t) => {
                             Some(t.text.clone())
                         }
                         _ => None,
@@ -203,7 +202,7 @@ impl ModelProvider for RouterModelProvider {
             .collect::<Vec<_>>()
             .join("\n\n");
 
-        let mut provider_req = custos_provider::request::ProviderRequest::new(
+        let mut provider_req = crate::request::ProviderRequest::new(
             req.attempt_id.to_string(),
             req.task_id.to_string(),
             1,
@@ -238,13 +237,13 @@ impl ModelProvider for RouterModelProvider {
                 let requested_model = req.requested_model.clone();
                 tokio::spawn(async move {
                     let _ = tx
-                        .send(custos_provider::turn::ModelTurnEvent {
+                        .send(crate::turn::ModelTurnEvent {
                             attempt_id,
                             sequence: 1,
                             actual_provider: Some(provider_id),
                             actual_model: Some(requested_model),
                             actual_transport: None,
-                            delta: custos_provider::turn::TurnDelta::Failed {
+                            delta: crate::turn::TurnDelta::Failed {
                                 error_class: "router_error".to_string(),
                                 message: err.to_string(),
                             },
@@ -260,41 +259,42 @@ impl ModelProvider for RouterModelProvider {
 }
 
 #[async_trait]
-impl custos_domain::inference::ModelPort for RouterModelProvider {
+impl custos_contracts::inference::ModelPort for RouterModelProvider {
     fn provider_id(&self) -> &str {
         "unified-router"
     }
 
     async fn generate(
         &self,
-        req: &custos_domain::inference::ProviderRequest,
-    ) -> Result<custos_domain::inference::ModelResponse, DomainError> {
-        let json_val = serde_json::to_value(req)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let internal_req: crate::request::ProviderRequest = serde_json::from_value(json_val)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        req: &custos_contracts::inference::ProviderRequest,
+    ) -> Result<custos_contracts::inference::ModelResponse, DomainError> {
+        let json_val =
+            serde_json::to_value(req).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let internal_req: crate::request::ProviderRequest =
+            serde_json::from_value(json_val).map_err(|e| DomainError::Validation(e.to_string()))?;
         let resp = <Self as ModelProvider>::generate(self, &internal_req).await?;
-        let resp_json = serde_json::to_value(&resp)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        serde_json::from_value(resp_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))
+        let resp_json =
+            serde_json::to_value(&resp).map_err(|e| DomainError::Validation(e.to_string()))?;
+        serde_json::from_value(resp_json).map_err(|e| DomainError::Validation(e.to_string()))
     }
 
     async fn stream(
         &self,
-        req: &custos_domain::inference::ProviderRequest,
-    ) -> Result<tokio::sync::mpsc::Receiver<custos_domain::inference::ProviderEvent>, DomainError> {
-        let json_val = serde_json::to_value(req)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let internal_req: crate::request::ProviderRequest = serde_json::from_value(json_val)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        req: &custos_contracts::inference::ProviderRequest,
+    ) -> Result<tokio::sync::mpsc::Receiver<custos_contracts::inference::ProviderEvent>, DomainError>
+    {
+        let json_val =
+            serde_json::to_value(req).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let internal_req: crate::request::ProviderRequest =
+            serde_json::from_value(json_val).map_err(|e| DomainError::Validation(e.to_string()))?;
         let mut internal_rx = <Self as ModelProvider>::stream(self, &internal_req).await?;
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         tokio::spawn(async move {
             while let Some(ev) = internal_rx.recv().await {
-                if let Ok(mapped) = serde_json::from_value::<custos_domain::inference::ProviderEvent>(
-                    serde_json::to_value(&ev).unwrap_or_default(),
-                ) {
+                if let Ok(mapped) = serde_json::from_value::<
+                    custos_contracts::inference::ProviderEvent,
+                >(serde_json::to_value(&ev).unwrap_or_default())
+                {
                     if tx.send(mapped).await.is_err() {
                         break;
                     }
@@ -304,4 +304,3 @@ impl custos_domain::inference::ModelPort for RouterModelProvider {
         Ok(rx)
     }
 }
-

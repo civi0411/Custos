@@ -13,16 +13,20 @@ use super::types::{
     AZURE_FOUNDRY_DEFAULT_MODEL, AZURE_FOUNDRY_DOC_URL, AZURE_FOUNDRY_KNOWN_MODELS,
     AZURE_FOUNDRY_PROVIDER_NAME, DEPLOYMENT_METADATA_TIMEOUT_SECS,
 };
-use crate::cloud::anthropic::{AnthropicProvider, AnthropicProviderBuilder, ANTHROPIC_API_VERSION};
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig};
 use crate::base::{
     ConfigKey, MessageStream, ModelInfo, Provider, ProviderDescriptor, ProviderMetadata,
+};
+use crate::cloud::anthropic::{AnthropicProvider, AnthropicProviderBuilder, ANTHROPIC_API_VERSION};
+use crate::cloud::openai::{OpenAiProvider, OpenAiProviderBuilder};
+use crate::cloud::transport::api_client::{
+    ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig,
+};
+use crate::cloud::transport::openai_compatible::{
+    handle_response_openai_compat, OpenAiCompatibleProvider,
 };
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
 use crate::model::ModelConfig;
-use crate::cloud::openai::{OpenAiProvider, OpenAiProviderBuilder};
-use crate::cloud::transport::openai_compatible::{handle_response_openai_compat, OpenAiCompatibleProvider};
 
 pub struct AzureFoundryProvider {
     pub(crate) chat: OpenAiCompatibleProvider,
@@ -213,10 +217,7 @@ impl AzureFoundryProvider {
         lookup: DeploymentMetadataLookup,
     ) -> Option<DeploymentMetadata> {
         {
-            let cache = self
-                .deployments
-                .lock()
-                .expect("Azure Foundry deployment cache poisoned");
+            let cache = self.deployments.lock().unwrap_or_else(|e| e.into_inner());
             if cache.applies_to(lookup) {
                 return cache.deployments.get(deployment_name).cloned();
             }
@@ -234,10 +235,7 @@ impl AzureFoundryProvider {
             .map(|(_, deployments)| deployments)
             .unwrap_or_default();
         let deployment = deployments.get(deployment_name).cloned();
-        *self
-            .deployments
-            .lock()
-            .expect("Azure Foundry deployment cache poisoned") = DeploymentCache {
+        *self.deployments.lock().unwrap_or_else(|e| e.into_inner()) = DeploymentCache {
             deployments,
             fetched_at: Some(Instant::now()),
             fetch_failed,
@@ -274,10 +272,7 @@ impl Provider for AzureFoundryProvider {
                 .collect());
         }
         let (models, deployments) = self.fetch_deployments().await?;
-        *self
-            .deployments
-            .lock()
-            .expect("Azure Foundry deployment cache poisoned") = DeploymentCache {
+        *self.deployments.lock().unwrap_or_else(|e| e.into_inner()) = DeploymentCache {
             deployments,
             fetched_at: Some(Instant::now()),
             fetch_failed: false,
@@ -304,10 +299,7 @@ impl Provider for AzureFoundryProvider {
                     .map(|deployment| model_info_for_deployment(name, &deployment.model_name))
             })
             .collect();
-        *self
-            .deployments
-            .lock()
-            .expect("Azure Foundry deployment cache poisoned") = DeploymentCache {
+        *self.deployments.lock().unwrap_or_else(|e| e.into_inner()) = DeploymentCache {
             deployments,
             fetched_at: Some(Instant::now()),
             fetch_failed: false,
@@ -330,7 +322,7 @@ impl Provider for AzureFoundryProvider {
     }
 
     async fn get_context_limit(&self, model: &str, override_limit: Option<usize>) -> usize {
-        custos_provider::context_limit::ContextLimitResolver::new(self.get_name())
+        crate::context_limit::ContextLimitResolver::new(self.get_name())
             .resolve(model, override_limit, || async {
                 self.fetch_model_info(model)
                     .await

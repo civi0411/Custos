@@ -1,8 +1,10 @@
 use super::*;
 use crate::connection::DbConnection;
 use chrono::Utc;
+use custos_contracts::{
+    Assurance, DomainError, EffectAttempt, EffectStatus, ExecutionReceipt, ReceiptStatus,
+};
 use custos_contracts::{OutboxEntry, OutboxPort, OutboxStatus};
-use custos_domain::{Assurance, DomainError, EffectAttempt, EffectStatus, ExecutionReceipt, ReceiptStatus};
 
 #[tokio::test]
 async fn test_effect_idempotency_unique_constraint_enforcement() {
@@ -204,4 +206,3 @@ async fn test_no_dispatch_before_approval_and_reconcile() {
         "No entries may remain dispatching without approval"
     );
 }
-

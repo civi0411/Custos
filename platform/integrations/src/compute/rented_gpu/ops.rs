@@ -1,8 +1,8 @@
 use serde_json::json;
 use std::path::Path;
 
-use custos_core::contracts::compute::PreflightReport;
-use custos_domain::{ComputeBackendKind, DomainError};
+use custos_contracts::contracts::compute::PreflightReport;
+use custos_contracts::{ComputeBackendKind, DomainError};
 
 use super::RentedGpuTargetAdapter;
 
@@ -63,11 +63,21 @@ pub(super) async fn deallocate_cloud_pod(
     pod: &str,
     api_key: &str,
 ) -> Result<(), DomainError> {
+    if pod.is_empty()
+        || !pod
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(DomainError::Validation(format!(
+            "Invalid cloud pod identifier '{pod}'"
+        )));
+    }
     match backend_kind {
         ComputeBackendKind::RunPod => {
             let client = reqwest::Client::new();
             let query = json!({
-                "query": format!("mutation {{ podStop(input: {{ podId: \"{pod}\" }}) {{ id }} }}")
+                "query": "mutation PodStop($podId: String!) { podStop(input: { podId: $podId }) { id } }",
+                "variables": { "podId": pod }
             });
             let resp = client
                 .post("https://api.runpod.io/graphql")
@@ -115,11 +125,10 @@ pub(super) async fn fetch_remote_train_log(
     );
     let mut scp_cmd = tokio::process::Command::new("scp");
     scp_cmd.arg("-P").arg(adapter.port.to_string());
-    scp_cmd.arg("-o").arg("StrictHostKeyChecking=no");
+    scp_cmd.arg("-o").arg("StrictHostKeyChecking=accept-new");
     if let Some(ref key) = adapter.ssh_key_path {
         scp_cmd.arg("-i").arg(key);
     }
-    scp_cmd.arg(&remote_src).arg(dest);
+    scp_cmd.arg("--").arg(&remote_src).arg(dest);
     let _ = scp_cmd.output().await;
 }
-

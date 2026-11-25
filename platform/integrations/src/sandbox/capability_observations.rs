@@ -4,8 +4,8 @@
 //! patch_preview, write_file) strictly constrained to a workspace directory under SandboxPort.
 
 use async_trait::async_trait;
-use custos_core::contracts::sandbox::{verify_permit_binding, SandboxPort};
-use custos_domain::{
+use custos_contracts::contracts::sandbox::{verify_permit_binding, SandboxPort};
+use custos_contracts::{
     digest, new_id, ActionIntent, Assurance, DomainError, ExecutionReceipt, Permit, ReceiptStatus,
 };
 use std::path::{Path, PathBuf};
@@ -310,7 +310,7 @@ impl SandboxPort for CapabilityObservationsAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{ActionIntent, RiskLevel};
+    use custos_contracts::{ActionIntent, RiskLevel};
 
     #[tokio::test]
     async fn test_capability_observations_read_and_list() {
@@ -332,12 +332,12 @@ mod tests {
         );
         intent.task_id = Some("task_1".into());
 
-        let mut permit = custos_domain::Permit::new(
+        let mut permit = custos_contracts::Permit::new(
             "task_1".into(),
             "act_1".into(),
             "read_file".into(),
             None,
-            custos_domain::RiskClass::Low,
+            custos_contracts::RiskClass::Low,
             300,
         );
         permit.argument_digest = intent.argument_digest();

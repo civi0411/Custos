@@ -1,8 +1,8 @@
 //! Linux bwrap unprivileged namespace containment
 
 use async_trait::async_trait;
-use custos_core::contracts::sandbox::{verify_permit_binding, SandboxCommand, SandboxPort};
-use custos_domain::{
+use custos_contracts::contracts::sandbox::{verify_permit_binding, SandboxCommand, SandboxPort};
+use custos_contracts::{
     digest, new_id, ActionIntent, DomainError, ExecutionReceipt, Permit, ReceiptStatus,
 };
 use std::path::PathBuf;
@@ -76,12 +76,33 @@ impl SandboxPort for BubblewrapSandbox {
         let sandbox_cmd = SandboxCommand::from_intent(intent)?;
 
         let start = Instant::now();
-        let mut cmd = self.wrap_command(&sandbox_cmd.program, &sandbox_cmd.args);
-        cmd.current_dir(if sandbox_cmd.cwd == "." {
-            self.workspace_root.clone()
+        let ws_canon = self
+            .workspace_root
+            .canonicalize()
+            .unwrap_or_else(|_| self.workspace_root.clone());
+        let cwd_path = if sandbox_cmd.cwd == "." {
+            ws_canon.clone()
         } else {
-            PathBuf::from(&sandbox_cmd.cwd)
-        });
+            let requested = PathBuf::from(&sandbox_cmd.cwd);
+            let resolved = if requested.is_absolute() {
+                requested
+            } else {
+                ws_canon.join(requested)
+            };
+            let canon_cwd = resolved.canonicalize().map_err(|e| {
+                DomainError::Validation(format!("Invalid sandbox cwd '{}': {e}", sandbox_cmd.cwd))
+            })?;
+            if !canon_cwd.starts_with(&ws_canon) {
+                return Err(DomainError::Unauthorized(format!(
+                    "Sandbox cwd '{}' escapes workspace root",
+                    sandbox_cmd.cwd
+                )));
+            }
+            canon_cwd
+        };
+        let mut cmd = self.wrap_command(&sandbox_cmd.program, &sandbox_cmd.args);
+        cmd.current_dir(cwd_path);
+        cmd.kill_on_drop(true);
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
@@ -122,7 +143,7 @@ impl SandboxPort for BubblewrapSandbox {
             error_message: if is_failure { Some(stderr) } else { None },
             duration_ms: Some(duration_ms),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         })
     }
 }

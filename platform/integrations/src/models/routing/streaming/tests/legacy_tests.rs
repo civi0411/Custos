@@ -2,7 +2,7 @@ use super::helpers::response;
 use crate::routing::streaming::{
     stream_response, stream_response_with_idle_timeout, unary_completion, Decoder, Wire,
 };
-use custos_provider::ProviderEventType;
+use crate::ProviderEventType;
 use std::time::Duration;
 
 #[tokio::test]

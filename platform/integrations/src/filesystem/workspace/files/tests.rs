@@ -1,5 +1,5 @@
 use super::*;
-use custos_domain::{WorkspaceId, WorkspaceKind};
+use custos_contracts::{WorkspaceId, WorkspaceKind};
 use tokio::fs;
 
 #[tokio::test]
@@ -21,8 +21,7 @@ async fn test_resolve_safe_path_rejects_traversal() {
 
 #[tokio::test]
 async fn test_file_read_write_lifecycle() {
-    let test_dir =
-        std::env::temp_dir().join(format!("custos_ws_file_test_{}", std::process::id()));
+    let test_dir = std::env::temp_dir().join(format!("custos_ws_file_test_{}", std::process::id()));
     let _ = fs::create_dir_all(&test_dir).await;
 
     let ws = ExecutionWorkspace::new(

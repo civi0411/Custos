@@ -23,4 +23,3 @@ impl FleetAutomationRepository {
         Self { db }
     }
 }
-

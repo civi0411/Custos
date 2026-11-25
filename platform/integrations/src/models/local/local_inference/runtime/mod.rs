@@ -23,13 +23,11 @@ pub mod tool_parsing;
 
 #[cfg(feature = "local-inference-native")]
 pub(crate) use crate::local_inference::StreamSender;
+pub(crate) use messages::extract_text_content;
 #[cfg(feature = "local-inference-native")]
 pub(crate) use messages::finalize_usage;
-pub(crate) use messages::extract_text_content;
 pub use preload::{preload_model, preload_model_with_profile};
-pub use resolution::{
-    available_inference_memory_bytes, local_context_limit, ResolvedModelPaths,
-};
+pub use resolution::{available_inference_memory_bytes, local_context_limit, ResolvedModelPaths};
 pub use runtime::{
     builtin_chat_template_names, evict_model, is_model_loaded, list_loaded_instances,
     loaded_model_ids, set_admission_coordinator, InferenceRuntime, LLAMACPP_BACKEND_ID,
@@ -38,4 +36,3 @@ pub use sidecar::{
     get_loaded_sidecar_instance, get_sidecar_port, is_sidecar_healthy,
     set_sidecar_generation_verified, start_sidecar, stop_sidecar, verify_sidecar_generation,
 };
-

@@ -1,7 +1,7 @@
-use crate::conversation::token_usage::{CostSource, ProviderUsage};
-use crate::images::ImageFormat;
 use crate::conversation::message::Message;
+use crate::conversation::token_usage::{CostSource, ProviderUsage};
 use crate::errors::ProviderError;
+use crate::images::ImageFormat;
 use anyhow::Error;
 use async_stream::try_stream;
 use futures::TryStreamExt;
@@ -23,9 +23,9 @@ use crate::cloud::codecs::openai::{
     OpenAiFormatOptions,
 };
 use crate::cloud::codecs::openai_responses::responses_api_to_streaming_message;
-use crate::retry::ProviderRetry;
 use crate::model::ModelConfig;
 use crate::request_log::{start_log, LoggerHandleExt, RequestLogHandle};
+use crate::retry::ProviderRetry;
 use rmcp::model::Tool;
 
 pub struct OpenAiCompatibleProvider {
@@ -400,8 +400,12 @@ mod tests {
 
         let provider = OpenAiCompatibleProvider::new(
             "test".to_string(),
-            ApiClient::new_with_tls(server.uri(), crate::cloud::transport::api_client::AuthMethod::NoAuth, None)
-                .unwrap(),
+            ApiClient::new_with_tls(
+                server.uri(),
+                crate::cloud::transport::api_client::AuthMethod::NoAuth,
+                None,
+            )
+            .unwrap(),
             String::new(),
         )
         .with_supports_streaming(false);
@@ -434,8 +438,12 @@ mod tests {
 
         let provider = OpenAiCompatibleProvider::new(
             "test".to_string(),
-            ApiClient::new_with_tls(server.uri(), crate::cloud::transport::api_client::AuthMethod::NoAuth, None)
-                .unwrap(),
+            ApiClient::new_with_tls(
+                server.uri(),
+                crate::cloud::transport::api_client::AuthMethod::NoAuth,
+                None,
+            )
+            .unwrap(),
             String::new(),
         )
         .with_supports_streaming(false);

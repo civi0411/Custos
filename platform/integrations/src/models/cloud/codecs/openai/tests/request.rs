@@ -317,4 +317,3 @@ fn test_create_request_o3_custom_reasoning_effort() -> anyhow::Result<()> {
 
     Ok(())
 }
-

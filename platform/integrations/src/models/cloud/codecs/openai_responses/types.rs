@@ -23,7 +23,6 @@ pub struct SummaryText {
     pub text: String,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -277,7 +276,9 @@ fn is_known_responses_stream_event_type(event_type: &str) -> bool {
     )
 }
 
-pub(crate) fn parse_responses_stream_event(data_line: &str) -> anyhow::Result<Option<ResponsesStreamEvent>> {
+pub(crate) fn parse_responses_stream_event(
+    data_line: &str,
+) -> anyhow::Result<Option<ResponsesStreamEvent>> {
     let raw_event: Value = serde_json::from_str(data_line).map_err(|e| {
         ProviderError::stream_decode_error(format!(
             "Failed to parse Responses stream event: {}: {:?}",
@@ -372,4 +373,3 @@ pub enum ContentBlockPart {
         arguments: String,
     },
 }
-

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use custos_provider::errors::ProviderError;
+use crate::errors::ProviderError;
 
 fn safetensors_shard(filename: &str) -> Option<(&str, u32, u32)> {
     let stem = filename.strip_suffix(".safetensors")?;

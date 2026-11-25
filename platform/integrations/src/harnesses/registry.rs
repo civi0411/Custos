@@ -6,10 +6,10 @@
 //! - Block Goose (`goose`)
 //! - Custos Governed Agent Runtime (`governed-agent-runtime`)
 
-use custos_core::contracts::harness::{
+use custos_contracts::contracts::harness::{
     AgentRuntimePort, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

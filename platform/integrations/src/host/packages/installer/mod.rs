@@ -4,7 +4,7 @@
 //! and staging promotion to `~/.custos/packages/{id}/{version}`.
 
 use async_trait::async_trait;
-use custos_core::contracts::packages::{
+use custos_contracts::contracts::packages::{
     InstalledPath, PackageError, PackageTransferPort, StagedArtifact,
 };
 use sha2::{Digest, Sha256};
@@ -44,6 +44,8 @@ impl LocalPackageTransferAdapter {
 
     pub fn sanitize_name(name: &str) -> Result<(), PackageError> {
         if name.is_empty()
+            || name == "."
+            || name == ".."
             || name.contains('/')
             || name.contains('\\')
             || name.contains("..")
@@ -68,31 +70,42 @@ impl PackageTransferPort for LocalPackageTransferAdapter {
         Self::sanitize_name(component_id)?;
         fs::create_dir_all(&self.staging_dir).await?;
 
-        let part_file = self.staging_dir.join(format!("{}.part", component_id));
+        let part_file =
+            self.staging_dir
+                .join(format!("{}-{}.part", component_id, uuid::Uuid::new_v4()));
         let mut hasher = Sha256::new();
         let mut total_bytes: u64 = 0;
 
         if let Some(file_path_str) = source_url.strip_prefix("file://") {
             let path = Path::new(file_path_str);
-            if !path.exists() {
-                return Err(PackageError::Validation(format!(
+            let meta = fs::metadata(path).await.map_err(|_| {
+                PackageError::Validation(format!(
                     "Local source file does not exist: {}",
+                    file_path_str
+                ))
+            })?;
+            if !meta.is_file() {
+                return Err(PackageError::Validation(format!(
+                    "Local source path is not a regular file: {}",
                     file_path_str
                 )));
             }
-            let bytes = fs::read(path).await?;
-            if bytes.len() as u64 > self.max_size_bytes {
+            if meta.len() > self.max_size_bytes {
                 return Err(PackageError::SizeExceeded {
-                    actual_bytes: bytes.len() as u64,
+                    actual_bytes: meta.len(),
                     limit_bytes: self.max_size_bytes,
                 });
             }
+            let bytes = fs::read(path).await?;
             hasher.update(&bytes);
             total_bytes = bytes.len() as u64;
             let mut file = fs::File::create(&part_file).await?;
             file.write_all(&bytes).await?;
             file.flush().await?;
         } else if source_url.starts_with("http://") || source_url.starts_with("https://") {
+            custos_contracts::execution::validate_browser_url(source_url).map_err(|e| {
+                PackageError::Validation(format!("Blocked package source URL: {e}"))
+            })?;
             let mut response = self
                 .client
                 .get(source_url)
@@ -163,11 +176,17 @@ impl PackageTransferPort for LocalPackageTransferAdapter {
         expected_digest: &str,
     ) -> Result<(), PackageError> {
         let expected = expected_digest.trim().to_lowercase();
-        let actual = staged.actual_digest.trim().to_lowercase();
+        let bytes = fs::read(&staged.staging_path).await.map_err(|e| {
+            PackageError::Validation(format!(
+                "Staged artifact unreadable at {}: {e}",
+                staged.staging_path.display()
+            ))
+        })?;
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let actual = format!("{:x}", hasher.finalize());
         if expected != actual {
-            if staged.staging_path.exists() {
-                let _ = fs::remove_file(&staged.staging_path).await;
-            }
+            let _ = fs::remove_file(&staged.staging_path).await;
             return Err(PackageError::DigestMismatch { expected, actual });
         }
         Ok(())

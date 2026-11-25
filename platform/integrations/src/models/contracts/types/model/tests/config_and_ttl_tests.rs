@@ -66,4 +66,3 @@ fn request_headers_never_serialize_into_bodies() {
         Some(&"500".to_string())
     );
 }
-

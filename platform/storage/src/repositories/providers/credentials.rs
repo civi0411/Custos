@@ -1,7 +1,7 @@
 //! Recoverable metadata operations; secret bytes are never written here.
 use super::ProviderRepository;
+use custos_contracts::DomainError;
 pub use custos_contracts::{CredentialMetadata, CredentialOperation};
-use custos_domain::DomainError;
 use rusqlite::{params, OptionalExtension};
 
 // Do not delete an old OS secret until the new database reference is fsynced.

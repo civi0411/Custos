@@ -28,10 +28,7 @@ fn leaves_think_tags_as_content_when_thinking_disabled() {
 #[test]
 fn parses_single_and_multiple_eos_token_ids() {
     assert_eq!(token_id_or_ids(&json!(106)), vec![106]);
-    assert_eq!(
-        token_id_or_ids(&json!([1, 2, "ignored", 3])),
-        vec![1, 2, 3]
-    );
+    assert_eq!(token_id_or_ids(&json!([1, 2, "ignored", 3])), vec![1, 2, 3]);
     assert!(token_id_or_ids(&json!({"not": "an id"})).is_empty());
 }
 

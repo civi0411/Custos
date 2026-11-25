@@ -25,7 +25,6 @@ pub fn format_tools(tools: &[Tool]) -> anyhow::Result<Vec<Value>> {
     Ok(result)
 }
 
-
 pub fn validate_tool_schemas(tools: &mut [Value]) {
     for tool in tools.iter_mut() {
         if let Some(function) = tool.get_mut("function") {
@@ -149,4 +148,3 @@ fn normalize_nullable(schema: &mut Value) {
         obj.insert("anyOf".to_string(), any_of);
     }
 }
-

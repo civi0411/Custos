@@ -57,7 +57,10 @@ pub(crate) fn parse_tool_arguments(arguments: &str) -> anyhow::Result<Value> {
     }
 }
 
-pub(crate) fn sanitize_tool_request_id(id: &str, seen_ids: &mut HashSet<String>) -> anyhow::Result<String> {
+pub(crate) fn sanitize_tool_request_id(
+    id: &str,
+    seen_ids: &mut HashSet<String>,
+) -> anyhow::Result<String> {
     let id = strip_unicode_tags(id);
     if !seen_ids.insert(id.clone()) {
         return Err(anyhow!(

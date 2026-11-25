@@ -18,6 +18,8 @@ pub use client::{
 };
 pub use protocol::OpenAiLiveProtocol;
 pub use session::{ConnectedOpenAiLiveSession, StartingOpenAiLiveSession};
+#[allow(unused_imports)]
+pub(crate) use types::OpenAiLiveConnectionKind;
 pub use types::{
     OpenAiLiveCommand, OpenAiLiveContext, OpenAiLiveContextChannel, OpenAiLiveDelegation,
     OpenAiLiveDelegationId, OpenAiLiveDelegationTarget, OpenAiLiveEvent, OpenAiLiveEventKind,
@@ -25,5 +27,3 @@ pub use types::{
     OpenAiLiveSessionEvent, OpenAiLiveSessionId, DEFAULT_OPENAI_LIVE_HTTP_URL,
     DEFAULT_OPENAI_LIVE_WEBSOCKET_URL,
 };
-#[allow(unused_imports)]
-pub(crate) use types::OpenAiLiveConnectionKind;

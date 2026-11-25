@@ -5,7 +5,7 @@ use super::inference::{codeassist_payload, generate_content, stream_codeassist};
 use super::models::probe_models;
 use super::project::discover_project;
 use super::transport::cloud_call_with_fallback;
-use custos_provider::ModelRequest;
+use crate::ModelRequest;
 
 async fn project(server: &MockServer) {
     Mock::given(method("POST"))
@@ -14,9 +14,11 @@ async fn project(server: &MockServer) {
         .and(wiremock::matchers::body_json(
             serde_json::json!({"metadata":{"ideType":"ANTIGRAVITY"}}),
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            serde_json::json!({"cloudaicompanionProject":{"id":"account-project"}}),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"cloudaicompanionProject":{"id":"account-project"}}),
+            ),
+        )
         .mount(server)
         .await;
 }
@@ -59,16 +61,13 @@ async fn tiered_catalog_and_both_transports_preserve_exact_effort_and_id() {
             request.model = model.id.clone();
             request.reasoning_effort = Some(effort.into());
             if streaming {
-                assert!(stream_codeassist(
-                    "antigravity",
-                    &server.uri(),
-                    "oauth-token",
-                    &request
-                )
-                .await
-                .unwrap()
-                .status()
-                .is_success());
+                assert!(
+                    stream_codeassist("antigravity", &server.uri(), "oauth-token", &request)
+                        .await
+                        .unwrap()
+                        .status()
+                        .is_success()
+                );
             } else {
                 assert_eq!(
                     generate_content(&server.uri(), "oauth-token", &request)
@@ -143,12 +142,22 @@ async fn bootstrap_metadata_and_error_detail_match_provider_contract() {
 async fn ide_project_onboarding_recovers_missing_initial_assignment() {
     let server = MockServer::start().await;
     Mock::given(path("/v1internal:loadCodeAssist"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"allowedTiers":[{"id":"tier-enterprise","isDefault":true}]})))
-        .expect(1).mount(&server).await;
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"allowedTiers":[{"id":"tier-enterprise","isDefault":true}]}),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
     Mock::given(path("/v1internal:onboardUser"))
-        .and(wiremock::matchers::body_json(serde_json::json!({"tier_id":"tier-enterprise","metadata":{"ideType":"ANTIGRAVITY"}})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"cloudaicompanionProject":{"id":"onboarded-project"}})))
-        .expect(1).mount(&server).await;
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"tier_id":"tier-enterprise","metadata":{"ideType":"ANTIGRAVITY"}}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"cloudaicompanionProject":{"id":"onboarded-project"}}),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
     assert_eq!(
         discover_project("antigravity", &server.uri(), "oauth-token")
             .await

@@ -1,5 +1,5 @@
-use custos_provider::errors::ProviderError;
-use custos_provider::request_log::{LoggerHandleExt, RequestLogHandle};
+use crate::errors::ProviderError;
+use crate::request_log::{LoggerHandleExt, RequestLogHandle};
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::{AddBos, ChatTemplateResult, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::mtmd::{MtmdBitmap, MtmdContext, MtmdInputText};

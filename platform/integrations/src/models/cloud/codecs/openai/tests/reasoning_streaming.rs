@@ -23,9 +23,7 @@ async fn test_streaming_response_extracts_inline_think_blocks() -> anyhow::Resul
         if let Some(message) = message {
             for item in message.content {
                 match item {
-                    MessageContentBlock::Text(text_content) => {
-                        text.push_str(&text_content.text)
-                    }
+                    MessageContentBlock::Text(text_content) => text.push_str(&text_content.text),
                     MessageContentBlock::Thinking(thinking_content) => {
                         thinking.push_str(&thinking_content.thinking)
                     }
@@ -42,8 +40,8 @@ async fn test_streaming_response_extracts_inline_think_blocks() -> anyhow::Resul
 }
 
 #[tokio::test]
-async fn test_streaming_truncated_inline_think_preserves_output_token_limit(
-) -> anyhow::Result<()> {
+async fn test_streaming_truncated_inline_think_preserves_output_token_limit() -> anyhow::Result<()>
+{
     let response_lines = concat!(
         "data: {\"id\":\"chunk-1\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"content\":\"<think>unfinished reasoning\"},\"index\":0,\"finish_reason\":null}]}\n",
         "data: {\"id\":\"chunk-1\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n",
@@ -88,8 +86,7 @@ async fn test_streaming_truncated_inline_think_preserves_output_token_limit(
 }
 
 #[tokio::test]
-async fn test_streaming_partial_think_tag_emits_one_output_limit_marker() -> anyhow::Result<()>
-{
+async fn test_streaming_partial_think_tag_emits_one_output_limit_marker() -> anyhow::Result<()> {
     let response_lines = concat!(
         "data: {\"id\":\"chunk-1\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"content\":\"<thi\"},\"index\":0,\"finish_reason\":null}]}\n",
         "data: {\"id\":\"chunk-1\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n",
@@ -148,9 +145,7 @@ async fn test_streaming_suppresses_inline_think_when_structured_reasoning_follow
         if let Some(message) = message {
             for item in message.content {
                 match item {
-                    MessageContentBlock::Text(text_content) => {
-                        text.push_str(&text_content.text)
-                    }
+                    MessageContentBlock::Text(text_content) => text.push_str(&text_content.text),
                     MessageContentBlock::Thinking(thinking_content) => {
                         thinking.push_str(&thinking_content.thinking)
                     }
@@ -165,4 +160,3 @@ async fn test_streaming_suppresses_inline_think_when_structured_reasoning_follow
 
     Ok(())
 }
-

@@ -2,7 +2,7 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 /// Extracts `chatgpt_account_id` from a JWT access token's `https://api.openai.com/auth` claim.
 pub fn extract_chatgpt_account_id(token: &str) -> Option<String> {
@@ -127,4 +127,3 @@ mod tests {
         assert_eq!(extract_chatgpt_account_id("bad.token"), None);
     }
 }
-

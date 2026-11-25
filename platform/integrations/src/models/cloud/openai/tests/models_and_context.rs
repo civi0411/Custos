@@ -211,11 +211,8 @@ async fn fetch_supported_models_falls_back_on_invalid_payload() {
         .await;
 
     let predefined = vec!["glm-4.5".to_string(), "glm-5".to_string()];
-    let provider = make_provider_with_custom_models(
-        &server.uri(),
-        "v1/chat/completions",
-        predefined.clone(),
-    );
+    let provider =
+        make_provider_with_custom_models(&server.uri(), "v1/chat/completions", predefined.clone());
 
     let models = provider
         .fetch_supported_models()

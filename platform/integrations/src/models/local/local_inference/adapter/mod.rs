@@ -8,4 +8,3 @@ pub mod provider_utils;
 pub use adapter::NativeLocalModelAdapter;
 pub(crate) use provider::StreamSender;
 pub use provider::{LocalInferenceProvider, LOCAL_LLM_MODEL_CONFIG_KEY};
-

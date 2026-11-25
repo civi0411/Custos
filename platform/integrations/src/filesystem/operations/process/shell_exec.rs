@@ -10,7 +10,7 @@
 //! infrastructure concern mounted at the daemon layer. This module enforces
 //! the Rust-level contract: timeout, output capture, and env filtering.
 
-use custos_core::contracts::skill::SkillError;
+use custos_contracts::contracts::skill::SkillError;
 use std::{path::Path, time::Duration};
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -224,8 +224,8 @@ impl SandboxedProcess {
 
                 // Cap total captured output to 64 KB on character boundaries
                 const MAX_OUTPUT_BYTES: usize = 65_536;
-                custos_domain::truncate_to_char_boundary(&mut stdout, MAX_OUTPUT_BYTES);
-                custos_domain::truncate_to_char_boundary(&mut stderr, MAX_OUTPUT_BYTES);
+                custos_contracts::truncate_to_char_boundary(&mut stdout, MAX_OUTPUT_BYTES);
+                custos_contracts::truncate_to_char_boundary(&mut stderr, MAX_OUTPUT_BYTES);
 
                 debug!(
                     exit_code,
@@ -259,14 +259,16 @@ impl SandboxedProcess {
 pub struct LocalCommandRunner;
 
 #[async_trait::async_trait]
-impl custos_core::contracts::sandbox::CommandRunnerPort for LocalCommandRunner {
+impl custos_contracts::contracts::sandbox::CommandRunnerPort for LocalCommandRunner {
     async fn run_shell(
         &self,
         command: &str,
         cwd: &Path,
         timeout_ms: u64,
-    ) -> Result<custos_core::contracts::sandbox::CommandExecutionResult, custos_domain::DomainError>
-    {
+    ) -> Result<
+        custos_contracts::contracts::sandbox::CommandExecutionResult,
+        custos_contracts::DomainError,
+    > {
         let output = SandboxedProcess::new("sh")
             .args(["-c", command])
             .cwd(cwd.to_string_lossy().as_ref())
@@ -274,13 +276,15 @@ impl custos_core::contracts::sandbox::CommandRunnerPort for LocalCommandRunner {
             .run()
             .await
             .map_err(|e| {
-                custos_domain::DomainError::Validation(format!("Command execution failed: {e}"))
+                custos_contracts::DomainError::Validation(format!("Command execution failed: {e}"))
             })?;
-        Ok(custos_core::contracts::sandbox::CommandExecutionResult {
-            exit_code: output.exit_code,
-            stdout: output.stdout,
-            stderr: output.stderr,
-        })
+        Ok(
+            custos_contracts::contracts::sandbox::CommandExecutionResult {
+                exit_code: output.exit_code,
+                stdout: output.stdout,
+                stderr: output.stderr,
+            },
+        )
     }
 }
 
@@ -366,7 +370,7 @@ mod tests {
     #[test]
     fn test_output_capping_safety() {
         let mut large_str = "A".repeat(100_000);
-        custos_domain::truncate_to_char_boundary(&mut large_str, 65_536);
+        custos_contracts::truncate_to_char_boundary(&mut large_str, 65_536);
         assert_eq!(large_str.len(), 65_536);
     }
 }

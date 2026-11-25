@@ -48,11 +48,8 @@ fn assistant_document_becomes_a_text_block() {
 
 #[test]
 fn unsupported_document_media_type_becomes_an_explicit_text_block() {
-    let messages = vec![Message::user().with_document(
-        "cm93cw==",
-        "text/csv",
-        Some("rows.csv".to_string()),
-    )];
+    let messages =
+        vec![Message::user().with_document("cm93cw==", "text/csv", Some("rows.csv".to_string()))];
 
     let spec = format_messages(&messages);
 
@@ -63,4 +60,3 @@ fn unsupported_document_media_type_becomes_an_explicit_text_block() {
     assert!(text.contains("application/pdf"), "{text}");
     assert!(!text.contains("cm93cw=="), "{text}");
 }
-

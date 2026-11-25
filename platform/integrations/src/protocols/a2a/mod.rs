@@ -40,10 +40,10 @@ impl A2aClient {
         endpoint: &str,
         task: &A2aTaskPayload,
         auth_header: Option<&str>,
-    ) -> Result<A2aTaskPayload, custos_domain::DomainError> {
+    ) -> Result<A2aTaskPayload, custos_contracts::DomainError> {
         let req_body = A2aJsonRpcRequest {
             jsonrpc: "2.0".to_string(),
-            id: serde_json::json!(custos_domain::new_id("a2a_req")),
+            id: serde_json::json!(custos_contracts::new_id("a2a_req")),
             method: "tasks/send".to_string(),
             params: serde_json::to_value(task).unwrap_or_default(),
         };
@@ -54,26 +54,26 @@ impl A2aClient {
         }
 
         let resp = req.send().await.map_err(|e| {
-            custos_domain::DomainError::Validation(format!(
+            custos_contracts::DomainError::Validation(format!(
                 "A2A request to '{endpoint}' failed: {e}"
             ))
         })?;
 
         if !resp.status().is_success() {
-            return Err(custos_domain::DomainError::Validation(format!(
+            return Err(custos_contracts::DomainError::Validation(format!(
                 "A2A peer returned HTTP {}",
                 resp.status()
             )));
         }
 
         let rpc_resp: A2aJsonRpcResponse = resp.json().await.map_err(|e| {
-            custos_domain::DomainError::Validation(format!(
+            custos_contracts::DomainError::Validation(format!(
                 "Failed to parse A2A JSON-RPC response: {e}"
             ))
         })?;
 
         if let Some(err) = rpc_resp.error {
-            return Err(custos_domain::DomainError::Validation(format!(
+            return Err(custos_contracts::DomainError::Validation(format!(
                 "A2A delegation error (code {}): {}",
                 err.code, err.message
             )));
@@ -81,7 +81,7 @@ impl A2aClient {
 
         let result_val = rpc_resp.result.unwrap_or_default();
         let payload: A2aTaskPayload = serde_json::from_value(result_val).map_err(|e| {
-            custos_domain::DomainError::Validation(format!("Invalid A2A payload returned: {e}"))
+            custos_contracts::DomainError::Validation(format!("Invalid A2A payload returned: {e}"))
         })?;
 
         Ok(payload)
@@ -94,10 +94,10 @@ impl A2aClient {
         task_id: &str,
         reason: &str,
         auth_header: Option<&str>,
-    ) -> Result<(), custos_domain::DomainError> {
+    ) -> Result<(), custos_contracts::DomainError> {
         let req_body = A2aJsonRpcRequest {
             jsonrpc: "2.0".to_string(),
-            id: serde_json::json!(custos_domain::new_id("a2a_cancel")),
+            id: serde_json::json!(custos_contracts::new_id("a2a_cancel")),
             method: "tasks/cancel".to_string(),
             params: serde_json::json!({
                 "taskId": task_id,
@@ -111,11 +111,11 @@ impl A2aClient {
         }
 
         let resp = req.send().await.map_err(|e| {
-            custos_domain::DomainError::Validation(format!("A2A cancel request failed: {e}"))
+            custos_contracts::DomainError::Validation(format!("A2A cancel request failed: {e}"))
         })?;
 
         if !resp.status().is_success() {
-            return Err(custos_domain::DomainError::Validation(format!(
+            return Err(custos_contracts::DomainError::Validation(format!(
                 "A2A peer returned HTTP {} on cancel",
                 resp.status()
             )));

@@ -373,4 +373,3 @@ fn test_thinking_type_off_means_disabled() {
         ThinkingType::Disabled
     );
 }
-

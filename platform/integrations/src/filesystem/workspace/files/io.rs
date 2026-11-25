@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 
-use custos_domain::{
+use custos_contracts::{
     DomainError, ExecutionWorkspace, WorkspaceFileContent, WorkspaceFileEntry, WorkspaceFileTree,
     WriteWorkspaceFileParams,
 };
@@ -57,8 +57,7 @@ pub async fn get_file_tree(
     let ignored_set: HashSet<&str> = IGNORED_DIRS.iter().copied().collect();
 
     // Breadth-first traversal with bounded capacity
-    let mut queue: std::collections::VecDeque<(PathBuf, usize)> =
-        std::collections::VecDeque::new();
+    let mut queue: std::collections::VecDeque<(PathBuf, usize)> = std::collections::VecDeque::new();
     queue.push_back((start_dir.clone(), 0));
 
     while let Some((curr_dir, depth)) = queue.pop_front() {

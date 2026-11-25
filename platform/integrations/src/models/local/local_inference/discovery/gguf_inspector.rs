@@ -3,7 +3,7 @@
 //! Lazily reads GGUF file headers (< 64KB) to extract model architecture, context window,
 //! quantization, and embedded Jinja2 chat template in under 5ms without loading tensor weights.
 
-use custos_domain::{LocalHardwareProfile, LocalModelDescriptor, ModelCompatibility};
+use custos_contracts::{LocalHardwareProfile, LocalModelDescriptor, ModelCompatibility};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};

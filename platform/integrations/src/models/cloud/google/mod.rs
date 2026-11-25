@@ -1,12 +1,16 @@
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::base::MessageStream;
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
+use crate::cloud::transport::openai_compatible::{
+    handle_status, map_http_error_to_provider_error, sanitize_url,
+};
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
-use crate::cloud::transport::openai_compatible::{handle_status, map_http_error_to_provider_error, sanitize_url};
 use crate::retry::ProviderRetry;
 
 use crate::base::{known_models_from_registry, ConfigKey, Provider, ProviderMetadata};
-use crate::cloud::codecs::google::{create_request_with_thinking_budget, response_to_streaming_message};
+use crate::cloud::codecs::google::{
+    create_request_with_thinking_budget, response_to_streaming_message,
+};
 use crate::model::ModelConfig;
 use crate::request_log::{start_log, LoggerHandleExt};
 use anyhow::Result;

@@ -3,7 +3,7 @@
 //! Scans the filesystem for installed workbenches, validates component structure,
 //! and tracks installed/enabled package states.
 
-use custos_core::contracts::packages::PackageError;
+use custos_contracts::contracts::packages::PackageError;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 

@@ -3,9 +3,9 @@
 use super::legacy_decoder::{unary_completion, Decoder};
 use super::turn_decoder::ModelTurnStreamDecoder;
 use super::types::Wire;
-use custos_domain::DomainError;
-use custos_provider::turn::{ModelTurnEvent, TurnDelta};
-use custos_provider::ProviderEvent;
+use crate::turn::{ModelTurnEvent, TurnDelta};
+use crate::ProviderEvent;
+use custos_contracts::DomainError;
 use serde_json::Value;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 pub(crate) type ResponseObserver = (
     std::sync::Arc<dyn super::super::router::CredentialResolver>,
-    custos_provider::ProviderRequest,
+    crate::ProviderRequest,
 );
 
 async fn observe_frame(
@@ -215,7 +215,7 @@ fn stream_response_observed_inner(
 
 pub fn stream_response_observed(
     response: reqwest::Response,
-    req: custos_provider::ProviderRequest,
+    req: crate::ProviderRequest,
     wire: Wire,
     resolver: std::sync::Arc<dyn super::super::router::CredentialResolver>,
 ) -> mpsc::Receiver<ProviderEvent> {
@@ -380,4 +380,3 @@ pub fn stream_turn_response_observed(
     });
     rx
 }
-

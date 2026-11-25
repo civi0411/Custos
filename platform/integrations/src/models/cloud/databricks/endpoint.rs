@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::base::ModelInfo;
-use crate::errors::ProviderError;
 use crate::cloud::codecs::databricks::DATABRICKS_PROVIDER_NAME;
+use crate::errors::ProviderError;
 use crate::model::ModelConfig;
 
 use super::types::{
@@ -272,13 +272,16 @@ impl DatabricksProvider {
         .await
         .ok()
         .and_then(Result::ok);
-        DATABRICKS_ENDPOINT_INFO_CACHE.lock().unwrap().insert(
-            cache_key,
-            CachedDatabricksEndpointInfo {
-                info: info.clone(),
-                fetched_at: Instant::now(),
-            },
-        );
+        DATABRICKS_ENDPOINT_INFO_CACHE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                cache_key,
+                CachedDatabricksEndpointInfo {
+                    info: info.clone(),
+                    fetched_at: Instant::now(),
+                },
+            );
         info.ok_or_else(|| {
             ProviderError::RequestFailed("Databricks endpoint metadata is unavailable".to_string())
         })
@@ -286,9 +289,11 @@ impl DatabricksProvider {
 
     pub(crate) fn model_info_from_endpoint(info: DatabricksEndpointInfo) -> ModelInfo {
         let context_model = info.upstream_model_name.as_deref().unwrap_or(&info.name);
-        let context_limit =
-            crate::catalog::canonical::maybe_get_canonical_model(DATABRICKS_PROVIDER_NAME, context_model)
-                .map(|model| model.limit.context);
+        let context_limit = crate::catalog::canonical::maybe_get_canonical_model(
+            DATABRICKS_PROVIDER_NAME,
+            context_model,
+        )
+        .map(|model| model.limit.context);
         let reasoning = info
             .reasoning
             .unwrap_or_else(|| ModelConfig::new(context_model).is_reasoning_model());
@@ -307,4 +312,3 @@ impl DatabricksProvider {
         }
     }
 }
-

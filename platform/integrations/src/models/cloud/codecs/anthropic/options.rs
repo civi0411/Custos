@@ -355,4 +355,3 @@ pub fn block_binding_behavior(payload: &Value) -> Option<PrefixMismatchBehavior>
 }
 
 pub use crate::contracts::types::retry::is_thinking_signature_error;
-

@@ -4,10 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use reqwest::{
-    header::HeaderMap,
-    Client, Response, StatusCode,
-};
+use reqwest::{header::HeaderMap, Client, Response, StatusCode};
 use serde_json::Value;
 
 use super::tls::TlsConfig;
@@ -92,4 +89,3 @@ impl fmt::Debug for ApiClient {
             .finish_non_exhaustive()
     }
 }
-

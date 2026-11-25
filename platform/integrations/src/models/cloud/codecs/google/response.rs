@@ -1,8 +1,8 @@
 use super::messages::{metadata_with_signature, THOUGHT_SIGNATURE_KEY};
+use crate::cloud::codecs::openai::is_valid_function_name;
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::conversation::token_usage::Usage;
 use crate::errors::ProviderError;
-use crate::cloud::codecs::openai::is_valid_function_name;
 use anyhow::Result;
 use rmcp::model::{object, CallToolRequestParams, ErrorCode, ErrorData, Role};
 use serde_json::Value;

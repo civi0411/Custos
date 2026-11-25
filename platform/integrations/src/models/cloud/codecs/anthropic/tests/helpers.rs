@@ -146,9 +146,7 @@ pub(crate) fn expect_refusal(
         .find_map(|r| r.err())
         .expect("refusal should surface as a stream error");
     match err.downcast_ref::<ProviderError>() {
-        Some(ProviderError::Refusal { details, category }) => {
-            (details.clone(), category.clone())
-        }
+        Some(ProviderError::Refusal { details, category }) => (details.clone(), category.clone()),
         other => panic!("expected ProviderError::Refusal, got {:?}", other),
     }
 }

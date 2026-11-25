@@ -1,5 +1,5 @@
 use super::*;
-use custos_domain::WorkspaceId;
+use custos_contracts::WorkspaceId;
 use std::path::Path;
 use tempfile::tempdir;
 

@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::base::ModelInfo;
+use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -121,7 +121,7 @@ pub struct DeclarativeProviderConfig {
     #[serde(default)]
     pub emit_clear_thinking: bool,
     #[serde(default)]
-    pub setup: Option<custos_provider::catalog::canonical::catalog::ProviderSetupMetadata>,
+    pub setup: Option<crate::catalog::canonical::catalog::ProviderSetupMetadata>,
 }
 
 pub fn default_requires_auth() -> bool {

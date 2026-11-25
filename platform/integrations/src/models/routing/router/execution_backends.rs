@@ -1,5 +1,5 @@
-use custos_domain::DomainError;
-use custos_provider::{ModelResponse, ProviderRequest};
+use crate::{ModelResponse, ProviderRequest};
+use custos_contracts::DomainError;
 use tracing::{debug, error, info};
 
 use super::classification::{format_provider_error, parse_codex_sse_stream, responses_payload};

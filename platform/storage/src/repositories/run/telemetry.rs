@@ -1,6 +1,6 @@
 //! Telemetry persistence for run execution step spans, logs, errors, and watchdog findings.
 
-use custos_domain::{
+use custos_contracts::{
     DomainError, RunStepSpan, StepError, SupervisionFinding, SupervisionLogEntry,
     SupervisionRunRecord,
 };

@@ -3,9 +3,8 @@ pub mod types;
 
 pub use provider::AzureFoundryProvider;
 pub use types::{
-    endpoint_kind, is_project_endpoint, EndpointKind, ModelPublisher,
-    AZURE_FOUNDRY_DEFAULT_MODEL, AZURE_FOUNDRY_DOC_URL, AZURE_FOUNDRY_KNOWN_MODELS,
-    AZURE_FOUNDRY_PROVIDER_NAME,
+    endpoint_kind, is_project_endpoint, EndpointKind, ModelPublisher, AZURE_FOUNDRY_DEFAULT_MODEL,
+    AZURE_FOUNDRY_DOC_URL, AZURE_FOUNDRY_KNOWN_MODELS, AZURE_FOUNDRY_PROVIDER_NAME,
 };
 
 #[allow(unused_imports)]

@@ -85,8 +85,7 @@ fn validate_provider_id(id: &str) -> Result<()> {
         anyhow::bail!("Invalid provider id: {id}");
     }
 
-    if chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
-    {
+    if chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-') {
         Ok(())
     } else {
         anyhow::bail!("Invalid provider id: {id}")

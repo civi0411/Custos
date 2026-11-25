@@ -1,7 +1,7 @@
 //! Canonical test data seeding for in-memory and verification tests.
 
 use super::SqliteTaskStore;
-use custos_domain::{DomainError, Task};
+use custos_contracts::{DomainError, Task};
 
 impl SqliteTaskStore {
     #[cfg(test)]
@@ -12,8 +12,8 @@ impl SqliteTaskStore {
                 "task_inv_verify_01".to_string(),
                 "Invariant Formal Verification Suite".to_string(),
             );
-            task1.status = custos_domain::TaskStatus::Running;
-            task1.contract = Some(custos_domain::TaskContract {
+            task1.status = custos_contracts::TaskStatus::Running;
+            task1.contract = Some(custos_contracts::TaskContract {
                 pack_id: "engineering".to_string(),
                 name: "Verification Contract".to_string(),
                 description: "Verify invariants on multi-agent execution".to_string(),
@@ -26,13 +26,13 @@ impl SqliteTaskStore {
                 "task_worktree_02".to_string(),
                 "Autonomous Worktree Pipeline".to_string(),
             );
-            task2.status = custos_domain::TaskStatus::Draft;
+            task2.status = custos_contracts::TaskStatus::Draft;
             self.task_repo.save_task(&task2)?;
 
-            let session_id = custos_domain::SessionId::new("sess_inv_01");
-            let mut session = custos_domain::Session::new(
+            let session_id = custos_contracts::SessionId::new("sess_inv_01");
+            let mut session = custos_contracts::Session::new(
                 session_id.clone(),
-                custos_domain::SessionMode::Attached {
+                custos_contracts::SessionMode::Attached {
                     task_id: "task_inv_verify_01".to_string(),
                 },
             );
@@ -41,7 +41,7 @@ impl SqliteTaskStore {
 
             let now = chrono::Utc::now().to_rfc3339();
             self.session_repo
-                .append_journal(&custos_domain::SessionJournalEntry {
+                .append_journal(&custos_contracts::SessionJournalEntry {
                     entry_id: None,
                     session_id: session_id.clone(),
                     entry_type: "user".to_string(),
@@ -50,7 +50,7 @@ impl SqliteTaskStore {
                     occurred_at: now.clone(),
                 })?;
             self.session_repo
-                .append_journal(&custos_domain::SessionJournalEntry {
+                .append_journal(&custos_contracts::SessionJournalEntry {
                     entry_id: None,
                     session_id,
                     entry_type: "assistant".to_string(),
@@ -64,7 +64,7 @@ impl SqliteTaskStore {
         // 2. Seed default providers if empty
         if self.provider_repo.list_providers()?.is_empty() {
             let now = chrono::Utc::now().timestamp_millis();
-            let p1 = custos_domain::ProviderConfig {
+            let p1 = custos_contracts::ProviderConfig {
                 id: "p_anthropic".to_string(),
                 name: "Anthropic Claude (Sonnet 3.7)".to_string(),
                 service_type: "anthropic".to_string(),
@@ -77,7 +77,7 @@ impl SqliteTaskStore {
                 created_at: now,
                 updated_at: now,
             };
-            let p2 = custos_domain::ProviderConfig {
+            let p2 = custos_contracts::ProviderConfig {
                 id: "p_openai".to_string(),
                 name: "OpenAI Codex / GPT-4o".to_string(),
                 service_type: "openai".to_string(),
@@ -90,7 +90,7 @@ impl SqliteTaskStore {
                 created_at: now,
                 updated_at: now,
             };
-            let p3 = custos_domain::ProviderConfig {
+            let p3 = custos_contracts::ProviderConfig {
                 id: "p_gemini".to_string(),
                 name: "Google Gemini 2.5 Flash".to_string(),
                 service_type: "gemini".to_string(),
@@ -103,7 +103,7 @@ impl SqliteTaskStore {
                 created_at: now,
                 updated_at: now,
             };
-            let p4 = custos_domain::ProviderConfig {
+            let p4 = custos_contracts::ProviderConfig {
                 id: "p_local".to_string(),
                 name: "Local Model (Ollama / llama.cpp)".to_string(),
                 service_type: "local".to_string(),
@@ -124,7 +124,7 @@ impl SqliteTaskStore {
 
         // 4. Seed default client key if empty
         if self.provider_repo.list_client_keys()?.is_empty() {
-            let k1 = custos_domain::ClientApiKeyRecord {
+            let k1 = custos_contracts::ClientApiKeyRecord {
                 id: "key_gateway_01".to_string(),
                 name: "Custos Desktop Client Token".to_string(),
                 token: "custos_live_sec_9941a8e2".to_string(),

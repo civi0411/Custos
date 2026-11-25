@@ -1,5 +1,5 @@
 use crate::connection::DbConnection;
-use custos_domain::{
+use custos_contracts::{
     BrowserConsoleEntry, BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab,
     BrowserTabStatus, DomainError,
 };
@@ -350,4 +350,3 @@ impl BrowserRepository {
         })
     }
 }
-

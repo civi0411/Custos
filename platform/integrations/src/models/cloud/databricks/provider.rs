@@ -6,25 +6,25 @@ use async_trait::async_trait;
 use rmcp::model::Tool;
 use serde_json::{json, Value};
 
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
-use crate::base::{ConfigKey, MessageStream, ModelInfo, Provider, ProviderMetadata};
-use crate::conversation::message::Message;
 use super::auth::{
     DatabricksAuth, DatabricksAuthProvider, DatabricksOauthTokenProvider, DatabricksRefreshHook,
     DatabricksSessionIdProvider, DatabricksTokenResolver,
 };
-use crate::errors::ProviderError;
+use crate::base::{ConfigKey, MessageStream, ModelInfo, Provider, ProviderMetadata};
 use crate::cloud::codecs::databricks::{create_request_for_provider, DATABRICKS_PROVIDER_NAME};
 use crate::cloud::codecs::openai::{
     extract_reasoning_effort, is_openai_responses_model, openai_reasoning_effort_for_thinking,
 };
 use crate::cloud::codecs::openai_responses::create_responses_request;
-use crate::images::ImageFormat;
-use crate::model::ModelConfig;
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 use crate::cloud::transport::openai_compatible::{
     handle_status, map_http_error_to_provider_error, sanitize_url, stream_openai_compat,
     stream_responses_compat,
 };
+use crate::conversation::message::Message;
+use crate::errors::ProviderError;
+use crate::images::ImageFormat;
+use crate::model::ModelConfig;
 use crate::request_log::{start_log, LoggerHandleExt};
 use crate::retry::{
     ProviderRetry, RetryConfig, DEFAULT_BACKOFF_MULTIPLIER, DEFAULT_INITIAL_RETRY_INTERVAL_MS,
@@ -214,7 +214,7 @@ impl Provider for DatabricksProvider {
         if let Some(refresh_hook) = &self.refresh_hook {
             refresh_hook();
         }
-        *self.token_cache.lock().unwrap() = None;
+        *self.token_cache.lock().unwrap_or_else(|e| e.into_inner()) = None;
         tracing::info!("Invalidated secrets cache and token cache for credential refresh");
         Ok(())
     }
@@ -368,9 +368,10 @@ impl Provider for DatabricksProvider {
                     if !resp.status().is_success() {
                         let status = resp.status();
                         let url = sanitize_url(resp.url().as_str());
-                        let error_text = crate::cloud::transport::http_status::read_error_body(resp)
-                            .await
-                            .unwrap_or_default();
+                        let error_text =
+                            crate::cloud::transport::http_status::read_error_body(resp)
+                                .await
+                                .unwrap_or_default();
 
                         let json_payload = serde_json::from_str::<Value>(&error_text).ok();
                         return Err(map_http_error_to_provider_error(status, json_payload, &url));
@@ -393,9 +394,10 @@ impl Provider for DatabricksProvider {
                         if !resp.status().is_success() {
                             let status = resp.status();
                             let url = sanitize_url(resp.url().as_str());
-                            let error_text = crate::cloud::transport::http_status::read_error_body(resp)
-                                .await
-                                .unwrap_or_default();
+                            let error_text =
+                                crate::cloud::transport::http_status::read_error_body(resp)
+                                    .await
+                                    .unwrap_or_default();
                             let json_payload = serde_json::from_str::<Value>(&error_text).ok();
                             return Err(map_http_error_to_provider_error(
                                 status,
@@ -488,4 +490,3 @@ impl Provider for DatabricksProvider {
         self.fetch_supported_model_info().await
     }
 }
-

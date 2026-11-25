@@ -350,4 +350,3 @@ impl StreamingEmulatorParser {
         results
     }
 }
-

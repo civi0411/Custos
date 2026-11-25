@@ -1,5 +1,5 @@
 use super::ProviderRepository;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 impl ProviderRepository {
     /// Queries the total recorded events for a given provider without exposing credentials or tokens.

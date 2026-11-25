@@ -16,10 +16,10 @@ pub use colab::ColabTargetAdapter;
 pub use kaggle::KaggleTargetAdapter;
 pub use rented_gpu::RentedGpuTargetAdapter;
 
+use custos_contracts::contracts::compute::{ExecutionTargetPort, ExecutionTargetResolver};
+use custos_contracts::ComputeBackendKind;
 use std::path::Path;
 use std::sync::Arc;
-use custos_core::contracts::compute::{ExecutionTargetPort, ExecutionTargetResolver};
-use custos_domain::ComputeBackendKind;
 
 /// Default production execution target resolver instantiating live adapters without mock bypasses.
 #[derive(Debug, Default, Clone)]
@@ -57,9 +57,11 @@ impl ExecutionTargetResolver for DefaultExecutionTargetResolver {
 }
 
 /// Mock execution target resolver for isolated testing environments.
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default, Clone)]
 pub struct MockExecutionTargetResolver;
 
+#[cfg(any(test, feature = "test-support"))]
 impl ExecutionTargetResolver for MockExecutionTargetResolver {
     fn resolve(
         &self,
@@ -72,8 +74,12 @@ impl ExecutionTargetResolver for MockExecutionTargetResolver {
         cloud_api_key: Option<&str>,
     ) -> Arc<dyn ExecutionTargetPort> {
         match backend {
-            ComputeBackendKind::Colab => Arc::new(ColabTargetAdapter::new(work_dir).with_mock_mode()),
-            ComputeBackendKind::Kaggle => Arc::new(KaggleTargetAdapter::new(work_dir).with_mock_mode()),
+            ComputeBackendKind::Colab => {
+                Arc::new(ColabTargetAdapter::new(work_dir).with_mock_mode())
+            }
+            ComputeBackendKind::Kaggle => {
+                Arc::new(KaggleTargetAdapter::new(work_dir).with_mock_mode())
+            }
             ComputeBackendKind::RunPod
             | ComputeBackendKind::VastAi
             | ComputeBackendKind::DedicatedSsh => {
@@ -90,4 +96,3 @@ impl ExecutionTargetResolver for MockExecutionTargetResolver {
         }
     }
 }
-
