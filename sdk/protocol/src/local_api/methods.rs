@@ -51,6 +51,12 @@ pub const METHOD_QUANT_GATE_EVALUATE: &str = "v1.quant.gate.evaluate";
 pub const METHOD_QUANT_REVIEW_COMPUTE: &str = "v1.quant.review.compute";
 pub const METHOD_QUANT_ORDERBOOK_GET: &str = "v1.quant.orderbook.get";
 pub const METHOD_QUANT_PBO_COMPUTE: &str = "v1.quant.pbo.compute";
+pub const METHOD_QUANT_STRATEGIES_LIST: &str = "v1.quant.strategies.list";
+pub const METHOD_QUANT_STRATEGIES_SAVE: &str = "v1.quant.strategies.save";
+pub const METHOD_QUANT_POSITIONS_LIST: &str = "v1.quant.positions.list";
+pub const METHOD_QUANT_FILLS_LIST: &str = "v1.quant.fills.list";
+pub const METHOD_QUANT_EVIDENCE_ASSESS: &str = "v1.quant.evidence.assess";
+pub const METHOD_QUANT_ORDERS_CLOSE_POSITION: &str = "v1.quant.orders.close_position";
 
 pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";
 pub const METHOD_WORKSPACE_FILES_READ: &str = "v1.workspace.files.read";

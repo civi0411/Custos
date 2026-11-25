@@ -8,7 +8,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Hierarchical priority execution lanes for concurrent agent tasks and compute workloads
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionLane {
     /// Ambient background tasks: vector indexing, OCR, sync, heartbeat.

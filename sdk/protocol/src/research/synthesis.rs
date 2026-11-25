@@ -1,7 +1,7 @@
 //! Research Synthesis & Handoff to Coding Wire DTOs.
 
 use super::ClaimGroundingLevel;
-use custos_domain::{new_id, DomainError};
+use custos_contracts::{new_id, DomainError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -210,4 +210,3 @@ mod tests {
         assert!(proposal.caveats[0].contains("ungrounded (L0)"));
     }
 }
-

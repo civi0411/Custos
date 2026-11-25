@@ -189,10 +189,9 @@ mod tests {
     }
 }
 
-
+use crate::identity::error::DomainError;
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
-use crate::identity::error::DomainError;
 
 /// Execution response from the underlying Python worker process.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,10 +252,8 @@ pub trait NotebookDriverPort: Send + Sync {
 /// Persistence Port for Interactive Notebook Cells and Execution States (RFC 003 §6).
 #[async_trait]
 pub trait NotebookStoragePort: Send + Sync {
-    async fn list_notebook_cells(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<NotebookCell>, DomainError>;
+    async fn list_notebook_cells(&self, session_id: &str)
+        -> Result<Vec<NotebookCell>, DomainError>;
     async fn list_notebook_cells_scoped(
         &self,
         session_id: &str,
@@ -284,10 +281,7 @@ pub trait NotebookStoragePort: Send + Sync {
     ) -> Result<(), DomainError> {
         self.replace_notebook_cells(session_id, cells).await
     }
-    async fn save_notebook_cell(
-        &self,
-        cell: &NotebookCell,
-    ) -> Result<(), DomainError>;
+    async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError>;
     async fn get_notebook_kernel_state(
         &self,
         session_id: &str,

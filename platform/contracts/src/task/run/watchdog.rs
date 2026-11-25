@@ -162,7 +162,10 @@ fn format_duration(ms: i64) -> String {
     }
 }
 
-fn has_active_exempt_span(snapshot: &SupervisionSnapshot<'_>, profile: &SupervisionProfile) -> bool {
+fn has_active_exempt_span(
+    snapshot: &SupervisionSnapshot<'_>,
+    profile: &SupervisionProfile,
+) -> bool {
     snapshot.spans.iter().any(|span| {
         span.status == StepSpanStatus::Running && profile.is_span_kind_exempt(span.kind)
     })
@@ -232,7 +235,11 @@ impl SupervisionRule for RepeatedToolRule {
         for span in snapshot.spans {
             if span.kind == StepSpanKind::Tool {
                 by_branch
-                    .entry(span.worker_run_id.clone().or_else(|| span.parent_id.clone()))
+                    .entry(
+                        span.worker_run_id
+                            .clone()
+                            .or_else(|| span.parent_id.clone()),
+                    )
                     .or_default()
                     .push(span);
             }
@@ -251,7 +258,9 @@ impl SupervisionRule for RepeatedToolRule {
                         run_id: snapshot.run_id.into(),
                         kind: FindingKind::RepeatedTool,
                         severity: SupervisionSeverity::Warning,
-                        message: format!("Tool '{tool_name}' invoked {count} times (threshold {threshold})"),
+                        message: format!(
+                            "Tool '{tool_name}' invoked {count} times (threshold {threshold})"
+                        ),
                         created_at_ms: snapshot.now_ms,
                     });
                 }
@@ -292,7 +301,9 @@ impl SupervisionRule for RepeatedErrorRule {
                     run_id: snapshot.run_id.into(),
                     kind: FindingKind::RepeatedError,
                     severity: SupervisionSeverity::Critical,
-                    message: format!("Error '{err_type}' occurred {count} times (threshold {threshold})"),
+                    message: format!(
+                        "Error '{err_type}' occurred {count} times (threshold {threshold})"
+                    ),
                     created_at_ms: snapshot.now_ms,
                 });
             }
@@ -366,7 +377,11 @@ impl SupervisionRule for PossibleLoopRule {
         for span in snapshot.spans {
             if span.kind == StepSpanKind::Tool {
                 by_branch
-                    .entry(span.worker_run_id.clone().or_else(|| span.parent_id.clone()))
+                    .entry(
+                        span.worker_run_id
+                            .clone()
+                            .or_else(|| span.parent_id.clone()),
+                    )
                     .or_default()
                     .push(span);
             }
@@ -402,13 +417,21 @@ impl SupervisionRule for PossibleLoopRule {
                     && slice[n - 1] != slice[n - 2]
                 {
                     findings.push(SupervisionFinding {
-                        id: format!("find_loop_alt_{}_{}_{}", snapshot.run_id, slice[n - 2], slice[n - 1]),
+                        id: format!(
+                            "find_loop_alt_{}_{}_{}",
+                            snapshot.run_id,
+                            slice[n - 2],
+                            slice[n - 1]
+                        ),
                         run_id: snapshot.run_id.into(),
                         kind: FindingKind::PossibleLoop,
                         severity: SupervisionSeverity::Critical,
                         message: format!(
                             "Alternating loop pattern detected: {} -> {} -> {} -> {}",
-                            slice[n - 4], slice[n - 3], slice[n - 2], slice[n - 1]
+                            slice[n - 4],
+                            slice[n - 3],
+                            slice[n - 2],
+                            slice[n - 1]
                         ),
                         created_at_ms: snapshot.now_ms,
                     });

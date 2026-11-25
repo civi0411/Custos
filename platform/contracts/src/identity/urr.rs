@@ -99,8 +99,7 @@ mod tests {
         assert_eq!(parsed.sha256, "abcdef0123456789");
 
         // Edge case: ID containing slashes
-        let complex =
-            UniversalResourceRef::parse("urr://coding/file/src/lib.rs#11223344").unwrap();
+        let complex = UniversalResourceRef::parse("urr://coding/file/src/lib.rs#11223344").unwrap();
         assert_eq!(complex.component, "coding");
         assert_eq!(complex.kind, "file");
         assert_eq!(complex.id, "src/lib.rs");
@@ -113,4 +112,3 @@ mod tests {
         assert!(UniversalResourceRef::parse("urr://research/artifact/123#").is_err());
     }
 }
-

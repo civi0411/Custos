@@ -1,20 +1,18 @@
 //! Execution & Harness SPI Trait Ports
 
-use async_trait::async_trait;
-use std::path::Path;
-use std::sync::Arc;
-use crate::identity::error::DomainError;
-use crate::resources::workspace::WorkspaceId;
 use crate::authority::{Action, ActionIntent, ExecutionReceipt, Permit};
 use crate::context::ContextPack;
-use crate::execution::harness::{
-    HarnessExecutionResult, HarnessProfile,
-};
 use crate::execution::assurance::EnvironmentAssurance;
+use crate::execution::harness::{HarnessExecutionResult, HarnessProfile};
 use crate::execution::spec::EnvironmentSpec;
 use crate::execution::state::EnvironmentState;
+use crate::identity::error::DomainError;
+use crate::resources::workspace::WorkspaceId;
 use crate::task::run::WorkerRun;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // 1. Agent Runtime / Driver Port (Port 7)
@@ -106,6 +104,14 @@ impl SandboxCommand {
 }
 
 pub fn verify_permit_binding(permit: &Permit, intent: &ActionIntent) -> Result<(), DomainError> {
+    // The kernel consumes the permit (single-use / replay guard) BEFORE the sandbox is invoked,
+    // so `used_at` is legitimately set here. Only expiry is re-checked at binding time.
+    if chrono::Utc::now() > permit.expires_at {
+        return Err(DomainError::Unauthorized(format!(
+            "permit {} has expired",
+            permit.id
+        )));
+    }
     if permit.task_id != intent.task_id.clone().unwrap_or_default() {
         return Err(DomainError::Unauthorized(format!(
             "permit {} belongs to a different task",
@@ -116,6 +122,12 @@ pub fn verify_permit_binding(permit: &Permit, intent: &ActionIntent) -> Result<(
         return Err(DomainError::Unauthorized(format!(
             "permit {} was issued for action {}, not {}",
             permit.id, permit.action_id, intent.id
+        )));
+    }
+    if !permit.argument_digest.is_empty() && permit.capability != intent.name {
+        return Err(DomainError::Unauthorized(format!(
+            "permit {} capability '{}' does not match action '{}'",
+            permit.id, permit.capability, intent.name
         )));
     }
     let actual = intent.argument_digest();
@@ -129,12 +141,6 @@ pub fn verify_permit_binding(permit: &Permit, intent: &ActionIntent) -> Result<(
         return Err(DomainError::Unauthorized(format!(
             "idempotency key mismatch for permit {}: bound {:?}, got {:?}",
             permit.id, permit.idempotency_key, intent.idempotency_key
-        )));
-    }
-    if chrono::Utc::now() > permit.expires_at {
-        return Err(DomainError::Unauthorized(format!(
-            "permit {} has expired",
-            permit.id
         )));
     }
     Ok(())
@@ -179,7 +185,11 @@ pub trait CommandRunnerPort: Send + Sync {
         args: &[String],
         cwd: &Path,
     ) -> Result<CommandExecutionResult, DomainError> {
-        self.run_shell(&format!("{} {}", program, args.join(" ")), cwd, 60_000).await
+        let quote_posix = |s: &str| -> String { format!("'{}'", s.replace('\'', "'\\''")) };
+        let mut parts = Vec::with_capacity(1 + args.len());
+        parts.push(quote_posix(program));
+        parts.extend(args.iter().map(|a| quote_posix(a)));
+        self.run_shell(&parts.join(" "), cwd, 60_000).await
     }
 }
 
@@ -278,4 +288,3 @@ pub trait EnvironmentPort: Send + Sync {
     /// Idempotently releases the environment binding. Physical workspace removal is explicit.
     async fn teardown(&self, handle: &EnvironmentHandle) -> Result<(), DomainError>;
 }
-

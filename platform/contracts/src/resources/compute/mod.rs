@@ -21,7 +21,8 @@ pub use self::admission::{
     WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
 };
 pub use self::backend::{
-    AcceleratorSpec, CloudPodLease, CloudPodStatus, ComputeBackendKind, ComputeDeviceRef, DeviceKind,
+    AcceleratorSpec, CloudPodLease, CloudPodStatus, ComputeBackendKind, ComputeDeviceRef,
+    DeviceKind,
 };
 pub use self::checkpoint::{
     CheckpointCommitStatus, CheckpointFileEntry, ResumabilityLevel, TrainingCheckpointManifest,
@@ -30,4 +31,3 @@ pub use self::training::{
     FrozenTrainingRecipe, ModelEvaluationReport, ModelEvaluationSpec, TrainingExecutionReceipt,
     TrainingStepTelemetry,
 };
-

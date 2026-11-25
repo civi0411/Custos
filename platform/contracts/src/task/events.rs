@@ -2,8 +2,8 @@
 //!
 //! Immutable records of state transitions and lifecycle changes.
 
-use chrono::{DateTime, Utc};
 use crate::task::{Task, TaskContract, TaskStatus};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

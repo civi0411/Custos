@@ -6,4 +6,3 @@ use async_trait::async_trait;
 pub trait ApiTransport: Send + Sync {
     async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String>;
 }
-

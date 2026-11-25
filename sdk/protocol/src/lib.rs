@@ -12,4 +12,3 @@ pub mod wire_types;
 pub mod worker;
 
 pub use wire_types::{custom_notifications, custom_requests};
-

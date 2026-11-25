@@ -273,7 +273,10 @@ mod tests {
         // Create second revision
         let rev2 = t.create_revision(
             "Fix bug in parser and add benchmark".into(),
-            vec!["platform/adapters/src/host/documents".into(), "benches".into()],
+            vec![
+                "platform/adapters/src/host/documents".into(),
+                "benches".into(),
+            ],
             vec!["cargo test passes".into(), "bench passes".into()],
             Some("commit_sha_2".into()),
         );

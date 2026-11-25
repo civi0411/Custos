@@ -63,9 +63,9 @@ pub struct TerminalOutputChunk {
     pub is_eof: bool,
 }
 
+use crate::identity::error::DomainError;
 use async_trait::async_trait;
 use std::path::Path;
-use crate::identity::error::DomainError;
 
 #[async_trait]
 pub trait TerminalPort: Send + Sync {

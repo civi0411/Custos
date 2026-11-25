@@ -90,6 +90,36 @@ fn test_all_workbench_manifests_exist_and_valid_json() {
             Some(*wb),
             "Workbench manifest id must match directory name"
         );
+        for key in ["name", "version", "description", "host_compatibility"] {
+            assert!(
+                parsed
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.trim().is_empty()),
+                "Workbench '{wb}' manifest missing non-empty string field '{key}'"
+            );
+        }
+        assert_eq!(
+            parsed.get("builtin").and_then(|v| v.as_bool()),
+            Some(*wb == "assistant"),
+            "Only 'assistant' is builtin; '{wb}' must have builtin={}",
+            *wb == "assistant"
+        );
+        assert!(
+            parsed
+                .get("capabilities")
+                .and_then(|v| v.as_array())
+                .is_some(),
+            "Workbench '{wb}' manifest missing capabilities array"
+        );
+        assert!(
+            parsed
+                .get("contributions")
+                .and_then(|c| c.get("supported_tab_types"))
+                .and_then(|v| v.as_array())
+                .is_some(),
+            "Workbench '{wb}' manifest missing contributions.supported_tab_types array"
+        );
     }
 }
 
@@ -103,13 +133,29 @@ fn test_all_capability_manifests_exist_and_valid_json() {
 
     let capabilities = [
         ("notebook", "platform/integrations/src/notebook", "notebook"),
-        ("workspace", "platform/integrations/src/filesystem/workspace", "workspace"),
+        (
+            "workspace",
+            "platform/integrations/src/filesystem/workspace",
+            "workspace",
+        ),
         ("terminal", "platform/integrations/src/terminal", "terminal"),
         ("compute", "platform/integrations/src/compute", "compute"),
-        ("documents", "platform/integrations/src/connectors/documents", "documents"),
-        ("local-inference", "platform/integrations/src/models/local/local_inference", "local_inference"),
+        (
+            "documents",
+            "platform/integrations/src/connectors/documents",
+            "documents",
+        ),
+        (
+            "local-inference",
+            "platform/integrations/src/models/local/local_inference",
+            "local_inference",
+        ),
         ("mcp", "platform/integrations/src/protocols/mcp", "mcp"),
-        ("remote-agents", "platform/integrations/src/protocols/a2a", "a2a"),
+        (
+            "remote-agents",
+            "platform/integrations/src/protocols/a2a",
+            "a2a",
+        ),
     ];
     let exports = format!(
         "{}\n{}\n{}",

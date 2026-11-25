@@ -1,12 +1,12 @@
 //! Authority, Policy, Outbox, and Credentials SPI Trait Ports
 
+use crate::authority::action::{EffectAttempt, EffectStatus};
+use crate::authority::permit::ExecutionReceipt;
+use crate::identity::error::DomainError;
+use crate::inference::provider::config::{OAuthTokenRecord, ProviderConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::identity::error::DomainError;
-use crate::authority::action::{EffectAttempt, EffectStatus};
-use crate::authority::permit::ExecutionReceipt;
-use crate::inference::provider::config::{OAuthTokenRecord, ProviderConfig};
 
 // ---------------------------------------------------------------------------
 // 1. Transactional Outbox Port (RFC 001)
@@ -281,4 +281,3 @@ pub struct CredentialOperation {
     pub phase: String,
     pub remove_provider: bool,
 }
-
