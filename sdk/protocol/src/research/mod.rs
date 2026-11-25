@@ -6,7 +6,7 @@ pub mod synthesis;
 pub use notes::*;
 pub use synthesis::*;
 
-pub use custos_domain::ArtifactLineageNode;
+pub use custos_contracts::ArtifactLineageNode;
 use serde::{Deserialize, Serialize};
 
 /// 4-Level Grounding Status enforcing zero false-passes.
@@ -25,4 +25,3 @@ pub enum ClaimGroundingLevel {
     /// L3: Invariant proof sealed into CAS Ledger (`cas://bafy...`).
     L3Sealed,
 }
-

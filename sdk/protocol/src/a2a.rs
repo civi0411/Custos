@@ -173,4 +173,3 @@ mod tests {
         assert!(parsed.capabilities.streaming);
     }
 }
-

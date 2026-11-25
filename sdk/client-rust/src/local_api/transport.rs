@@ -41,6 +41,7 @@ impl ProcessTransport {
         }
         cmd.env("CUSTOS_BIND", "127.0.0.1:0");
         cmd.env("CUSTOS_HTTP_BIND", "127.0.0.1:0");
+        cmd.kill_on_drop(true);
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::inherit());
@@ -81,14 +82,18 @@ impl ApiTransport for ProcessTransport {
         let mut encoded = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
         encoded.push(b'\n');
 
-        {
-            let mut stdin = self.stdin.lock().await;
-            stdin.write_all(&encoded).await.map_err(|e| e.to_string())?;
-            stdin.flush().await.map_err(|e| e.to_string())?;
-        }
-
+        // Hold both transport locks across write+read so concurrent callers cannot cross-talk responses.
+        let mut stdin = self.stdin.lock().await;
         let mut lines = self.lines.lock().await;
-        while let Some(line) = lines.next_line().await.map_err(|e| e.to_string())? {
+        stdin.write_all(&encoded).await.map_err(|e| e.to_string())?;
+        stdin.flush().await.map_err(|e| e.to_string())?;
+
+        while let Some(line) =
+            tokio::time::timeout(std::time::Duration::from_secs(60), lines.next_line())
+                .await
+                .map_err(|_| "Timed out waiting for daemon stdout response".to_string())?
+                .map_err(|e| e.to_string())?
+        {
             if line.trim().is_empty() {
                 continue;
             }
@@ -112,8 +117,20 @@ impl TcpTransport {
 
 #[async_trait]
 impl ApiTransport for TcpTransport {
-    async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
+    async fn send_request(&self, mut req: ApiRequest) -> Result<ApiResponse, String> {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        // Daemon TCP enforces CUSTOS_IPC_TOKEN when set; forward it from the client environment.
+        if let Ok(token) = std::env::var("CUSTOS_IPC_TOKEN") {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                if let Some(obj) = req.params.as_object_mut() {
+                    obj.insert("_ipc_token".into(), serde_json::Value::String(token));
+                } else if req.params.is_null() {
+                    req.params = serde_json::json!({ "_ipc_token": token });
+                }
+            }
+        }
 
         let stream = tokio::net::TcpStream::connect(&self.addr)
             .await
@@ -130,7 +147,12 @@ impl ApiTransport for TcpTransport {
         writer.flush().await.map_err(|e| e.to_string())?;
 
         let mut lines = BufReader::new(reader).lines();
-        while let Some(line) = lines.next_line().await.map_err(|e| e.to_string())? {
+        while let Some(line) =
+            tokio::time::timeout(std::time::Duration::from_secs(60), lines.next_line())
+                .await
+                .map_err(|_| "Timed out waiting for daemon TCP response".to_string())?
+                .map_err(|e| e.to_string())?
+        {
             if line.trim().is_empty() {
                 continue;
             }

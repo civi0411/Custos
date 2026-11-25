@@ -7,4 +7,3 @@ pub use envelope::*;
 pub use methods::*;
 pub use params::*;
 pub use transport::ApiTransport;
-

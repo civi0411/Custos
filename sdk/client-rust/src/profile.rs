@@ -5,6 +5,10 @@ pub use custos_protocol::profile::{DaemonLifecycleState, ProfileResolver};
 use std::sync::Arc;
 
 pub fn spawn_daemon_process() {
+    spawn_daemon_process_with_profile(None);
+}
+
+pub fn spawn_daemon_process_with_profile(profile: Option<&ProfileResolver>) {
     let daemon_bin =
         std::env::var("CUSTOS_DAEMON_BIN").unwrap_or_else(|_| "custos-daemon".to_string());
     let mut cmd = std::process::Command::new(&daemon_bin);
@@ -21,12 +25,24 @@ pub fn spawn_daemon_process() {
         }
     }
 
+    if let Some(p) = profile {
+        cmd.env("CUSTOS_PROFILE", p.profile_id());
+        cmd.env("CUSTOS_PROFILE_DIR", p.profile_dir());
+    }
+
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::inherit());
 
     match cmd.spawn() {
-        Ok(_) => eprintln!("[Client] Spawned background custos-daemon process"),
+        Ok(mut child) => {
+            // Reap in a lightweight background thread if it exits immediately (e.g. lock contention)
+            // so the parent process never accumulates `<defunct>` zombies.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            eprintln!("[Client] Spawned background custos-daemon process");
+        }
         Err(e) => eprintln!("[Client] Notice: unable to spawn daemon binary directly: {e}"),
     }
 }
@@ -41,7 +57,7 @@ pub async fn ensure_daemon_client_async(
         }
     }
 
-    spawn_daemon_process();
+    spawn_daemon_process_with_profile(Some(profile));
 
     let start = tokio::time::Instant::now();
     while start.elapsed() < std::time::Duration::from_secs(30) {
