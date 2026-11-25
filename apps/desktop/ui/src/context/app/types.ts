@@ -20,6 +20,8 @@ import type {
 import type { OrcaTab, ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
 import type { ActiveWorkbench } from './canvas_layout';
 
+export type WorkbenchPackageState = 'builtin' | 'active' | 'disabled' | 'not_installed';
+
 export interface AppContextType {
   // Projects & Sessions
   projectData: ProjectData;
@@ -50,6 +52,7 @@ export interface AppContextType {
   activeWorkbench: ActiveWorkbench;
   setActiveWorkbench: (wb: ActiveWorkbench) => void;
   installedWorkbenches: string[];
+  workbenchStates: Record<string, WorkbenchPackageState>;
   refreshInstalledWorkbenches: () => Promise<void>;
   isWorkbenchLibraryOpen: boolean;
   setIsWorkbenchLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;

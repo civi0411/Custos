@@ -1,8 +1,46 @@
 //! compute application use cases over the shared daemon context.
 
 use super::*;
+use std::sync::Arc;
 
 impl LocalApiDispatcher {
+    fn resolve_attempt_adapter(
+        &self,
+        attempt: &ExecutionAttempt,
+        ext_ref: &custos_contracts::evidence::ExternalJobRef,
+        params: &serde_json::Value,
+    ) -> Arc<dyn ExecutionTargetPort> {
+        let work_dir = dirs::home_dir()
+            .map(|h| h.join(".custos"))
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+        let ssh_host = params
+            .get("ssh_host")
+            .and_then(|v| v.as_str())
+            .or(Some(ext_ref.account_ref.as_str()));
+        let ssh_port = params
+            .get("ssh_port")
+            .and_then(|v| v.as_u64())
+            .and_then(|p| u16::try_from(p).ok());
+        let ssh_user = params.get("ssh_user").and_then(|v| v.as_str());
+        let pod_id = params.get("pod_id").and_then(|v| v.as_str()).or_else(|| {
+            matches!(
+                attempt.backend,
+                ComputeBackendKind::RunPod | ComputeBackendKind::VastAi
+            )
+            .then_some(ext_ref.job_id.as_str())
+        });
+        let cloud_api_key = params.get("cloud_api_key").and_then(|v| v.as_str());
+        self.resolve_target_adapter(
+            attempt.backend,
+            &work_dir,
+            ssh_host,
+            ssh_port,
+            ssh_user,
+            pod_id,
+            cloud_api_key,
+        )
+    }
+
     pub(crate) async fn handle_compute(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_COMPUTE_TARGETS_LIST => {
@@ -213,18 +251,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                let work_dir = dirs::home_dir()
-                    .map(|h| h.join(".custos"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
-                let adapter = self.resolve_target_adapter(
-                    attempt.backend,
-                    &work_dir,
-                    Some(&ext_ref.account_ref),
-                    None,
-                    None,
-                    None,
-                    None,
-                );
+                let adapter = self.resolve_attempt_adapter(&attempt, &ext_ref, &req.params);
 
                 match adapter.observe(&ext_ref).await {
                     Ok(obs) => {
@@ -285,18 +312,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                let work_dir = dirs::home_dir()
-                    .map(|h| h.join(".custos"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
-                let adapter = self.resolve_target_adapter(
-                    attempt.backend,
-                    &work_dir,
-                    Some(&ext_ref.account_ref),
-                    None,
-                    None,
-                    None,
-                    None,
-                );
+                let adapter = self.resolve_attempt_adapter(&attempt, &ext_ref, &req.params);
 
                 if let Err(e) = adapter.stop_job(&ext_ref).await {
                     let _ = attempt.apply(ExecEvent::StopRequested);
@@ -338,18 +354,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                let work_dir = dirs::home_dir()
-                    .map(|h| h.join(".custos"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
-                let adapter = self.resolve_target_adapter(
-                    attempt.backend,
-                    &work_dir,
-                    Some(&ext_ref.account_ref),
-                    None,
-                    None,
-                    None,
-                    None,
-                );
+                let adapter = self.resolve_attempt_adapter(&attempt, &ext_ref, &req.params);
 
                 if let Err(e) = adapter.release_compute(&ext_ref).await {
                     let _ = attempt.apply_resource(ResourceEvent::ReleaseRequested);
@@ -391,18 +396,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                let work_dir = dirs::home_dir()
-                    .map(|h| h.join(".custos"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
-                let adapter = self.resolve_target_adapter(
-                    attempt.backend,
-                    &work_dir,
-                    Some(&ext_ref.account_ref),
-                    None,
-                    None,
-                    None,
-                    None,
-                );
+                let adapter = self.resolve_attempt_adapter(&attempt, &ext_ref, &req.params);
 
                 match adapter.collect_artifacts(&ext_ref).await {
                     Ok(artifacts) => {

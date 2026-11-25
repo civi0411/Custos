@@ -9,35 +9,19 @@
 //! 6. Optional consumer placement & cooperative CPU fallback: active training run forces background embedding/OCR to CPU.
 //! 7. Data privacy / cloud egress guardrail & cooperative priority preemption.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use std::sync::Arc;
 use tempfile::tempdir;
 
-use custos_adapters::compute::{ColabTargetAdapter, KaggleTargetAdapter};
-use custos_core::contracts::compute::{ExecutionTargetPort, WorkloadAdmissionPort};
-use custos_domain::{
+use custos_contracts::{
     ComputeBackendKind, ComputeDeviceRef, ComputeWorkloadKind, ExecState, ExecutionAttempt,
-    ExecutionLane, ExternalJobRef, ResourceState, WorkloadAdmissionRequest, WorkloadAdmissionVerdict,
-    WorkloadLease, WorkloadLeaseStatus,
+    ExecutionLane, ExternalJobRef, ResourceState, WorkloadAdmissionRequest,
+    WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
 };
-use custos_runtime::compute::{
+use custos_engine::compute::{
     OptionalConsumerPlacementEngine, RemoteExecutionCoordinator, WorkloadAdmissionCoordinator,
 };
+use custos_engine::contracts::compute::{ExecutionTargetPort, WorkloadAdmissionPort};
+use custos_integrations::compute::{ColabTargetAdapter, KaggleTargetAdapter};
 
 #[tokio::test]
 async fn test_g_multi_01_colab_interactive_lifecycle_and_capabilities() {

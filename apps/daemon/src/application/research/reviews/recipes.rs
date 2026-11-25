@@ -16,7 +16,7 @@ impl LocalApiDispatcher {
                 Err(e) => ApiResponse::error(req.id, e.to_string()),
             },
             "v1.research.recipes.save" => {
-                let recipe: custos_domain::Recipe = match serde_json::from_value(req.params) {
+                let recipe: custos_contracts::Recipe = match serde_json::from_value(req.params) {
                     Ok(r) => r,
                     Err(e) => {
                         return ApiResponse::error(req.id, format!("Invalid recipe payload: {e}"))
@@ -44,7 +44,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown research recipes method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown research recipes method: {unknown}"),
+            ),
         }
     }
 }

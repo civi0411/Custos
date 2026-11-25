@@ -2,7 +2,7 @@
 
 use crate::api::*;
 use crate::application::capabilities::browser_execution_adapter_connected;
-use custos_adapters::host::binaries::resolve_agent_browser_binary;
+use custos_integrations::host::binaries::resolve_agent_browser_binary;
 
 impl LocalApiDispatcher {
     pub(super) async fn handle_browser_interaction(&self, req: ApiRequest) -> ApiResponse {
@@ -19,12 +19,7 @@ impl LocalApiDispatcher {
         }
         let fleet = match self.workbenches.browser.as_ref() {
             Some(f) => f,
-            None => {
-                return ApiResponse::error(
-                    req.id,
-                    "BrowserRepository not configured",
-                )
-            }
+            None => return ApiResponse::error(req.id, "BrowserRepository not configured"),
         };
 
         match req.method.as_str() {
@@ -51,7 +46,7 @@ impl LocalApiDispatcher {
                     format!("@{}", element_ref)
                 };
 
-                match custos_adapters::integrations::run_agent_browser_json(
+                match custos_integrations::integrations::run_agent_browser_json(
                     &agent_bin,
                     tab_id,
                     &["click", &formatted_ref],
@@ -68,7 +63,7 @@ impl LocalApiDispatcher {
                                 )
                             }
                         };
-                        if let Ok(val) = custos_adapters::integrations::run_agent_browser_json(
+                        if let Ok(val) = custos_integrations::integrations::run_agent_browser_json(
                             &agent_bin,
                             tab_id,
                             &["snapshot", "-i", "--urls"],
@@ -133,7 +128,7 @@ impl LocalApiDispatcher {
                     format!("@{}", element_ref)
                 };
 
-                match custos_adapters::integrations::run_agent_browser_json(
+                match custos_integrations::integrations::run_agent_browser_json(
                     &agent_bin,
                     tab_id,
                     &["fill", &formatted_ref, text],

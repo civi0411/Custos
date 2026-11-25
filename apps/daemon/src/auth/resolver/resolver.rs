@@ -1,14 +1,14 @@
 //! Daemon Credential Resolver implementing Provider routing trait.
 
-use custos_domain::DomainError;
-use custos_persistence::SqliteTaskStore;
-use custos_provider::routing::router::CredentialResolver;
+use custos_contracts::DomainError;
+use custos_integrations::routing::router::CredentialResolver;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 use super::selection::{provider_catalog_scope, reserve_available_provider_account};
 
 pub struct DaemonCredentialResolver {
-    pub availability: custos_provider::routing::availability::ModelAvailability,
+    pub availability: custos_integrations::routing::availability::ModelAvailability,
     pub store: Arc<SqliteTaskStore>,
     pub credentials: Arc<crate::credentials::ProviderCredentials>,
 }
@@ -93,7 +93,7 @@ impl CredentialResolver for DaemonCredentialResolver {
                     "Selected account no longer advertises this model; refresh models".into(),
                 )
             })?;
-        if !custos_provider::routing::probe::conversation_model_is_visible(
+        if !custos_integrations::routing::probe::conversation_model_is_visible(
             &selected.id,
             Some(&selected.label),
         ) {
@@ -144,8 +144,8 @@ impl CredentialResolver for DaemonCredentialResolver {
                     ));
                 }
                 let settings =
-                    custos_adapters::connectors::oauth::oauth_settings(&tok.service_type)?;
-                let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
+                    custos_integrations::connectors::oauth::oauth_settings(&tok.service_type)?;
+                let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
                     &settings.0,
                     &settings.1,
                 );

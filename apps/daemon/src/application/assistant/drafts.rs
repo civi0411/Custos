@@ -8,17 +8,14 @@ use custos_workbench_assistant::AssistantDraft;
 pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
     let assistant = match dispatcher.assistant_repo() {
         Some(a) => a,
-        None => {
-            return ApiResponse::error(req.id, "AssistantRepository not configured on daemon")
-        }
+        None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
     };
     let session_id = req.params.get("session_id").and_then(|v| v.as_str());
     let task_id = req.params.get("task_id").and_then(|v| v.as_str());
     match assistant.list_drafts_sync(session_id, task_id) {
-        Ok(drafts) => ApiResponse::success(
-            req.id,
-            serde_json::to_value(&drafts).unwrap_or_default(),
-        ),
+        Ok(drafts) => {
+            ApiResponse::success(req.id, serde_json::to_value(&drafts).unwrap_or_default())
+        }
         Err(e) => ApiResponse::error(req.id, e.to_string()),
     }
 }
@@ -26,19 +23,16 @@ pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
 pub async fn handle_get(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
     let assistant = match dispatcher.assistant_repo() {
         Some(a) => a,
-        None => {
-            return ApiResponse::error(req.id, "AssistantRepository not configured on daemon")
-        }
+        None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
     };
     let id = match req.params.get("id").and_then(|v| v.as_str()) {
         Some(i) => i,
         None => return ApiResponse::error(req.id, "Missing id parameter"),
     };
     match assistant.get_draft_sync(id) {
-        Ok(Some(draft)) => ApiResponse::success(
-            req.id,
-            serde_json::to_value(&draft).unwrap_or_default(),
-        ),
+        Ok(Some(draft)) => {
+            ApiResponse::success(req.id, serde_json::to_value(&draft).unwrap_or_default())
+        }
         Ok(None) => ApiResponse::error(req.id, format!("Draft '{id}' not found")),
         Err(e) => ApiResponse::error(req.id, e.to_string()),
     }
@@ -47,9 +41,7 @@ pub async fn handle_get(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Api
 pub async fn handle_save(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
     let assistant = match dispatcher.assistant_repo() {
         Some(a) => a,
-        None => {
-            return ApiResponse::error(req.id, "AssistantRepository not configured on daemon")
-        }
+        None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
     };
     let mut params = req.params;
     let Some(fields) = params.as_object_mut() else {
@@ -61,9 +53,7 @@ pub async fn handle_save(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
     fields.insert("updated_at".into(), serde_json::json!(now));
     let mut draft: AssistantDraft = match serde_json::from_value(params) {
         Ok(d) => d,
-        Err(e) => {
-            return ApiResponse::error(req.id, format!("Invalid AssistantDraft: {e}"))
-        }
+        Err(e) => return ApiResponse::error(req.id, format!("Invalid AssistantDraft: {e}")),
     };
     if draft.id.is_empty()
         || draft.id.len() > 128
@@ -78,9 +68,7 @@ pub async fn handle_save(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
     }
     match assistant.get_draft_sync(&draft.id) {
         Ok(Some(existing)) => {
-            if existing.session_id != draft.session_id
-                || existing.task_id != draft.task_id
-            {
+            if existing.session_id != draft.session_id || existing.task_id != draft.task_id {
                 return ApiResponse::error(req.id, "Draft scope cannot be changed");
             }
             if existing.payload_lock.is_some()
@@ -113,10 +101,7 @@ pub async fn handle_save(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
         None
     };
     match assistant.save_draft_sync(&draft) {
-        Ok(()) => ApiResponse::success(
-            req.id,
-            serde_json::to_value(&draft).unwrap_or_default(),
-        ),
+        Ok(()) => ApiResponse::success(req.id, serde_json::to_value(&draft).unwrap_or_default()),
         Err(e) => ApiResponse::error(req.id, e.to_string()),
     }
 }
@@ -124,18 +109,14 @@ pub async fn handle_save(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
 pub async fn handle_delete(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
     let assistant = match dispatcher.assistant_repo() {
         Some(a) => a,
-        None => {
-            return ApiResponse::error(req.id, "AssistantRepository not configured on daemon")
-        }
+        None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
     };
     let id = match req.params.get("id").and_then(|v| v.as_str()) {
         Some(i) => i,
         None => return ApiResponse::error(req.id, "Missing id parameter"),
     };
     match assistant.delete_draft_sync(id) {
-        Ok(deleted) => {
-            ApiResponse::success(req.id, serde_json::json!({ "deleted": deleted }))
-        }
+        Ok(deleted) => ApiResponse::success(req.id, serde_json::json!({ "deleted": deleted })),
         Err(e) => ApiResponse::error(req.id, e.to_string()),
     }
 }

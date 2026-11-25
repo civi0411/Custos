@@ -9,7 +9,7 @@ impl LocalApiDispatcher {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
             "v1.system.metrics" | "v1.system.telemetry" => {
-                let telemetry = custos_adapters::host::telemetry::collect_system_telemetry();
+                let telemetry = custos_integrations::host::telemetry::collect_system_telemetry();
 
                 let mut active_runs: u64 = 0;
                 if let Some(store) = &self.kernel.usage_runs {
@@ -27,7 +27,7 @@ impl LocalApiDispatcher {
                 }
 
                 let (caffeinate_mode, is_active) =
-                    custos_adapters::host::CAFFEINATE_MANAGER.status();
+                    custos_integrations::host::CAFFEINATE_MANAGER.status();
                 let caffeinate_status = serde_json::json!({
                     "mode": caffeinate_mode,
                     "active": is_active,
@@ -53,7 +53,7 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str())
                     .unwrap_or("off");
                 let (current_mode, is_active) =
-                    custos_adapters::host::CAFFEINATE_MANAGER.set_mode(mode);
+                    custos_integrations::host::CAFFEINATE_MANAGER.set_mode(mode);
                 ApiResponse::success(
                     req.id,
                     serde_json::json!({

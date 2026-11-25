@@ -4,4 +4,3 @@ mod gate;
 mod tests;
 
 pub use gate::DeterministicGate;
-

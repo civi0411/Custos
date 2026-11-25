@@ -6,31 +6,15 @@
 //! 3. Quantitative Risk Permit Configuration & Auditing
 //! 4. Algorithmic Order Ticket Generation & Governed Outbox Handoff
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
+use custos_contracts::session::WorkbenchLens;
+use custos_contracts::DomainPack;
+use custos_contracts::{VerificationContext, VerificationResult};
+use custos_engine::create_default_pack_registry;
+use custos_workbench_quant::QuantPack;
 use custos_workbench_quant::{
     AlphaFactor, BacktestTearsheet, MonthlyReturn, OrderDirection, OrderTicket, OrderTicketStatus,
     OrderType, RiskBreach, RiskPermitConfig,
 };
-use custos_domain::session::WorkbenchLens;
-use custos_packs::create_default_pack_registry;
-use custos_domain::DomainPack;
-use custos_workbench_quant::QuantPack;
-use custos_domain::{VerificationContext, VerificationResult};
 
 #[tokio::test]
 async fn test_quant_pack_manifest_roles_jobs_and_verifiers() {

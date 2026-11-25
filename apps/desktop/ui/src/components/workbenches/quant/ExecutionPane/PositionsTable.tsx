@@ -16,9 +16,14 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
           Active Positions Ledger ({positions.length})
         </span>
-        <span className="text-[11px] font-mono text-emerald-400">
-          Total Unrealized PnL: +${positions.reduce((acc, p) => acc + p.unrealizedPnl, 0).toLocaleString()}
-        </span>
+        {(() => {
+          const totalPnl = positions.reduce((acc, p) => acc + p.unrealizedPnl, 0);
+          return (
+            <span className={`text-[11px] font-mono ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              Total Unrealized PnL: {totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`}
+            </span>
+          );
+        })()}
       </div>
       {positions.length > 0 ? (
         <table className="w-full text-left text-xs">
@@ -34,8 +39,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border-subtle)]">
-            {positions.map((p) => (
-              <tr key={p.symbol} className="hover:bg-[var(--color-surface-2)]">
+            {positions.map((p, idx) => (
+              <tr key={`${p.symbol}-${p.direction}-${idx}`} className="hover:bg-[var(--color-surface-2)]">
                 <td className="px-4 py-2 font-mono font-semibold">{p.symbol}</td>
                 <td className="px-4 py-2">
                   <span

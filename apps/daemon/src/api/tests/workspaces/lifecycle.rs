@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
-use custos_runtime::workspace::WorkspaceCoordinator;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::workspace::WorkspaceCoordinator;
+use custos_engine::TaskService;
 
 use crate::api::*;
 
 #[tokio::test]
 async fn test_workspace_api_dispatch_lifecycle() {
-    use custos_adapters::workspace::LocalWorkspaceProvider;
-    use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
-    use custos_persistence::SqliteTaskStore;
+    use custos_contracts::{ExecutionWorkspace, WorkspaceStatus};
+    use custos_integrations::workspace::LocalWorkspaceProvider;
+    use custos_storage::SqliteTaskStore;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
@@ -93,7 +93,7 @@ async fn test_workspace_api_dispatch_lifecycle() {
     };
     let inspect_resp = dispatcher.handle_request(inspect_req).await;
     assert!(inspect_resp.is_success());
-    let dirty: custos_domain::DirtyManifest =
+    let dirty: custos_contracts::DirtyManifest =
         serde_json::from_value(inspect_resp.result.unwrap()).unwrap();
     assert!(!dirty.is_dirty);
 
@@ -125,7 +125,7 @@ async fn test_workspace_api_dispatch_lifecycle() {
 
 #[tokio::test]
 async fn test_workspace_files_api_dispatch() {
-    use custos_persistence::SqliteTaskStore;
+    use custos_storage::SqliteTaskStore;
 
     let temp_dir = std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
     let _ = tokio::fs::create_dir_all(&temp_dir).await;
@@ -138,12 +138,12 @@ async fn test_workspace_files_api_dispatch() {
         task_service.clone(),
     ));
 
-    let ws_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+    let ws_provider = Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new());
     let ws_coord = Arc::new(WorkspaceCoordinator::new(store, ws_provider));
     let ws = ws_coord
         .create_workspace(CreateWorkspaceRequest {
             name: "files_test_ws".into(),
-            kind: custos_domain::WorkspaceKind::Folder {
+            kind: custos_contracts::WorkspaceKind::Folder {
                 path: temp_dir.to_string_lossy().to_string(),
             },
             path: temp_dir.to_string_lossy().to_string(),
@@ -171,7 +171,7 @@ async fn test_workspace_files_api_dispatch() {
         })
         .await;
     assert!(write_resp.is_success());
-    let written: custos_domain::WorkspaceFileContent =
+    let written: custos_contracts::WorkspaceFileContent =
         serde_json::from_value(write_resp.result.unwrap()).unwrap();
     assert_eq!(written.path, "src/hello.rs");
     assert_eq!(written.line_count, 1);
@@ -188,7 +188,7 @@ async fn test_workspace_files_api_dispatch() {
         })
         .await;
     assert!(read_resp.is_success());
-    let read: custos_domain::WorkspaceFileContent =
+    let read: custos_contracts::WorkspaceFileContent =
         serde_json::from_value(read_resp.result.unwrap()).unwrap();
     assert!(read.content.contains("pub fn hello"));
 
@@ -203,7 +203,7 @@ async fn test_workspace_files_api_dispatch() {
         })
         .await;
     assert!(tree_resp.is_success());
-    let tree: custos_domain::WorkspaceFileTree =
+    let tree: custos_contracts::WorkspaceFileTree =
         serde_json::from_value(tree_resp.result.unwrap()).unwrap();
     assert!(tree.entries.iter().any(|e| e.path == "src/hello.rs"));
 
@@ -218,7 +218,7 @@ async fn test_workspace_files_api_dispatch() {
         })
         .await;
     assert!(diff_resp.is_success());
-    let diff: custos_domain::WorkspaceDiffSummary =
+    let diff: custos_contracts::WorkspaceDiffSummary =
         serde_json::from_value(diff_resp.result.unwrap()).unwrap();
     assert!(diff.is_clean);
 

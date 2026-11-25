@@ -84,20 +84,14 @@ const INITIAL_PLUGINS: PluginItem[] = [
 
 export const PluginsModal: React.FC<PluginsModalProps> = ({ isOpen, onClose }) => {
   const { showToast } = useAppContext();
-  const [plugins, setPlugins] = useState<PluginItem[]>(INITIAL_PLUGINS);
+  const [plugins] = useState<PluginItem[]>(INITIAL_PLUGINS);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'core' | 'tools' | 'mcp' | 'storage'>('all');
 
   const togglePlugin = (id: string) => {
-    setPlugins((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          const next = !p.enabled;
-          showToast(`${p.name} ${next ? 'enabled' : 'disabled'}`);
-          return { ...p, enabled: next };
-        }
-        return p;
-      })
+    const target = plugins.find((p) => p.id === id);
+    showToast(
+      `Plugin '${target?.name ?? id}' is managed by daemon package inventory; use Workbench Library to enable/disable live packs.`
     );
   };
 

@@ -2,7 +2,7 @@ use super::LocalApiClient;
 use crate::local_api::envelope::ApiRequest;
 use crate::local_api::methods::*;
 use crate::local_api::params::*;
-use custos_domain::{
+use custos_contracts::{
     ExecuteCellParams, ExecuteCellResult, NotebookCell, NotebookKernelState, RecordReviewParams,
     ReviewTargetType, ReviewerRecord,
 };
@@ -62,7 +62,7 @@ impl LocalApiClient {
     pub async fn list_artifacts(
         &self,
         req_id: &str,
-    ) -> Result<Vec<custos_domain::ArtifactSummary>, String> {
+    ) -> Result<Vec<custos_contracts::ArtifactSummary>, String> {
         let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_LIST, serde_json::json!({}));
         let resp = self.transport.send_request(req).await?;
         if let Some(err) = resp.error {
@@ -94,7 +94,7 @@ impl LocalApiClient {
         &self,
         req_id: &str,
         filter_path: Option<&str>,
-    ) -> Result<custos_domain::ArtifactLineageGraph, String> {
+    ) -> Result<custos_contracts::ArtifactLineageGraph, String> {
         let req = ApiRequest::new(
             req_id,
             METHOD_ARTIFACTS_LINEAGE_GRAPH,

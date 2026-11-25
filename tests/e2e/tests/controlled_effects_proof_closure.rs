@@ -5,30 +5,15 @@
 //! 2. `security_containment_and_rejection`: Containment traversal denial, risk authorization gates, failure receipts.
 //! 3. `daemon_proof_closure_completion`: Process-level proof closure gate requiring verified evidence bundles.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::ToolGate;
-use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_testkit::DeterministicGate;
-use custos_domain::{
+use custos_contracts::{
     Action, ContractEvidence, DomainError, EvidenceKind, ReceiptStatus, RiskLevel, TaskContract,
     TaskStatus, VerificationClaim,
 };
+use custos_engine::contracts::ToolGate;
+use custos_engine::evidence::{EvidenceBundle, EvidencePipeline};
+use custos_integrations::sandbox::developer::SovereignDeveloperAdapter;
 use custos_sdk::local_api::{LocalApiClient, ProcessTransport};
+use custos_testkit::DeterministicGate;
 use std::path::{Path, PathBuf};
 
 fn resolve_daemon_binary() -> PathBuf {
@@ -68,7 +53,13 @@ fn resolve_daemon_binary() -> PathBuf {
             return p;
         }
     }
-    PathBuf::from("target/debug/custos-daemon")
+    let fallback = PathBuf::from("target/debug/custos-daemon");
+    if !fallback.is_file() {
+        let _ = std::process::Command::new("cargo")
+            .args(["build", "-p", "custos-daemon"])
+            .status();
+    }
+    fallback
 }
 
 fn setup_test_workspace(dir: &Path) -> (PathBuf, PathBuf) {
@@ -85,11 +76,9 @@ fn setup_test_workspace(dir: &Path) -> (PathBuf, PathBuf) {
 
 fn physical_gate(workspace_root: impl Into<PathBuf>) -> DeterministicGate {
     let root = workspace_root.into();
-    let driver = std::sync::Arc::new(
-        custos_adapters::sandbox::developer::SovereignDeveloperAdapter::new(&root),
-    );
+    let driver = std::sync::Arc::new(SovereignDeveloperAdapter::new(&root));
     DeterministicGate::with_driver(
-        std::sync::Arc::new(custos_core::authority::AuthorityEngine::default()),
+        std::sync::Arc::new(custos_engine::authority::AuthorityEngine::default()),
         root,
         driver,
     )

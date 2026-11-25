@@ -1,10 +1,10 @@
 //! Composition-root service coordinating OS secrets and durable metadata.
-use custos_core::contracts::credentials::{
+use custos_contracts::{DomainError, OAuthTokenRecord, ProviderConfig};
+use custos_engine::contracts::credentials::{
     credential_part_count, CredentialLocation, CredentialVault, CredentialVaultError,
     MAX_CREDENTIAL_BYTES,
 };
-use custos_domain::{DomainError, OAuthTokenRecord, ProviderConfig};
-use custos_persistence::{CredentialMetadata, CredentialOperation, ProviderRepository};
+use custos_storage::{CredentialMetadata, CredentialOperation, ProviderRepository};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -178,7 +178,7 @@ impl ProviderCredentials {
             return Err(CredentialError::Vault(CredentialVaultError::Invalid).into());
         }
         let op = CredentialOperation {
-            id: custos_domain::new_id("credential"),
+            id: custos_contracts::new_id("credential"),
             metadata: CredentialMetadata::from_token(
                 token,
                 uuid::Uuid::new_v4().to_string(),
@@ -443,7 +443,7 @@ impl ProviderCredentials {
         let metadata = self.repo.credential_metadata(account)?;
         if let Some(metadata) = metadata {
             let op = CredentialOperation {
-                id: custos_domain::new_id("credential"),
+                id: custos_contracts::new_id("credential"),
                 previous: Some(metadata.clone()),
                 metadata,
                 config: None,
@@ -458,7 +458,7 @@ impl ProviderCredentials {
                 let metadata =
                     CredentialMetadata::from_token(&token, uuid::Uuid::new_v4().to_string(), 0);
                 let op = CredentialOperation {
-                    id: custos_domain::new_id("credential"),
+                    id: custos_contracts::new_id("credential"),
                     metadata,
                     previous: None,
                     config: None,

@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use custos_core::contracts::notebook::{
+use custos_contracts::*;
+use custos_engine::bridge::BridgeService;
+use custos_engine::contracts::notebook::{
     CellExecutionStatus, ExecuteCellResult, NotebookCell, NotebookCellType, NotebookKernelState,
 };
-use custos_core::TaskService;
-use custos_domain::*;
-use custos_persistence::SharedCapabilitiesRepository;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
+use custos_storage::SharedCapabilitiesRepository;
 
 use crate::api::tests::harness::MockStore;
 use crate::api::*;
@@ -16,17 +16,16 @@ use crate::api::*;
 async fn test_notebook_kernel_api_lifecycle() {
     let temp_dir = tempfile::tempdir().unwrap();
     let db_path = temp_dir.path().join("custos_test_nb.db");
-    let store =
-        Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::new());
     let bridge_service = Arc::new(BridgeService::new(
         session_manager.clone(),
         task_service.clone(),
     ));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
     let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
         .with_sqlite_store(store)
@@ -67,7 +66,7 @@ async fn test_notebook_kernel_api_lifecycle() {
 
     // 2. Save cells
     let cell = NotebookCell {
-        id: custos_domain::new_id("cell"),
+        id: custos_contracts::new_id("cell"),
         session_id: session_id.to_string(),
         cell_type: NotebookCellType::Code,
         source: "print(6 * 7)".to_string(),
@@ -89,7 +88,11 @@ async fn test_notebook_kernel_api_lifecycle() {
             params: serde_json::json!({ "session_id": session_id, "cells": [cell.clone()] }),
         })
         .await;
-    assert!(save_resp.is_success(), "Failed to save cells: {:?}", save_resp.error);
+    assert!(
+        save_resp.is_success(),
+        "Failed to save cells: {:?}",
+        save_resp.error
+    );
 
     let mut forged = cell.clone();
     forged.status = CellExecutionStatus::Success;
@@ -171,7 +174,11 @@ async fn test_notebook_kernel_api_lifecycle() {
             }),
         })
         .await;
-    assert!(exec_resp.is_success(), "Execution failed: {:?}", exec_resp.error);
+    assert!(
+        exec_resp.is_success(),
+        "Execution failed: {:?}",
+        exec_resp.error
+    );
     let exec_result: ExecuteCellResult = serde_json::from_value(exec_resp.result.unwrap()).unwrap();
     assert_eq!(exec_result.status, CellExecutionStatus::Success);
     assert_eq!(exec_result.stdout.trim(), "42");
@@ -241,7 +248,7 @@ async fn test_reviewer_records_api_lifecycle() {
         session_manager.clone(),
         task_service.clone(),
     ));
-    let db = custos_persistence::DbConnection::open_in_memory().expect("open memory db");
+    let db = custos_storage::DbConnection::open_in_memory().expect("open memory db");
     let shared = Arc::new(SharedCapabilitiesRepository::new(db));
     let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
         .with_shared_capabilities(shared);
@@ -344,7 +351,7 @@ async fn test_reviewer_records_api_lifecycle() {
 
 #[tokio::test]
 async fn test_artifact_and_notes_api_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::new());
     let bridge_service = Arc::new(BridgeService::new(
@@ -352,8 +359,8 @@ async fn test_artifact_and_notes_api_lifecycle() {
         task_service.clone(),
     ));
 
-    let dispatcher =
-        LocalApiDispatcher::new(task_service, session_manager, bridge_service).with_sqlite_store(store);
+    let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+        .with_sqlite_store(store);
 
     // 1. Save a Note
     let save_resp = dispatcher
@@ -439,13 +446,13 @@ async fn test_artifact_and_notes_api_lifecycle() {
 #[tokio::test]
 async fn artifact_reads_are_workspace_scoped_and_annotations_are_version_bound() {
     let temp = tempfile::tempdir().unwrap();
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
     let shared = store.shared_capabilities();
     let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
@@ -531,7 +538,10 @@ async fn artifact_reads_are_workspace_scoped_and_annotations_are_version_bound()
         method: "v1.research.annotations.save".into(),
         params: serde_json::to_value(annotation).unwrap(),
     };
-    assert!(dispatcher.handle_request(save(&annotation)).await.is_success());
+    assert!(dispatcher
+        .handle_request(save(&annotation))
+        .await
+        .is_success());
     let mut forged = annotation.clone();
     forged.artifact_version = 999;
     assert!(!dispatcher.handle_request(save(&forged)).await.is_success());
@@ -546,4 +556,3 @@ async fn artifact_reads_are_workspace_scoped_and_annotations_are_version_bound()
         1
     );
 }
-

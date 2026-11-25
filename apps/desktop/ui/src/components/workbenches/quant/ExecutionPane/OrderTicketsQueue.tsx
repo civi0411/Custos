@@ -34,9 +34,11 @@ export const OrderTicketsQueue: React.FC<OrderTicketsQueueProps> = ({
                   </span>
                   <span
                     className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                      ord.status === 'approved'
+                      ord.status === 'approved' || ord.status === 'filled'
                         ? 'text-emerald-400 bg-emerald-500/10'
-                        : 'text-amber-400 bg-amber-500/10'
+                        : ord.status === 'cancelled' || ord.status === 'rejected'
+                          ? 'text-rose-400 bg-rose-500/10'
+                          : 'text-amber-400 bg-amber-500/10'
                     }`}
                   >
                     {ord.status}
@@ -46,7 +48,10 @@ export const OrderTicketsQueue: React.FC<OrderTicketsQueueProps> = ({
                   Strategy: {ord.strategy_id} · Weight: {(ord.target_weight * 100).toFixed(1)}%
                 </div>
               </div>
-              {ord.status !== 'approved' && ord.status !== 'cancelled' ? (
+              {ord.status !== 'approved' &&
+              ord.status !== 'filled' &&
+              ord.status !== 'cancelled' &&
+              ord.status !== 'rejected' ? (
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -74,7 +79,7 @@ export const OrderTicketsQueue: React.FC<OrderTicketsQueueProps> = ({
                 onClick={onCreateOrder}
                 className="px-3 py-1.5 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600"
               >
-                Draft Sample Order
+                Draft Order Ticket
               </button>
             }
           />

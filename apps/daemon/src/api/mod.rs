@@ -2,7 +2,7 @@
 //!
 //! Protocol types and dispatcher for IPC communication between CLI / UI / VS Code and custosd.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use std::sync::Arc;
 
 mod builder;
@@ -42,11 +42,13 @@ pub use crate::custos_local_api::{
     METHOD_PACKS_MANIFESTS_LIST, METHOD_PACKS_ROLES_LIST, METHOD_PIPELINE_RUN,
     METHOD_PIPELINE_STATUS, METHOD_PIPELINE_STRUCTURE_DETECT, METHOD_PROVIDERS_DELETE,
     METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
-    METHOD_QUANT_BACKTEST_SUBMIT, METHOD_QUANT_FACTORS_DISCOVER, METHOD_QUANT_GATE_EVALUATE,
-    METHOD_QUANT_GRID_EVALUATE, METHOD_QUANT_INDICATORS_COMPUTE, METHOD_QUANT_KILL_SWITCH,
-    METHOD_QUANT_MARKET_BARS_GET, METHOD_QUANT_MARKET_BARS_INGEST, METHOD_QUANT_ORDERBOOK_GET,
-    METHOD_QUANT_ORDERS_APPROVE, METHOD_QUANT_ORDERS_CREATE, METHOD_QUANT_ORDERS_LIST,
-    METHOD_QUANT_PBO_COMPUTE, METHOD_QUANT_REVIEW_COMPUTE, METHOD_QUANT_TEARSHEET_GET,
+    METHOD_QUANT_BACKTEST_SUBMIT, METHOD_QUANT_EVIDENCE_ASSESS, METHOD_QUANT_FACTORS_DISCOVER,
+    METHOD_QUANT_FILLS_LIST, METHOD_QUANT_GATE_EVALUATE, METHOD_QUANT_GRID_EVALUATE,
+    METHOD_QUANT_INDICATORS_COMPUTE, METHOD_QUANT_KILL_SWITCH, METHOD_QUANT_MARKET_BARS_GET,
+    METHOD_QUANT_MARKET_BARS_INGEST, METHOD_QUANT_ORDERBOOK_GET, METHOD_QUANT_ORDERS_APPROVE,
+    METHOD_QUANT_ORDERS_CLOSE_POSITION, METHOD_QUANT_ORDERS_CREATE, METHOD_QUANT_ORDERS_LIST,
+    METHOD_QUANT_PBO_COMPUTE, METHOD_QUANT_POSITIONS_LIST, METHOD_QUANT_REVIEW_COMPUTE,
+    METHOD_QUANT_STRATEGIES_LIST, METHOD_QUANT_STRATEGIES_SAVE, METHOD_QUANT_TEARSHEET_GET,
     METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
     METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
     METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST,
@@ -66,40 +68,32 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACE_FILE_DIFF, METHOD_WORKSPACE_GIT_COMMIT, METHOD_WORKSPACE_GIT_DISCARD,
     METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
 };
-pub(crate) use custos_adapters::harness::HarnessRegistry;
-pub(crate) use custos_runtime::bridge::BridgeService;
-pub(crate) use custos_core::contracts::compute::{
-    ExecutionTargetPort, ExecutionTargetResolver,
+#[cfg(test)]
+pub(crate) use custos_contracts::ResourceActionCapability;
+pub(crate) use custos_contracts::{
+    new_id, validate_browser_url, BrowserConsoleEntry, BrowserNetworkRequest, BrowserPageSnapshot,
+    BrowserSession, BrowserTab, BrowserTabStatus, ComputeBackendKind, CreateHeadlessJobParams,
+    FleetExecReceipt, HeadlessAutomationJob, HeadlessJobStatus, OutboxActionItem,
+    RegisterHostParams, RemoteHostNode, RemoteHostStatus, SessionId, SshAuthMethod,
 };
-pub(crate) use custos_core::contracts::workflow::WorkflowPort;
-pub(crate) use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-#[allow(unused_imports)]
-pub(crate) use custos_core::{AdvanceTask, CreateTask, TaskService};
-#[allow(unused_imports)]
-pub(crate) use custos_domain::{
-    new_id, validate_browser_url, BrowserConsoleEntry,
-    BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
-    ComputeBackendKind, CreateHeadlessJobParams,
-    FleetExecReceipt, HeadlessAutomationJob, HeadlessJobStatus,
-    OutboxActionItem, RegisterHostParams, RemoteHostNode, RemoteHostStatus,
-    SessionId, SshAuthMethod, TaskContract,
-};
-pub(crate) use custos_persistence::repositories::OutboxRepository;
-pub(crate) use custos_persistence::{
-    BrowserRepository, FleetAutomationRepository, ProviderRepository,
-};
-#[cfg(feature = "custos-workbench-research")]
-pub(crate) use custos_workbench_research::ResearchRepository;
+pub(crate) use custos_engine::bridge::BridgeService;
+pub(crate) use custos_engine::contracts::compute::{ExecutionTargetPort, ExecutionTargetResolver};
+pub(crate) use custos_engine::contracts::workflow::WorkflowPort;
+pub(crate) use custos_engine::contracts::workspace_files::WorkspaceFilesPort;
+pub(crate) use custos_engine::session::SessionManager;
+#[cfg(test)]
+pub(crate) use custos_engine::workspace::CreateWorkspaceRequest;
+pub(crate) use custos_engine::workspace::WorkspaceCoordinator;
+pub(crate) use custos_engine::{AdvanceTask, CreateTask, TaskService};
+pub(crate) use custos_engine::{PythonKernelCoordinator, TerminalCoordinator};
+pub(crate) use custos_integrations::harness::HarnessRegistry;
+pub(crate) use custos_integrations::workspace::LocalWorkspaceFilesAdapter;
+pub(crate) use custos_storage::repositories::OutboxRepository;
+pub(crate) use custos_storage::{BrowserRepository, FleetAutomationRepository, ProviderRepository};
 #[cfg(feature = "custos-workbench-assistant")]
 pub(crate) use custos_workbench_assistant::AssistantRepository;
-pub(crate) use custos_runtime::session::SessionManager;
-#[cfg(test)]
-pub(crate) use custos_domain::ResourceActionCapability;
-#[cfg(test)]
-pub(crate) use custos_runtime::workspace::CreateWorkspaceRequest;
-pub(crate) use custos_adapters::workspace::LocalWorkspaceFilesAdapter;
-pub(crate) use custos_runtime::workspace::WorkspaceCoordinator;
-pub(crate) use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
+#[cfg(feature = "custos-workbench-research")]
+pub(crate) use custos_workbench_research::ResearchRepository;
 
 pub mod admission;
 pub mod commands;
@@ -119,14 +113,14 @@ pub struct LocalApiDependencies {
     pub files: Arc<dyn WorkspaceFilesPort>,
     pub harnesses: Arc<HarnessRegistry>,
     pub python_kernel: Option<Arc<PythonKernelCoordinator>>,
-    pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
-    pub mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
+    pub pack_registry: Arc<custos_engine::DomainPackRegistry>,
+    pub mcp_hub: Arc<custos_integrations::mcp::McpFederationHub>,
     pub target_resolver: Option<Arc<dyn ExecutionTargetResolver>>,
 }
 
 impl LocalApiDispatcher {
     pub fn ensure_module_registered(component_id: &str) {
-        let reg = custos_packs::ModuleRegistry::global();
+        let reg = custos_engine::ModuleRegistry::global();
         let _ = &reg;
         match component_id {
             #[cfg(feature = "custos-workbench-assistant")]
@@ -170,7 +164,7 @@ impl LocalApiDispatcher {
                 workflow: None,
                 usage_runs: None,
                 sqlite_store: None,
-                supervision: Arc::new(custos_runtime::workflow::SupervisionCoordinator::default()),
+                supervision: Arc::new(custos_engine::workflow::SupervisionCoordinator::default()),
             },
             env: contexts::EnvironmentServices {
                 workspace: None,
@@ -181,15 +175,15 @@ impl LocalApiDispatcher {
                 python_kernel: deps.python_kernel,
                 admission_coordinator: None,
                 environment_coordinator: None,
-                target_resolver: deps
-                    .target_resolver
-                    .unwrap_or_else(|| Arc::new(custos_adapters::compute::DefaultExecutionTargetResolver)),
+                target_resolver: deps.target_resolver.unwrap_or_else(|| {
+                    Arc::new(custos_integrations::compute::DefaultExecutionTargetResolver)
+                }),
             },
             providers: contexts::ProviderServices {
                 repo: None,
                 credentials: None,
                 model_availability: Default::default(),
-                model_catalog: custos_provider::catalog::ModelCatalogService::new(),
+                model_catalog: custos_integrations::catalog::ModelCatalogService::new(),
                 oauth_callback_server: None,
             },
             workbenches: contexts::WorkbenchServices {
@@ -222,15 +216,15 @@ impl LocalApiDispatcher {
             bridge_service,
             LocalApiDependencies {
                 terminal: Arc::new(TerminalCoordinator::new(Arc::new(
-                    custos_adapters::terminal::NativePtyDriver,
+                    custos_integrations::terminal::NativePtyDriver,
                 ))),
                 files: Arc::new(LocalWorkspaceFilesAdapter::new()),
                 harnesses: Arc::new(HarnessRegistry::new()),
                 python_kernel: Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
-                    custos_adapters::notebook::LocalPythonDriver,
+                    custos_integrations::notebook::LocalPythonDriver,
                 )))),
-                pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
-                mcp_hub: Arc::new(custos_adapters::mcp::McpFederationHub::new()),
+                pack_registry: Arc::new(custos_engine::create_default_pack_registry()),
+                mcp_hub: Arc::new(custos_integrations::mcp::McpFederationHub::new()),
                 target_resolver: None,
             },
         )
@@ -259,7 +253,7 @@ impl LocalApiDispatcher {
         &self,
         req_id: &str,
         ws_id_str: &str,
-    ) -> Result<custos_domain::ExecutionWorkspace, ApiResponse> {
+    ) -> Result<custos_contracts::ExecutionWorkspace, ApiResponse> {
         let coordinator = match self.env.workspace.as_ref() {
             Some(c) => c,
             None => {
@@ -269,7 +263,7 @@ impl LocalApiDispatcher {
                 ))
             }
         };
-        let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
+        let ws_id = custos_contracts::WorkspaceId::new(ws_id_str);
         match coordinator.get_workspace(&ws_id).await {
             Ok(Some(ws)) => Ok(ws),
             Ok(None) => Err(ApiResponse::error(
@@ -312,12 +306,10 @@ impl LocalApiDispatcher {
             "terminal" => true,
             "documents" => true,
             "compute" => true,
-            other => {
-                self.list_capabilities().iter().any(|c| {
-                    (c.id == other || c.resource_id.as_deref() == Some(other))
-                        && c.status == custos_domain::CapabilityStatus::Available
-                })
-            }
+            other => self.list_capabilities().iter().any(|c| {
+                (c.id == other || c.resource_id.as_deref() == Some(other))
+                    && c.status == custos_contracts::CapabilityStatus::Available
+            }),
         }
     }
 
@@ -333,7 +325,7 @@ impl LocalApiDispatcher {
             .workbenches
             .pack_registry
             .get_pack_manifest(canonical)
-            .or_else(|| custos_packs::get_manifest_for_pack(canonical));
+            .or_else(|| custos_engine::get_manifest_for_pack(canonical));
 
         if let Some(manifest) = manifest {
             for cap in &manifest.required_capabilities {
@@ -360,7 +352,7 @@ impl LocalApiDispatcher {
         session_id: &str,
         run_id: &str,
         cursor: u64,
-    ) -> Result<custos_domain::LiveRunReplay, DomainError> {
+    ) -> Result<custos_contracts::LiveRunReplay, DomainError> {
         if self
             .kernel
             .session_manager

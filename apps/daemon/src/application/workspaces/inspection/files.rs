@@ -1,5 +1,5 @@
 use crate::api::*;
-use custos_domain::WriteWorkspaceFileParams;
+use custos_contracts::WriteWorkspaceFileParams;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_workspace_files(&self, req: ApiRequest) -> ApiResponse {
@@ -23,7 +23,12 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_u64())
                     .map(|d| d as usize);
 
-                match self.env.files.get_file_tree(&ws, relative_dir, max_depth).await {
+                match self
+                    .env
+                    .files
+                    .get_file_tree(&ws, relative_dir, max_depth)
+                    .await
+                {
                     Ok(tree) => match serde_json::to_value(&tree) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -104,7 +109,9 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown workspace files method: {unknown}")),
+            unknown => {
+                ApiResponse::error(req.id, format!("Unknown workspace files method: {unknown}"))
+            }
         }
     }
 }

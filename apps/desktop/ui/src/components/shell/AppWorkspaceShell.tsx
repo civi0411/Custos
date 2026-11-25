@@ -380,7 +380,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const pack = String(task.contract?.pack_id || task.metadata?.pack_id || '').toLowerCase();
     if (!pack) return true;
     return mode === 'engineering' ? ['engineering', 'coding', 'code'].includes(pack)
-      : mode === 'research' ? pack === 'research' : ['assistant', 'copilot'].includes(pack);
+      : mode === 'research' ? pack === 'research'
+      : mode === 'quant' ? pack === 'quant'
+      : ['assistant', 'copilot'].includes(pack);
   });
   const inspectedTab = screenResourceTabs.tabs.find(tab => tab.id === screenResourceTabs.activeTabId);
   const inspectedWorkspace = isWebTabOpen && inspectedTab?.workspaceId ? workspaces.find(workspace => workspace.id === inspectedTab.workspaceId) : activeWorkspace;
@@ -435,7 +437,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           onRequestCreateTask={() => {
             setCreateTaskPrefill({
               workspaceId: activeWorkspaceId,
-              packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+              packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : mode === 'quant' ? 'quant' : 'copilot',
             });
             setIsGlobalCreateTaskOpen(true);
           }}

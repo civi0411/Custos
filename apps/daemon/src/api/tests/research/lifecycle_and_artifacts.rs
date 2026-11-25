@@ -1,19 +1,17 @@
 use std::sync::Arc;
 
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
-use custos_workbench_research::{
-    ClaimGroundingLevel, PassageAnchor, ResearchClaim, SourceRecord,
-};
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
+use custos_workbench_research::{ClaimGroundingLevel, PassageAnchor, ResearchClaim, SourceRecord};
 
 use crate::api::*;
 
 #[tokio::test]
 async fn test_research_api_dispatch_lifecycle() {
-    use custos_adapters::workspace::LocalWorkspaceProvider;
-    use custos_persistence::SqliteTaskStore;
-    use custos_runtime::workspace::WorkspaceCoordinator;
+    use custos_engine::workspace::WorkspaceCoordinator;
+    use custos_integrations::workspace::LocalWorkspaceProvider;
+    use custos_storage::SqliteTaskStore;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
@@ -27,7 +25,9 @@ async fn test_research_api_dispatch_lifecycle() {
         store.clone(),
         Arc::new(LocalWorkspaceProvider::new()),
     ));
-    let research = Arc::new(custos_workbench_research::ResearchRepository::from_raw(store.db().writer_arc()));
+    let research = Arc::new(custos_workbench_research::ResearchRepository::from_raw(
+        store.db().writer_arc(),
+    ));
     let dispatcher = LocalApiDispatcher::new(
         task_service.clone(),
         session_manager.clone(),
@@ -172,10 +172,7 @@ async fn test_research_api_dispatch_lifecycle() {
         serde_json::from_value(list_claim_resp.result.unwrap()).unwrap();
     assert_eq!(claims.len(), 1);
     assert_eq!(claims[0].id, "claim_zne_01");
-    assert_eq!(
-        claims[0].level,
-        ClaimGroundingLevel::L0Ungrounded
-    );
+    assert_eq!(claims[0].level, ClaimGroundingLevel::L0Ungrounded);
     assert_eq!(
         claims[0].evidence_links[0].verified_by,
         "unreviewed_client_proposal"
@@ -183,15 +180,15 @@ async fn test_research_api_dispatch_lifecycle() {
 
     // 4. Recipe definitions and observed executions stay separate. The API
     // exposes the ledger read-only; it does not execute the recipe command.
-    let recipe = custos_domain::Recipe::new(
+    let recipe = custos_contracts::Recipe::new(
         "QEM reproduction",
         "python reproduce.py --seed 7",
-        custos_domain::RecipeEnvironmentSpec::new(),
+        custos_contracts::RecipeEnvironmentSpec::new(),
     );
     research.save_recipe(&recipe).unwrap();
     let mut execution =
-        custos_domain::ExecutionRecord::new(&recipe.id).with_session_id("research_session_01");
-    execution.transition(custos_domain::ExecutionRecordStatus::Completed);
+        custos_contracts::ExecutionRecord::new(&recipe.id).with_session_id("research_session_01");
+    execution.transition(custos_contracts::ExecutionRecordStatus::Completed);
     execution.exit_code = Some(0);
     research.save_execution_record(&execution).unwrap();
 
@@ -203,7 +200,7 @@ async fn test_research_api_dispatch_lifecycle() {
         })
         .await;
     assert!(list_executions.is_success());
-    let records: Vec<custos_domain::ExecutionRecord> =
+    let records: Vec<custos_contracts::ExecutionRecord> =
         serde_json::from_value(list_executions.result.unwrap()).unwrap();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].id, execution.id);

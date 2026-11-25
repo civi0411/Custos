@@ -6,12 +6,6 @@
 //!   Trường -> in-memory SQLite (`SqliteTaskStore::new_in_memory`), `InMemoryOutbox`
 //!   Vinh   -> `MockSandbox`
 //! Nothing here touches the network, spawns a process, or needs a database file.
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
-extern crate custos_engine as custos_runtime;
-extern crate custos_integrations as custos_provider;
-extern crate custos_storage as custos_persistence;
-
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -23,19 +17,19 @@ pub use deterministic_trainer::*;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use custos_core::contracts::sandbox::verify_permit_binding;
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_core::contracts::{
-    MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxCommand, SandboxPort, TrustedKernel,
-};
-use custos_domain::{
+use custos_contracts::{
     digest, new_id, ActionIntent, CancelReceipt, ContinuationPacket, DomainError, ExecutionReceipt,
     FactProposal, MemoryEntry, MemoryError, MemoryScope, Permit, PersonalFact, ProposalReceipt,
     ProposalStatus, RecallQuery, ReceiptStatus, RunHandle, StartRunCommand, WorkerRunId,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_provider::request::{ModelResponse, ProviderRequest};
-use custos_provider::ModelProvider;
+use custos_engine::contracts::sandbox::verify_permit_binding;
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::contracts::{
+    MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxCommand, SandboxPort, TrustedKernel,
+};
+use custos_integrations::request::{ModelResponse, ProviderRequest};
+use custos_integrations::ModelProvider;
+use custos_storage::SqliteTaskStore;
 
 // ───────────────────────────── ModelPort mock (Vĩ) ─────────────────────────────
 
@@ -110,7 +104,7 @@ impl SandboxPort for MockSandbox {
             error_message: None,
             duration_ms: Some(1),
             executed_at: Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         })
     }
 }
@@ -304,7 +298,7 @@ impl WorkflowPort for MockWorkflow {
         Ok(RunHandle::new(
             run_id,
             cmd.task_id,
-            custos_domain::RunStatus::Active,
+            custos_contracts::RunStatus::Active,
             Utc::now(),
         ))
     }
@@ -330,7 +324,7 @@ impl WorkflowPort for MockWorkflow {
         Ok(RunHandle::new(
             run_id.to_string(),
             "resumed",
-            custos_domain::RunStatus::Active,
+            custos_contracts::RunStatus::Active,
             Utc::now(),
         ))
     }

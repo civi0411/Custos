@@ -1,5 +1,5 @@
 // Domain Packs & Workbench Jobs Types
-// Strictly mirrors platform/domain (custos-domain) and apps/daemon (custos-daemon) API
+// Strictly mirrors platform/contracts (custos-contracts) and apps/daemon (custos-daemon) API
 
 export interface DomainPackManifest {
   id: string;

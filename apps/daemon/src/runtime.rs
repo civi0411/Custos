@@ -1,18 +1,18 @@
 use crate::api::LocalApiDispatcher;
 pub use crate::credential_resolver::*;
 pub use crate::tool_executor::*;
-use custos_adapters::harness::HarnessRegistry;
-use custos_provider::routing::router::RouterModelProvider;
-use custos_runtime::bridge::BridgeService;
-use custos_core::contracts::harness::AgentRuntimePort;
-use custos_core::contracts::kernel::KernelPort;
-use custos_core::contracts::sandbox::SandboxPort;
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_core::TaskService;
-use custos_domain::DomainError;
-use custos_persistence::SqliteTaskStore;
-use custos_domain::ModelPort;
-use custos_runtime::session::SessionManager;
+use custos_contracts::DomainError;
+use custos_contracts::ModelPort;
+use custos_engine::bridge::BridgeService;
+use custos_engine::contracts::harness::AgentRuntimePort;
+use custos_engine::contracts::kernel::KernelPort;
+use custos_engine::contracts::sandbox::SandboxPort;
+use custos_engine::contracts::workflow::WorkflowPort;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
+use custos_integrations::harness::HarnessRegistry;
+use custos_integrations::routing::router::RouterModelProvider;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 #[allow(dead_code)]
@@ -31,11 +31,11 @@ pub struct CustosRuntime {
     pub harness: Arc<dyn AgentRuntimePort>,
     pub harnesses: Arc<HarnessRegistry>,
     pub workflow: Arc<dyn WorkflowPort>,
-    pub lease_manager: Arc<custos_runtime::workspace::WorkspaceLeaseManager>,
-    pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
-    pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
-    pub python_coordinator: Option<Arc<custos_runtime::PythonKernelCoordinator>>,
-    pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
+    pub lease_manager: Arc<custos_engine::workspace::WorkspaceLeaseManager>,
+    pub workspace_coordinator: Arc<custos_engine::workspace::WorkspaceCoordinator>,
+    pub terminal_coordinator: Arc<custos_engine::TerminalCoordinator>,
+    pub python_coordinator: Option<Arc<custos_engine::PythonKernelCoordinator>>,
+    pub pack_registry: Arc<custos_engine::DomainPackRegistry>,
 }
 
 impl CustosRuntime {
@@ -51,22 +51,23 @@ impl CustosRuntime {
 
         // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
         let credentials = Self::credential_service(&store);
-        let availability = custos_provider::routing::availability::ModelAvailability::default();
+        let availability = custos_integrations::routing::availability::ModelAvailability::default();
         let credential_resolver = Arc::new(DaemonCredentialResolver {
             availability: availability.clone(),
             store: store.clone(),
             credentials: credentials.clone(),
         });
 
-        let local_adapter = match custos_provider::local::InferenceRuntime::get_or_init()
-        {
+        let local_adapter = match custos_integrations::local::InferenceRuntime::get_or_init() {
             Ok(runtime) => {
                 let local_provider = Arc::new(
-                    custos_provider::local::LocalInferenceProvider::new(runtime),
+                    custos_integrations::local::LocalInferenceProvider::new(runtime),
                 );
-                Some(Arc::new(
-                    custos_provider::local::NativeLocalModelAdapter::new(local_provider),
-                ) as Arc<dyn custos_provider::ModelPort>)
+                Some(
+                    Arc::new(custos_integrations::local::NativeLocalModelAdapter::new(
+                        local_provider,
+                    )) as Arc<dyn custos_integrations::ModelPort>,
+                )
             }
             Err(err) => {
                 tracing::warn!(error = %err, "Local inference engine not available on this platform");
@@ -107,12 +108,12 @@ impl CustosRuntime {
         }
         #[cfg(not(test))]
         {
-            let vault: Arc<dyn custos_core::contracts::credentials::CredentialVault> =
+            let vault: Arc<dyn custos_engine::contracts::credentials::CredentialVault> =
                 if std::env::var("CUSTOS_VAULT_BACKEND").as_deref() == Ok("keyring") {
-                    Arc::new(custos_adapters::host::vault::KeyringCredentialVault)
+                    Arc::new(custos_integrations::host::vault::KeyringCredentialVault)
                 } else {
-                    Arc::new(custos_adapters::host::vault::FileCredentialVault::new(
-                        custos_adapters::host::vault::FileCredentialVault::default_dir(),
+                    Arc::new(custos_integrations::host::vault::FileCredentialVault::new(
+                        custos_integrations::host::vault::FileCredentialVault::default_dir(),
                     ))
                 };
             Arc::new(crate::credentials::ProviderCredentials::new(repo, vault))
@@ -123,7 +124,7 @@ impl CustosRuntime {
         store: Arc<SqliteTaskStore>,
         model: Arc<dyn ModelPort>,
         credentials: Arc<crate::credentials::ProviderCredentials>,
-        availability: custos_provider::routing::availability::ModelAvailability,
+        availability: custos_integrations::routing::availability::ModelAvailability,
     ) -> Result<Self, DomainError> {
         // Phase 1: Storage Crash Recovery and Reconciliation (Gate 3)
         crate::bootstrap::reconcile_storage_on_startup(&store)?;
@@ -134,7 +135,8 @@ impl CustosRuntime {
         let workspace_root = std::env::current_dir().unwrap_or_else(|_| ".".into());
 
         // Phase 3: Kernel and Isolation Services
-        let kernel_services = crate::bootstrap::init_kernel_services(store.clone(), &workspace_root);
+        let kernel_services =
+            crate::bootstrap::init_kernel_services(store.clone(), &workspace_root);
 
         // Phase 4: Workbenches, Packs, and Governed Harness Setup
         let wb_setup = crate::bootstrap::init_workbenches_and_harness(

@@ -6,12 +6,7 @@ impl LocalApiDispatcher {
     pub(super) async fn handle_browser_sessions(&self, req: ApiRequest) -> ApiResponse {
         let fleet = match self.workbenches.browser.as_ref() {
             Some(f) => f,
-            None => {
-                return ApiResponse::error(
-                    req.id,
-                    "BrowserRepository not configured",
-                )
-            }
+            None => return ApiResponse::error(req.id, "BrowserRepository not configured"),
         };
 
         match req.method.as_str() {

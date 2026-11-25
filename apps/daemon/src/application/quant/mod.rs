@@ -25,6 +25,7 @@ impl LocalApiDispatcher {
             METHOD_QUANT_ORDERS_CREATE
             | METHOD_QUANT_ORDERS_LIST
             | METHOD_QUANT_ORDERS_APPROVE
+            | METHOD_QUANT_ORDERS_CLOSE_POSITION
             | METHOD_QUANT_KILL_SWITCH
             | METHOD_QUANT_ORDERBOOK_GET => self.handle_quant_orders(req).await,
 
@@ -32,7 +33,12 @@ impl LocalApiDispatcher {
             | METHOD_QUANT_MARKET_BARS_INGEST
             | METHOD_QUANT_MARKET_BARS_GET
             | METHOD_QUANT_GATE_EVALUATE
-            | METHOD_QUANT_REVIEW_COMPUTE => self.handle_quant_market(req).await,
+            | METHOD_QUANT_REVIEW_COMPUTE
+            | METHOD_QUANT_STRATEGIES_LIST
+            | METHOD_QUANT_STRATEGIES_SAVE
+            | METHOD_QUANT_POSITIONS_LIST
+            | METHOD_QUANT_FILLS_LIST
+            | METHOD_QUANT_EVIDENCE_ASSESS => self.handle_quant_market(req).await,
 
             _ => ApiResponse::error(req.id, format!("Unknown quant method: {}", req.method)),
         }

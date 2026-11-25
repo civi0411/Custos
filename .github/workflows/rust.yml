@@ -40,9 +40,10 @@ jobs:
           bash xtask/scripts/check_deps.sh
           bash xtask/scripts/check_layering.sh
           bash xtask/scripts/check_naming.sh
+          cargo run -p xtask -- check-boundaries
+          cargo run -p xtask -- validate-packs
 
       - name: Check Formatting
-        continue-on-error: true
         run: cargo fmt --check --all
 
       - name: Cargo Check Workspace

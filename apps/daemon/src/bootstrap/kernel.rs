@@ -3,13 +3,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use custos_adapters::documents::SourceFetchAdapter;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_core::contracts::kernel::TrustedKernel;
-use custos_core::TaskService;
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::contracts::kernel::TrustedKernel;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
+use custos_integrations::documents::SourceFetchAdapter;
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_storage::SqliteTaskStore;
 
 pub struct KernelServices {
     pub task_service: Arc<TaskService>,
@@ -17,8 +17,8 @@ pub struct KernelServices {
     pub bridge_service: Arc<BridgeService>,
     pub kernel: Arc<TrustedKernel>,
     pub sandbox: Arc<SovereignDeveloperAdapter>,
-    pub live_runs: custos_runtime::workflow::live::LiveRuns,
-    pub supervision: Arc<custos_runtime::workflow::SupervisionCoordinator>,
+    pub live_runs: custos_engine::workflow::live::LiveRuns,
+    pub supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
 }
 
 pub fn init_kernel_services(store: Arc<SqliteTaskStore>, workspace_root: &Path) -> KernelServices {
@@ -28,18 +28,15 @@ pub fn init_kernel_services(store: Arc<SqliteTaskStore>, workspace_root: &Path) 
         session_manager.clone(),
         task_service.clone(),
     ));
-    let live_runs = custos_runtime::workflow::live::LiveRuns::default();
-    let supervision = Arc::new(custos_runtime::workflow::SupervisionCoordinator::new(
+    let live_runs = custos_engine::workflow::live::LiveRuns::default();
+    let supervision = Arc::new(custos_engine::workflow::SupervisionCoordinator::new(
         Some(store.clone()),
         live_runs.clone(),
     ));
     supervision.ensure_started();
 
     let source_acq = Arc::new(SourceFetchAdapter::with_base_dir(workspace_root));
-    let kernel = Arc::new(TrustedKernel::with_source_acquisition(
-        store,
-        source_acq,
-    ));
+    let kernel = Arc::new(TrustedKernel::with_source_acquisition(store, source_acq));
     let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.to_path_buf()));
 
     KernelServices {

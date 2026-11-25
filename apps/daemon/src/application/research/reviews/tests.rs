@@ -1,5 +1,5 @@
-use custos_domain::{Recipe, RecipeEnvironmentSpec};
-use custos_persistence::SqliteTaskStore;
+use custos_contracts::{Recipe, RecipeEnvironmentSpec};
+use custos_storage::SqliteTaskStore;
 
 #[tokio::test]
 async fn reviews_group_test_without_dispatcher() {

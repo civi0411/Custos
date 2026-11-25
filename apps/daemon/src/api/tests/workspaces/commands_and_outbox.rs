@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 
 use crate::api::*;
 
 #[tokio::test]
 async fn test_command_id_dedup_and_conflict_rejection() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::with_store(store.clone()));
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
@@ -56,7 +56,7 @@ async fn test_command_id_dedup_and_conflict_rejection() {
 
 #[tokio::test]
 async fn command_admission_failure_denies_mutation_and_errors_are_replayed() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::with_store(store.clone()));
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
@@ -101,14 +101,14 @@ async fn command_admission_failure_denies_mutation_and_errors_are_replayed() {
 
 #[tokio::test]
 async fn test_compute_targets_and_experiment_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
     let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
         .with_sqlite_store(store.clone())
         .with_target_resolver(Arc::new(
-            custos_adapters::compute::MockExecutionTargetResolver,
+            custos_integrations::compute::MockExecutionTargetResolver,
         ));
 
     // 1. List compute targets -> must return Colab, Kaggle, Rented GPU / SSH
@@ -196,7 +196,7 @@ async fn test_compute_targets_and_experiment_lifecycle() {
 #[cfg(feature = "custos-workbench-assistant")]
 #[tokio::test]
 async fn test_outbox_mcp_dispatch_flow() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
@@ -206,7 +206,9 @@ async fn test_outbox_mcp_dispatch_flow() {
         .with_outbox(outbox_repo);
 
     // Register MCP server in federation hub
-    let client = Arc::new(custos_adapters::mcp::CustosMcpClient::new("kaggle-cluster"));
+    let client = Arc::new(custos_integrations::mcp::CustosMcpClient::new(
+        "kaggle-cluster",
+    ));
     dispatcher
         .mcp_hub()
         .register_server("kaggle", client)

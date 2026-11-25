@@ -1,19 +1,27 @@
 //! Workflow execution telemetry, waterfall inspection, logs, and watchdog handlers.
 
 use super::super::*;
-use custos_core::contracts::workflow::{
+use custos_contracts::{LogSeverity, SupervisionSeverity};
+use custos_engine::contracts::workflow::{
     SupervisionFindingFilter, SupervisionIngestPort, SupervisionLogFilter, SupervisionQueryPort,
     SupervisionRunFilter,
 };
-use custos_domain::{LogSeverity, SupervisionSeverity};
 
 impl LocalApiDispatcher {
-    pub(crate) async fn handle_workflow_telemetry(&self, req: ApiRequest, submethod: &str) -> ApiResponse {
+    pub(crate) async fn handle_workflow_telemetry(
+        &self,
+        req: ApiRequest,
+        submethod: &str,
+    ) -> ApiResponse {
         match submethod {
-            "overview" | "metrics" | "runs.metrics" => match self.kernel.supervision.overview().await {
-                Ok(data) => ApiResponse::success(req.id, serde_json::to_value(data).unwrap_or_default()),
-                Err(e) => ApiResponse::error(req.id, e.to_string()),
-            },
+            "overview" | "metrics" | "runs.metrics" => {
+                match self.kernel.supervision.overview().await {
+                    Ok(data) => {
+                        ApiResponse::success(req.id, serde_json::to_value(data).unwrap_or_default())
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             "runs" | "runs.list" => {
                 let filter = SupervisionRunFilter {
                     workbench_id: req
@@ -52,7 +60,9 @@ impl LocalApiDispatcher {
                     Ok(Some(view)) => {
                         ApiResponse::success(req.id, serde_json::to_value(view).unwrap_or_default())
                     }
-                    Ok(None) => ApiResponse::error(req.id, format!("Workflow run '{run_id}' not found")),
+                    Ok(None) => {
+                        ApiResponse::error(req.id, format!("Workflow run '{run_id}' not found"))
+                    }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -149,7 +159,8 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            "profiles" | "watchdog.profiles" => match self.kernel.supervision.list_profiles().await {
+            "profiles" | "watchdog.profiles" => match self.kernel.supervision.list_profiles().await
+            {
                 Ok(profiles) => {
                     ApiResponse::success(req.id, serde_json::json!({ "profiles": profiles }))
                 }
@@ -161,24 +172,34 @@ impl LocalApiDispatcher {
                 };
                 let batch = match serde_json::from_value(batch_val) {
                     Ok(b) => b,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid telemetry batch: {e}")),
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid telemetry batch: {e}"))
+                    }
                 };
                 match self.kernel.supervision.ingest_batch(batch).await {
-                    Ok(count) => ApiResponse::success(req.id, serde_json::json!({ "ingested_spans": count })),
+                    Ok(count) => {
+                        ApiResponse::success(req.id, serde_json::json!({ "ingested_spans": count }))
+                    }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id.clone(), format!("Unknown workflow method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id.clone(),
+                format!("Unknown workflow method: {unknown}"),
+            ),
         }
     }
 
-    pub(crate) async fn ingest_otlp_traces_bytes(&self, bytes: &[u8]) -> Result<usize, DomainError> {
-        let batch = custos_adapters::host::telemetry::normalize_otlp_traces_json(bytes)?;
+    pub(crate) async fn ingest_otlp_traces_bytes(
+        &self,
+        bytes: &[u8],
+    ) -> Result<usize, DomainError> {
+        let batch = custos_integrations::host::telemetry::normalize_otlp_traces_json(bytes)?;
         self.kernel.supervision.ingest_batch(batch).await
     }
 
     pub(crate) async fn ingest_otlp_logs_bytes(&self, bytes: &[u8]) -> Result<usize, DomainError> {
-        let batch = custos_adapters::host::telemetry::normalize_otlp_logs_json(bytes)?;
+        let batch = custos_integrations::host::telemetry::normalize_otlp_logs_json(bytes)?;
         self.kernel.supervision.ingest_batch(batch).await
     }
 }

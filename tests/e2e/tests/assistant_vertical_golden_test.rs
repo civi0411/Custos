@@ -7,30 +7,14 @@
 //! 3. Tampered Payload & Unapproved Dispatch Rejection: Tampered payload fails digest validation; pending items cannot skip approval.
 //! 4. Double-Dispatch CAS Fencing: Concurrent dispatches on the same outbox entry are strictly fenced to a single execution.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
 use chrono::Utc;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
-use custos_domain::{
+use custos_contracts::{
     digest, new_id, ActionLifecycleState, Assurance, DomainError, EffectAttempt, EffectStatus,
     ExecutionReceipt, ReceiptStatus,
 };
+use custos_engine::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+use custos_storage::SqliteTaskStore;
 use custos_workbench_assistant::AssistantDraft;
-use custos_persistence::SqliteTaskStore;
 use std::sync::Arc;
 
 fn ensure_task_exists(store: &SqliteTaskStore, task_id: &str) {
@@ -45,7 +29,8 @@ fn ensure_task_exists(store: &SqliteTaskStore, task_id: &str) {
 #[tokio::test]
 async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
-    let assistant_repo = custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc());
+    let assistant_repo =
+        custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc());
 
     // 1. Assistant Draft Creation
     let draft_id = new_id("draft");
@@ -63,10 +48,7 @@ async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() 
     draft.recipient = Some("exec-team@company.internal".into());
     assistant_repo.save_draft_sync(&draft).unwrap();
 
-    let fetched = assistant_repo
-        .get_draft_sync(&draft_id)
-        .unwrap()
-        .unwrap();
+    let fetched = assistant_repo.get_draft_sync(&draft_id).unwrap().unwrap();
     assert_eq!(fetched.status, "draft");
     assert!(fetched.payload_lock.is_none());
 
@@ -81,10 +63,7 @@ async fn test_g10_normal_path_draft_creation_approval_outbox_dispatch_receipt() 
     draft.payload_lock = Some(digest(payload.to_string().as_bytes()));
     assistant_repo.save_draft_sync(&draft).unwrap();
 
-    let approved_draft = assistant_repo
-        .get_draft_sync(&draft_id)
-        .unwrap()
-        .unwrap();
+    let approved_draft = assistant_repo.get_draft_sync(&draft_id).unwrap().unwrap();
     assert_eq!(approved_draft.status, "approved");
     assert!(approved_draft.payload_lock.is_some());
 

@@ -75,4 +75,3 @@ pub(crate) fn render_success_html() -> &'static str {
 </body>
 </html>"#
 }
-

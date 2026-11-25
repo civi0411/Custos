@@ -2,7 +2,7 @@
 
 use crate::api::*;
 use crate::application::capabilities::remote_execution_adapter_connected;
-use custos_adapters::host::binaries::resolve_ssh_binary;
+use custos_integrations::host::binaries::resolve_ssh_binary;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_integrations_fleet(&self, req: ApiRequest) -> ApiResponse {
@@ -103,18 +103,14 @@ impl LocalApiDispatcher {
                 let ssh_bin =
                     resolve_ssh_binary().unwrap_or_else(|| std::path::PathBuf::from("ssh"));
                 let key_path = match &host.auth_method {
-                    SshAuthMethod::KeyPair { private_key_path, .. } => {
-                        Some(private_key_path.as_str())
-                    }
+                    SshAuthMethod::KeyPair {
+                        private_key_path, ..
+                    } => Some(private_key_path.as_str()),
                     _ => None,
                 };
 
-                match custos_adapters::integrations::ping_ssh_host(
-                    &ssh_bin,
-                    &host.host,
-                    &host.user,
-                    host.port,
-                    key_path,
+                match custos_integrations::integrations::ping_ssh_host(
+                    &ssh_bin, &host.host, &host.user, host.port, key_path,
                 )
                 .await
                 {
@@ -183,19 +179,14 @@ impl LocalApiDispatcher {
                 let ssh_bin =
                     resolve_ssh_binary().unwrap_or_else(|| std::path::PathBuf::from("ssh"));
                 let key_path = match &host.auth_method {
-                    SshAuthMethod::KeyPair { private_key_path, .. } => {
-                        Some(private_key_path.as_str())
-                    }
+                    SshAuthMethod::KeyPair {
+                        private_key_path, ..
+                    } => Some(private_key_path.as_str()),
                     _ => None,
                 };
 
-                match custos_adapters::integrations::exec_ssh_command(
-                    &ssh_bin,
-                    &host.host,
-                    &host.user,
-                    host.port,
-                    key_path,
-                    command,
+                match custos_integrations::integrations::exec_ssh_command(
+                    &ssh_bin, &host.host, &host.user, host.port, key_path, command,
                 )
                 .await
                 {

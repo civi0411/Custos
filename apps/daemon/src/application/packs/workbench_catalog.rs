@@ -1,8 +1,18 @@
 use super::super::*;
 
 impl LocalApiDispatcher {
-    #[allow(dead_code)]
-    pub(crate) fn require_pack_enabled(&self, pack_id: &str, req_id: &str) -> Result<(), ApiResponse> {
+    #[cfg_attr(
+        not(any(
+            feature = "custos-workbench-quant",
+            feature = "custos-workbench-research"
+        )),
+        allow(dead_code)
+    )]
+    pub(crate) fn require_pack_enabled(
+        &self,
+        pack_id: &str,
+        req_id: &str,
+    ) -> Result<(), ApiResponse> {
         let canonical = match pack_id {
             "quant" => "quant",
             "research" => "research",
@@ -63,21 +73,21 @@ impl LocalApiDispatcher {
                 for job in all_jobs {
                     if let Some(fl) = filter_lens {
                         let matches_lens = match &job.lens {
-                            custos_domain::WorkbenchLens::Coding => {
+                            custos_contracts::WorkbenchLens::Coding => {
                                 fl.eq_ignore_ascii_case("coding") || fl.eq_ignore_ascii_case("code")
                             }
-                            custos_domain::WorkbenchLens::Research => {
+                            custos_contracts::WorkbenchLens::Research => {
                                 fl.eq_ignore_ascii_case("research")
                             }
-                            custos_domain::WorkbenchLens::Assistant => {
+                            custos_contracts::WorkbenchLens::Assistant => {
                                 fl.eq_ignore_ascii_case("assistant")
                                     || fl.eq_ignore_ascii_case("chat")
                             }
-                            custos_domain::WorkbenchLens::Quant => {
+                            custos_contracts::WorkbenchLens::Quant => {
                                 fl.eq_ignore_ascii_case("quant")
                                     || fl.eq_ignore_ascii_case("trading")
                             }
-                            custos_domain::WorkbenchLens::Custom(id) => {
+                            custos_contracts::WorkbenchLens::Custom(id) => {
                                 fl.eq_ignore_ascii_case(id.as_str())
                             }
                         };
@@ -121,7 +131,7 @@ impl LocalApiDispatcher {
 
                         _ => (
                             JobOperationalStatus::Degraded,
-                            Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                            Some("Provider not configured — configure an API key or OAuth provider in Settings > Providers".into()),
                         ),
                     };
 
@@ -176,7 +186,7 @@ impl LocalApiDispatcher {
 
                             _ => (
                                 JobOperationalStatus::Degraded,
-                                Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                                Some("Provider not configured — configure an API key or OAuth provider in Settings > Providers".into()),
                             ),
                         };
 
@@ -266,11 +276,11 @@ impl LocalApiDispatcher {
                     "source": "packs_job",
                     "job_id": job.job_id,
                     "pack_id": match &job.lens {
-                        custos_domain::WorkbenchLens::Coding => "engineering",
-                        custos_domain::WorkbenchLens::Research => "research",
-                        custos_domain::WorkbenchLens::Assistant => "assistant",
-                        custos_domain::WorkbenchLens::Quant => "quant",
-                        custos_domain::WorkbenchLens::Custom(id) => id.as_str(),
+                        custos_contracts::WorkbenchLens::Coding => "engineering",
+                        custos_contracts::WorkbenchLens::Research => "research",
+                        custos_contracts::WorkbenchLens::Assistant => "assistant",
+                        custos_contracts::WorkbenchLens::Quant => "quant",
+                        custos_contracts::WorkbenchLens::Custom(id) => id.as_str(),
                     },
                     "lens": job.lens.as_str(),
                     "primary_role": job.primary_role,
@@ -294,7 +304,8 @@ impl LocalApiDispatcher {
                     Ok((task, _event)) => {
                         if let Some(ref sid) = session_id {
                             let _ = self
-                                .kernel.session_manager
+                                .kernel
+                                .session_manager
                                 .append_user_message(
                                     &SessionId(sid.clone()),
                                     &format!(

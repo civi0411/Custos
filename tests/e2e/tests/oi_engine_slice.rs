@@ -5,27 +5,11 @@
 //! - `admissibility_and_compilation`: Validates admissibility gate and DAG loading.
 //! - `graph_runtime_execution`: Validates full execution through GraphRuntime & WorkerExecutor.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
-use custos_runtime::oi::DecisionSnapshotExtractor;
-use custos_domain::oi::DecisionSnapshot;
-use custos_domain::task::TaskContract;
-use custos_persistence::SqliteTaskStore;
+use custos_contracts::oi::DecisionSnapshot;
+use custos_contracts::task::TaskContract;
+use custos_engine::contracts::kernel::{KernelPort, TrustedKernel};
+use custos_engine::oi::DecisionSnapshotExtractor;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 
 async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) {
@@ -58,9 +42,9 @@ async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) 
 // ─────────────────────────────────────────────────────────────────────────────
 mod engine_planning_overhead {
     use super::*;
-    use custos_core::contracts::oi::OiPlannerPort;
-    use custos_domain::oi::ExecutionTopology;
-    use custos_runtime::oi::engine::OiEngine;
+    use custos_contracts::oi::ExecutionTopology;
+    use custos_engine::contracts::oi::OiPlannerPort;
+    use custos_engine::oi::engine::OiEngine;
     use std::time::Instant;
 
     #[tokio::test]
@@ -90,11 +74,11 @@ mod engine_planning_overhead {
 // ─────────────────────────────────────────────────────────────────────────────
 mod admissibility_and_compilation {
     use super::*;
-    use custos_core::contracts::oi::OiPlannerPort;
-    use custos_runtime::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
-    use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-    use custos_runtime::oi::engine::OiEngine;
-    use custos_runtime::workflow::revision_loader::RevisionLoader;
+    use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
+    use custos_engine::contracts::oi::OiPlannerPort;
+    use custos_engine::oi::admissibility::{AdmissibilityEvaluator, AdmissibilityResult};
+    use custos_engine::oi::engine::OiEngine;
+    use custos_engine::workflow::revision_loader::RevisionLoader;
 
     #[tokio::test]
     async fn test_admissibility_and_dag_compilation() {
@@ -133,12 +117,12 @@ mod admissibility_and_compilation {
 // ─────────────────────────────────────────────────────────────────────────────
 mod graph_runtime_execution {
     use super::*;
-    use custos_core::contracts::oi::OiPlannerPort;
-    use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-    use custos_runtime::oi::engine::OiEngine;
-    use custos_runtime::workflow::graph_runtime::GraphRuntime;
-    use custos_runtime::workflow::revision_loader::RevisionLoader;
-    use custos_runtime::workflow::worker_executor::WorkerExecutor;
+    use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
+    use custos_engine::contracts::oi::OiPlannerPort;
+    use custos_engine::oi::engine::OiEngine;
+    use custos_engine::workflow::graph_runtime::GraphRuntime;
+    use custos_engine::workflow::revision_loader::RevisionLoader;
+    use custos_engine::workflow::worker_executor::WorkerExecutor;
 
     #[tokio::test]
     async fn planning_without_a_bound_worker_cannot_claim_execution_success() {

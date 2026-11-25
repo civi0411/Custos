@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use custos_core::{TaskEvent, TaskStore};
-use custos_domain::{ContinuationPacket, DomainError, Span, Task};
+use custos_contracts::{ContinuationPacket, DomainError, Span, Task};
+use custos_engine::{TaskEvent, TaskStore};
 use std::sync::Mutex;
 
 pub struct MockStore {

@@ -1,11 +1,11 @@
 use super::super::super::*;
-use custos_core::{CreateTask, TaskService};
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::{CreateTask, TaskService};
 use std::sync::Arc;
 
 pub async fn setup_quant_env() -> (LocalApiDispatcher, String) {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     store
         .packages()
         .commit_installed("quant", "0.1.0", "any", None, "packages/quant/0.1.0")

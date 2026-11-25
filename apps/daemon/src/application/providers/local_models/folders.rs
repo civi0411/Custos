@@ -6,9 +6,7 @@ impl LocalApiDispatcher {
             "v1.local_models.folders.list" => {
                 let repo = match self.providers.repo.as_ref() {
                     Some(r) => r,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let folders = match repo.list_local_folders() {
                     Ok(f) => f,
@@ -22,9 +20,7 @@ impl LocalApiDispatcher {
             "v1.local_models.folders.add" => {
                 let repo = match self.providers.repo.as_ref() {
                     Some(r) => r,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let folder_path = match req.params.get("folder_path").and_then(|v| v.as_str()) {
                     Some(p) if !p.trim().is_empty() => p.trim(),
@@ -43,8 +39,8 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
                 let now = chrono::Utc::now().timestamp_millis();
-                let folder = custos_domain::LocalModelFolder {
-                    id: custos_domain::new_id("fld"),
+                let folder = custos_contracts::LocalModelFolder {
+                    id: custos_contracts::new_id("fld"),
                     folder_path: folder_path.to_string(),
                     label,
                     is_active: true,
@@ -55,9 +51,10 @@ impl LocalApiDispatcher {
                 if let Err(e) = repo.save_local_folder(&folder) {
                     return ApiResponse::error(req.id, e.to_string());
                 }
-                let hardware = custos_provider::local::metal_probe::probe_local_hardware();
-                let discovered =
-                    custos_provider::local::folder_scanner::scan_folder_for_models(&folder, &hardware);
+                let hardware = custos_integrations::local::metal_probe::probe_local_hardware();
+                let discovered = custos_integrations::local::folder_scanner::scan_folder_for_models(
+                    &folder, &hardware,
+                );
                 for m in &discovered {
                     if let Err(error) = repo.upsert_cached_model(m) {
                         return ApiResponse::error(
@@ -78,9 +75,7 @@ impl LocalApiDispatcher {
             "v1.local_models.folders.remove" => {
                 let repo = match self.providers.repo.as_ref() {
                     Some(r) => r,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let id = match req.params.get("id").and_then(|v| v.as_str()) {
                     Some(id) if !id.trim().is_empty() => id.trim(),
@@ -97,16 +92,14 @@ impl LocalApiDispatcher {
             "v1.local_models.scan" => {
                 let repo = match self.providers.repo.as_ref() {
                     Some(r) => r,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let folder_id = req.params.get("folder_id").and_then(|v| v.as_str());
                 let folders = match repo.list_local_folders() {
                     Ok(f) => f,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let hardware = custos_provider::local::metal_probe::probe_local_hardware();
+                let hardware = custos_integrations::local::metal_probe::probe_local_hardware();
                 let mut total_discovered = Vec::new();
                 for f in &folders {
                     if let Some(fid) = folder_id {
@@ -117,8 +110,9 @@ impl LocalApiDispatcher {
                     if !f.is_active {
                         continue;
                     }
-                    let found =
-                        custos_provider::local::folder_scanner::scan_folder_for_models(f, &hardware);
+                    let found = custos_integrations::local::folder_scanner::scan_folder_for_models(
+                        f, &hardware,
+                    );
                     for m in &found {
                         if let Err(error) = repo.upsert_cached_model(m) {
                             return ApiResponse::error(
@@ -143,9 +137,7 @@ impl LocalApiDispatcher {
             "v1.local_models.list" => {
                 let repo = match self.providers.repo.as_ref() {
                     Some(r) => r,
-                    None => {
-                        return ApiResponse::error(req.id, "ProviderRepository not configured")
-                    }
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
                 };
                 let folder_id = req.params.get("folder_id").and_then(|v| v.as_str());
                 match repo.list_cached_models(folder_id) {
@@ -157,7 +149,7 @@ impl LocalApiDispatcher {
                 }
             }
             "v1.local_models.hardware" => {
-                let hardware = custos_provider::local::metal_probe::probe_local_hardware();
+                let hardware = custos_integrations::local::metal_probe::probe_local_hardware();
                 match serde_json::to_value(&hardware) {
                     Ok(val) => ApiResponse::success(req.id, val),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),

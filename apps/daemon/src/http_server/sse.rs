@@ -47,7 +47,7 @@ pub async fn handle_sse_events(
     let initial = if valid(&session) && valid(&run) {
         api.live_run(&session, &run, cursor).await
     } else {
-        Err(custos_domain::DomainError::Validation(
+        Err(custos_contracts::DomainError::Validation(
             "Invalid event scope".into(),
         ))
     };
@@ -86,8 +86,7 @@ pub async fn handle_sse_events(
                 ))
         {
             cursor = replay.snapshot.cursor;
-            let data =
-                serde_json::to_string(&replay.snapshot).map_err(std::io::Error::other)?;
+            let data = serde_json::to_string(&replay.snapshot).map_err(std::io::Error::other)?;
             write_live(
                 stream,
                 format!("id: {cursor}\nevent: snapshot\ndata: {data}\n\n").as_bytes(),

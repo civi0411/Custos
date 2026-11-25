@@ -7,7 +7,7 @@ impl ApiTransport for MockTransport {
     async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
         match req.method.as_str() {
             METHOD_TASKS_CREATE => {
-                let task = Task::new(custos_domain::new_id("task"), "Mock Task".to_string());
+                let task = Task::new(custos_contracts::new_id("task"), "Mock Task".to_string());
                 Ok(ApiResponse::ok(
                     req.id,
                     serde_json::to_value(&task).unwrap(),

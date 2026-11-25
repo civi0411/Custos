@@ -2,7 +2,7 @@
 
 use super::LocalApiDispatcher;
 use crate::custos_local_api::{ApiRequest, ApiResponse, ExplainPlanRequest};
-use custos_runtime::oi::ExplainService;
+use custos_engine::oi::ExplainService;
 
 pub struct OiApiHandler;
 
@@ -15,8 +15,8 @@ impl OiApiHandler {
 
         let task_id = params
             .task_id
-            .unwrap_or_else(|| custos_domain::new_id("task"));
-        let mut snapshot = custos_domain::oi::DecisionSnapshot::new(&task_id);
+            .unwrap_or_else(|| custos_contracts::new_id("task"));
+        let mut snapshot = custos_contracts::oi::DecisionSnapshot::new(&task_id);
         if let Some(budget) = params.budget_limit_tokens {
             snapshot.remaining_budget_tokens = budget;
         }

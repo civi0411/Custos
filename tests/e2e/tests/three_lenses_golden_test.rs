@@ -7,27 +7,11 @@
 //! 4. Draft payload lock guarantees content immutability after approval.
 //! 5. Project/workspace switch preserves history, drafts, and context scope without leaking active runs or permissions.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_domain::{
+use custos_contracts::{
     ConversationTurn, DomainError, SessionMode, SessionStatus, TurnActorKind, WorkbenchLens,
 };
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::session::SessionManager;
+use custos_engine::session::SessionManager;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -167,15 +151,17 @@ async fn test_g08_lens_switch_idempotency_and_no_permission_leakage() {
 
 #[tokio::test]
 async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
-    use custos_runtime::bridge::BridgeService;
-    use custos_core::TaskService;
     use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
+    use custos_engine::bridge::BridgeService;
+    use custos_engine::TaskService;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc()));
+    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(
+        store.writer_arc(),
+    ));
     let dispatcher =
         LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
 
@@ -234,15 +220,17 @@ async fn test_g08_independent_draft_scoping_and_cross_session_isolation() {
 
 #[tokio::test]
 async fn test_g08_draft_payload_lock_guarantees_immutability_after_review() {
-    use custos_runtime::bridge::BridgeService;
-    use custos_core::TaskService;
     use custos_daemon::api::{ApiRequest, LocalApiDispatcher, METHOD_ASSISTANT_DRAFTS_SAVE};
+    use custos_engine::bridge::BridgeService;
+    use custos_engine::TaskService;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(store.writer_arc()));
+    let assistant = Arc::new(custos_workbench_assistant::AssistantRepository::from_raw(
+        store.writer_arc(),
+    ));
     let dispatcher =
         LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
 

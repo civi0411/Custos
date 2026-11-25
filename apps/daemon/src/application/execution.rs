@@ -11,35 +11,77 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
                 };
 
-                let working_dir_str = match req.params.get("working_dir").and_then(|v| v.as_str()) {
-                    Some(dir) => dir.to_string(),
-                    None => {
-                        let coordinator = match self.env.workspace.as_ref() {
-                            Some(c) => c,
-                            None => {
+                let working_dir_path = if let Some(coordinator) = self.env.workspace.as_ref() {
+                    let ws_id = custos_contracts::WorkspaceId::new(workspace_id);
+                    let ws_base = match coordinator.get_workspace(&ws_id).await {
+                        Ok(Some(ws)) => std::path::PathBuf::from(ws.path),
+                        Ok(None) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Workspace {workspace_id} not found"),
+                            );
+                        }
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Workspace {workspace_id} lookup failed: {e}"),
+                            );
+                        }
+                    };
+                    let canonical_base = match ws_base.canonicalize() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Workspace {workspace_id} root inaccessible: {e}"),
+                            );
+                        }
+                    };
+                    match req.params.get("working_dir").and_then(|v| v.as_str()) {
+                        Some(dir) => {
+                            let req_path = std::path::Path::new(dir);
+                            let resolved = if req_path.is_absolute() {
+                                req_path.to_path_buf()
+                            } else {
+                                canonical_base.join(req_path)
+                            };
+                            let canonical_dir = match resolved.canonicalize() {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    return ApiResponse::error(
+                                        req.id,
+                                        format!("Invalid working_dir '{dir}': {e}"),
+                                    );
+                                }
+                            };
+                            if !canonical_dir.starts_with(&canonical_base) {
                                 return ApiResponse::error(
                                     req.id,
-                                    "WorkspaceCoordinator not configured on daemon",
-                                )
-                            }
-                        };
-                        let ws_id = custos_domain::WorkspaceId::new(workspace_id);
-                        match coordinator.get_workspace(&ws_id).await {
-                            Ok(Some(ws)) => ws.path,
-                            Ok(None) => {
-                                return ApiResponse::error(
-                                    req.id,
-                                    format!("Workspace {workspace_id} not found"),
+                                    format!(
+                                        "Security boundary violation: working_dir '{dir}' escapes workspace '{}'",
+                                        canonical_base.display()
+                                    ),
                                 );
                             }
-                            Err(e) => {
-                                return ApiResponse::error(
-                                    req.id,
-                                    format!("Workspace {workspace_id} lookup failed: {e}"),
-                                );
-                            }
+                            canonical_dir
+                        }
+                        None => canonical_base,
+                    }
+                } else if let Some(dir) = req.params.get("working_dir").and_then(|v| v.as_str()) {
+                    match std::path::Path::new(dir).canonicalize() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Invalid working_dir '{dir}': {e}"),
+                            );
                         }
                     }
+                } else {
+                    return ApiResponse::error(
+                        req.id,
+                        "WorkspaceCoordinator not configured on daemon",
+                    );
                 };
 
                 let command = req.params.get("command").and_then(|v| v.as_str());
@@ -55,14 +97,9 @@ impl LocalApiDispatcher {
                     .unwrap_or(24) as u16;
 
                 match self
-                    .env.terminal
-                    .spawn(
-                        workspace_id,
-                        std::path::Path::new(&working_dir_str),
-                        command,
-                        cols,
-                        rows,
-                    )
+                    .env
+                    .terminal
+                    .spawn(workspace_id, &working_dir_path, command, cols, rows)
                     .await
                 {
                     Ok(session) => match serde_json::to_value(&session) {
@@ -125,7 +162,8 @@ impl LocalApiDispatcher {
                     .unwrap_or(65536) as usize;
 
                 match self
-                    .env.terminal
+                    .env
+                    .terminal
                     .read_output(session_id, from_seq, max_bytes)
                     .await
                 {
@@ -224,34 +262,59 @@ impl LocalApiDispatcher {
                 let cwd_path = if let Some(ws_id) = &params.workspace_id {
                     match self.resolve_workspace_for_dispatch(&req.id, ws_id).await {
                         Ok(ws) => {
-                            let base = std::path::PathBuf::from(ws.path);
-                            if let Some(c) = &params.cwd {
-                                let requested = std::path::PathBuf::from(c);
-                                if requested.is_absolute() && !requested.starts_with(&base) {
+                            let base = std::path::PathBuf::from(&ws.path);
+                            let canonical_base = match base.canonicalize() {
+                                Ok(p) => p,
+                                Err(e) => {
                                     return ApiResponse::error(
                                         req.id,
-                                        format!("Security boundary violation: cwd '{c}' escapes registered workspace '{}'", base.display()),
+                                        format!("Workspace root inaccessible: {e}"),
                                     );
                                 }
-                                requested
+                            };
+                            if let Some(c) = &params.cwd {
+                                let requested = std::path::PathBuf::from(c);
+                                let resolved = if requested.is_absolute() {
+                                    requested
+                                } else {
+                                    canonical_base.join(requested)
+                                };
+                                let canonical_req = match resolved.canonicalize() {
+                                    Ok(p) => p,
+                                    Err(e) => {
+                                        return ApiResponse::error(
+                                            req.id,
+                                            format!("Invalid cwd '{c}': {e}"),
+                                        );
+                                    }
+                                };
+                                if !canonical_req.starts_with(&canonical_base) {
+                                    return ApiResponse::error(
+                                        req.id,
+                                        format!("Security boundary violation: cwd '{c}' escapes registered workspace '{}'", canonical_base.display()),
+                                    );
+                                }
+                                canonical_req
                             } else {
-                                base
+                                canonical_base
                             }
                         }
                         Err(resp) => return resp,
                     }
                 } else if let Some(c) = &params.cwd {
                     let requested = std::path::PathBuf::from(c);
-                    // Check if requested cwd is within ANY registered workspace
                     let registered_workspaces =
                         coordinator.list_workspaces().await.unwrap_or_default();
-                    let canonical = requested
-                        .canonicalize()
-                        .unwrap_or_else(|_| requested.clone());
+                    let canonical = match requested.canonicalize() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return ApiResponse::error(req.id, format!("Invalid cwd '{c}': {e}"));
+                        }
+                    };
                     let is_within_registered = registered_workspaces.iter().any(|ws| {
-                        let ws_path = std::path::PathBuf::from(&ws.path);
-                        let ws_canonical = ws_path.canonicalize().unwrap_or(ws_path);
-                        canonical.starts_with(&ws_canonical)
+                        std::path::PathBuf::from(&ws.path)
+                            .canonicalize()
+                            .is_ok_and(|ws_canonical| canonical.starts_with(&ws_canonical))
                     });
                     if !is_within_registered {
                         return ApiResponse::error(
@@ -259,7 +322,7 @@ impl LocalApiDispatcher {
                             format!("Security boundary violation: raw harness execution requires cwd inside a registered workspace, '{c}' is outside registered boundaries"),
                         );
                     }
-                    requested
+                    canonical
                 } else {
                     return ApiResponse::error(
                         req.id,
@@ -268,7 +331,8 @@ impl LocalApiDispatcher {
                 };
 
                 match self
-                    .env.harnesses
+                    .env
+                    .harnesses
                     .run_native(&params.harness_id, &params.instruction, &cwd_path)
                     .await
                 {
@@ -292,7 +356,8 @@ impl LocalApiDispatcher {
                     }
                 };
                 match self
-                    .env.harnesses
+                    .env
+                    .harnesses
                     .cancel(&params.harness_id, &params.run_id)
                     .await
                 {
@@ -312,7 +377,8 @@ impl LocalApiDispatcher {
                     }
                 };
                 match self
-                    .env.harnesses
+                    .env
+                    .harnesses
                     .steer(&params.harness_id, &params.run_id, &params.guidance)
                     .await
                 {

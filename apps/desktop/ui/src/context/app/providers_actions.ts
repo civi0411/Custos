@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ProviderItem, ClientApiKey, ModelCombo, ConnectedAccount } from '@/types';
 import type { ProviderConfigRecord } from '@/types/domain';
 import { daemonClient } from '@/api/daemon_client';
+import { getErrorMessage } from '@/lib/utils';
 import {
   mapBackendKey,
   PROVIDER_LABELS,
@@ -21,7 +22,7 @@ export interface ProvidersActionsDeps {
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
   selectedModel: string;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
-  refreshProviderState: () => Promise<{ providers: ProviderConfigRecord[]; keys: any[]; accounts: ConnectedAccount[] }>;
+  refreshProviderState: () => Promise<{ providers: ProviderConfigRecord[]; keys: Parameters<typeof mapBackendKey>[0][]; accounts: ConnectedAccount[] }>;
   setIsAddProviderOpen: (open: boolean) => void;
   showToast: (msg: string) => void;
 }
@@ -80,9 +81,9 @@ export function useProvidersActions({
       await refreshProviderState();
       setIsAddProviderOpen(false);
       showToast(`Provider ${service} saved with secure credentials.`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SaveProvider] Error:', err);
-      showToast(`Failed to save provider: ${err?.message || err}`);
+      showToast(`Failed to save provider: ${getErrorMessage(err)}`);
       throw err;
     }
   };
@@ -92,9 +93,9 @@ export function useProvidersActions({
       await daemonClient.deleteProvider(id);
       await refreshProviderState();
       showToast(`Removed provider ${id} from system.`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[DeleteProvider] Error:', err);
-      showToast(`Failed to remove provider: ${err?.message || err}`);
+      showToast(`Failed to remove provider: ${getErrorMessage(err)}`);
     }
   };
 
@@ -108,8 +109,8 @@ export function useProvidersActions({
       const probeRes = await daemonClient.probeModels(provider.endpoint || '', undefined, undefined, provider.id);
       await refreshProviderState();
       showToast(`✓ Successfully probed ${provider.name}; daemon detected ${probeRes.count} models.`);
-    } catch (err: any) {
-      showToast(`Provider connection error: ${err?.message || err}`);
+    } catch (err: unknown) {
+      showToast(`Provider connection error: ${getErrorMessage(err)}`);
     }
   };
 
@@ -123,9 +124,9 @@ export function useProvidersActions({
         setClientKeys(updated.map(mapBackendKey));
       }
       showToast('New Client Key generated and persisted to SQLite DB.');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[GenerateKey] Error:', err);
-      showToast(`Failed to create key: ${err?.message || err}`);
+      showToast(`Failed to create key: ${getErrorMessage(err)}`);
     }
   };
 
@@ -137,9 +138,9 @@ export function useProvidersActions({
         setClientKeys(updated.map(mapBackendKey));
       }
       showToast(`Revoked Client Key ${id.slice(0, 8)}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[RevokeKey] Error:', err);
-      showToast(`Failed to revoke key: ${err?.message || err}`);
+      showToast(`Failed to revoke key: ${getErrorMessage(err)}`);
     }
   };
 

@@ -48,19 +48,14 @@ fn source_capabilities(root: &std::path::Path) -> Result<std::collections::BTree
 
     for manifest in manifests {
         let parent = manifest.parent().unwrap();
-        let value: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&manifest)?)?;
+        let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&manifest)?)?;
         let id = value
             .get("id")
             .and_then(|v| v.as_str())
             .filter(|id| !id.is_empty())
             .ok_or_else(|| anyhow::anyhow!("Missing capability ID: {}", manifest.display()))?;
         let module = parent.file_name().unwrap().to_string_lossy().into_owned();
-        if !parent.join("mod.rs").is_file()
-            || !exports
-                .lines()
-                .any(|line| line.contains(&module))
-        {
+        if !parent.join("mod.rs").is_file() || !exports.lines().any(|line| line.contains(&module)) {
             anyhow::bail!(
                 "Descriptor has no exported adapter module: {}",
                 manifest.display()
@@ -106,7 +101,6 @@ enum Commands {
     /// Run SADE R7 empirical footprint, memory, disk, and admission latency benchmark
     BenchmarkFootprint,
 }
-
 
 fn validate_packs() -> Result<()> {
     use std::fs;
@@ -184,7 +178,10 @@ fn package_workbench(target: Option<String>) -> Result<()> {
         let manifest_path = wb_dir.join("manifest/manifest.json");
         let manifest_content = std::fs::read_to_string(&manifest_path)?;
         let manifest: serde_json::Value = serde_json::from_str(&manifest_content)?;
-        let version = manifest.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0");
+        let version = manifest
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.1.0");
 
         let out_archive = dist.join(format!("{wb}-{version}.tar.gz"));
         let out_manifest = dist.join(format!("{wb}-{version}-manifest.json"));
@@ -193,7 +190,11 @@ fn package_workbench(target: Option<String>) -> Result<()> {
         cmd!(sh, "tar -czf {out_archive} -C {wb_dir} .").run()?;
 
         let sha_file = dist.join(format!("{wb}-{version}.sha256"));
-        let sh_cmd = format!("shasum -a 256 {} > {}", out_archive.display(), sha_file.display());
+        let sh_cmd = format!(
+            "shasum -a 256 {} > {}",
+            out_archive.display(),
+            sha_file.display()
+        );
         cmd!(sh, "sh -c {sh_cmd}").run()?;
 
         let metadata = std::fs::metadata(&out_archive)?;
@@ -238,10 +239,8 @@ fn main() -> Result<()> {
             println!("==> [3/5] Canvas Smoke Invariants");
             cmd!(sh, "node --test tests/desktop/canvas-smoke.mjs tests/desktop/model-catalog-smoke.mjs xtask/scripts/checks-smoke.mjs").run()?;
             println!("==> [4/5] Architecture Invariants & Contracts");
-            cmd!(sh, "bash xtask/scripts/check_deps.sh").run()?;
-            cmd!(sh, "bash xtask/scripts/check_layering.sh").run()?;
+            check_boundaries()?;
             cmd!(sh, "bash xtask/scripts/check_naming.sh").run()?;
-            check_file_line_ceiling(&sh)?;
             cmd!(
                 sh,
                 "cargo test -p custos-testkit -p custos-tests-contract --lib --tests --offline"
@@ -289,9 +288,15 @@ fn benchmark_footprint(sh: &Shell, root: &std::path::Path) -> Result<()> {
         }
         dir_size(&wb_dir, &mut wb_bytes);
         total_wb_bytes += wb_bytes;
-        println!("  • Workbench '{wb}' source & asset footprint: {:.2} KB ({wb_bytes} bytes)", wb_bytes as f64 / 1024.0);
+        println!(
+            "  • Workbench '{wb}' source & asset footprint: {:.2} KB ({wb_bytes} bytes)",
+            wb_bytes as f64 / 1024.0
+        );
     }
-    println!("  • Combined Multi-Workbench Disk Footprint: {:.2} KB ({total_wb_bytes} bytes)", total_wb_bytes as f64 / 1024.0);
+    println!(
+        "  • Combined Multi-Workbench Disk Footprint: {:.2} KB ({total_wb_bytes} bytes)",
+        total_wb_bytes as f64 / 1024.0
+    );
 
     let dist_dir = root.join("dist/workbenches");
     if dist_dir.exists() {
@@ -303,7 +308,10 @@ fn benchmark_footprint(sh: &Shell, root: &std::path::Path) -> Result<()> {
                     if name.starts_with(wb) && name.ends_with(".tar.gz") {
                         if let Ok(meta) = entry.metadata() {
                             let size = meta.len();
-                            println!("  • Archive '{name}': {:.2} KB ({size} bytes)", size as f64 / 1024.0);
+                            println!(
+                                "  • Archive '{name}': {:.2} KB ({size} bytes)",
+                                size as f64 / 1024.0
+                            );
                         }
                     }
                 }
@@ -369,21 +377,30 @@ fn check_boundaries() -> Result<()> {
         }
     }
 
-    if root.join("platform/storage/src/repositories/assistant.rs").exists() {
-        println!("  ⚠ [LEAK] platform/storage/src/repositories/assistant.rs exists in core storage");
+    if root
+        .join("platform/storage/src/repositories/assistant.rs")
+        .exists()
+    {
+        println!(
+            "  ⚠ [LEAK] platform/storage/src/repositories/assistant.rs exists in core storage"
+        );
         warnings += 1;
     }
 
     let engine_cargo = fs::read_to_string(root.join("platform/engine/Cargo.toml"))?;
     if engine_cargo.contains("custos-workbench-") {
-        println!("  ⚠ [LEAK] platform/engine/Cargo.toml has direct dependencies on workbench crates");
+        println!(
+            "  ⚠ [LEAK] platform/engine/Cargo.toml has direct dependencies on workbench crates"
+        );
         warnings += 1;
     }
 
     if warnings == 0 {
         println!("  ✓ Zero kernel-workbench leaks detected! Clean target architecture achieved.");
     } else {
-        println!("\n  Found {warnings} transitional architecture debt warnings (tracked for resolution in R3..R6).");
+        anyhow::bail!(
+            "Found {warnings} kernel-workbench boundary leak(s); boundary isolation must remain clean."
+        );
     }
 
     println!("\nChecking SADE Topic-Cohesion Invariants (Wave 1 & Wave 2):");
@@ -425,14 +442,36 @@ fn check_boundaries() -> Result<()> {
         }
     }
     if !root.join("sdk/protocol/Cargo.toml").exists() {
-        violations.push("sdk/protocol/Cargo.toml missing: custos-protocol must own neutral wire schemas".into());
+        violations.push(
+            "sdk/protocol/Cargo.toml missing: custos-protocol must own neutral wire schemas".into(),
+        );
     }
     for (manifest, forbidden, rule) in [
-        ("platform/contracts/Cargo.toml", "reqwest", "platform/contracts must stay zero-I/O without reqwest"),
-        ("platform/contracts/Cargo.toml", "rusqlite", "platform/contracts must stay zero-I/O without rusqlite"),
-        ("platform/engine/Cargo.toml", "reqwest", "platform/engine must not depend on reqwest in production"),
-        ("platform/engine/Cargo.toml", "rusqlite", "platform/engine must not depend on rusqlite in production"),
-        ("apps/cli/Cargo.toml", "tauri", "apps/cli must stay a headless pure-Rust CLI without tauri"),
+        (
+            "platform/contracts/Cargo.toml",
+            "reqwest",
+            "platform/contracts must stay zero-I/O without reqwest",
+        ),
+        (
+            "platform/contracts/Cargo.toml",
+            "rusqlite",
+            "platform/contracts must stay zero-I/O without rusqlite",
+        ),
+        (
+            "platform/engine/Cargo.toml",
+            "reqwest",
+            "platform/engine must not depend on reqwest in production",
+        ),
+        (
+            "platform/engine/Cargo.toml",
+            "rusqlite",
+            "platform/engine must not depend on rusqlite in production",
+        ),
+        (
+            "apps/cli/Cargo.toml",
+            "tauri",
+            "apps/cli must stay a headless pure-Rust CLI without tauri",
+        ),
     ] {
         if root.join(manifest).exists() {
             let cargo_text = fs::read_to_string(root.join(manifest))?;
@@ -447,7 +486,10 @@ fn check_boundaries() -> Result<()> {
         for v in &violations {
             eprintln!("  ✗ [VIOLATION] {v}");
         }
-        anyhow::bail!("Topic-cohesion boundary check failed ({} violation(s))", violations.len());
+        anyhow::bail!(
+            "Topic-cohesion boundary check failed ({} violation(s))",
+            violations.len()
+        );
     }
 
     check_file_line_ceiling(&sh)?;
@@ -474,7 +516,10 @@ fn check_file_line_ceiling(sh: &Shell) -> Result<()> {
     }
 
     if !violations.is_empty() {
-        eprintln!("  FAIL: Found {} files exceeding the 600-line ceiling:", violations.len());
+        eprintln!(
+            "  FAIL: Found {} files exceeding the 600-line ceiling:",
+            violations.len()
+        );
         for (f, count) in &violations {
             eprintln!("    - {f}: {count} lines");
         }
@@ -483,7 +528,6 @@ fn check_file_line_ceiling(sh: &Shell) -> Result<()> {
     println!("  ✓ 100% of tracked source files comply with the <= 600 line ceiling.");
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -526,10 +570,27 @@ mod tests {
 
     #[test]
     fn package_command_never_claims_an_unbuilt_artifact() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap();
+        let dist_dir = root.join("dist/workbenches");
+        let generated = [
+            dist_dir.join("research-0.1.0.tar.gz"),
+            dist_dir.join("research-0.1.0.sha256"),
+            dist_dir.join("research-0.1.0-manifest.json"),
+        ];
+        let existed: Vec<bool> = generated.iter().map(|p| p.exists()).collect();
+
         assert!(package_workbench(Some("research".into())).is_ok());
         assert!(package_workbench(Some("unknown".into()))
             .unwrap_err()
             .to_string()
             .contains("Unknown workbench"));
+
+        for (path, was_present) in generated.iter().zip(existed) {
+            if !was_present {
+                let _ = std::fs::remove_file(path);
+            }
+        }
     }
 }

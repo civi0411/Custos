@@ -27,7 +27,7 @@ impl LocalApiDispatcher {
                             )
                         }
                     };
-                    return match custos_adapters::connectors::oauth::start_copilot_device()
+                    return match custos_integrations::connectors::oauth::start_copilot_device()
                         .await
                     {
                         Ok(mut device) => {
@@ -59,7 +59,7 @@ impl LocalApiDispatcher {
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     };
                 }
-                let settings = match custos_adapters::connectors::oauth::oauth_settings(service)
+                let settings = match custos_integrations::connectors::oauth::oauth_settings(service)
                 {
                     Ok(v) => v,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
@@ -74,15 +74,15 @@ impl LocalApiDispatcher {
                     } else if service_type_or_default == "antigravity" {
                         "http://localhost:51121/oauth-callback"
                     } else {
-                        custos_adapters::connectors::oauth::DEFAULT_REDIRECT_URI
+                        custos_integrations::connectors::oauth::DEFAULT_REDIRECT_URI
                     },
                 );
                 let scope = params.scope.as_deref().or(Some(settings.3.as_str()));
 
-                let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
+                let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
                     auth_url, token_url,
                 );
-                let challenge = custos_adapters::connectors::oauth::OAuthPkceManager::generate_pkce_challenge();
+                let challenge = custos_integrations::connectors::oauth::OAuthPkceManager::generate_pkce_challenge();
 
                 match manager.build_authorization_url(client_id, redirect_uri, scope, &challenge) {
                     Ok(res) => {
@@ -132,7 +132,7 @@ impl LocalApiDispatcher {
                     .unwrap_or("openai");
                 let service_type = raw_service.split('-').next().unwrap_or(raw_service);
                 let settings =
-                    match custos_adapters::connectors::oauth::oauth_settings(service_type) {
+                    match custos_integrations::connectors::oauth::oauth_settings(service_type) {
                         Ok(v) => v,
                         Err(e) => return ApiResponse::error(req.id, e.to_string()),
                     };
@@ -144,7 +144,7 @@ impl LocalApiDispatcher {
                     } else if service_type_or_default == "antigravity" {
                         "http://localhost:51121/oauth-callback"
                     } else {
-                        custos_adapters::connectors::oauth::DEFAULT_REDIRECT_URI
+                        custos_integrations::connectors::oauth::DEFAULT_REDIRECT_URI
                     },
                 );
                 let token_url = params.token_endpoint.as_deref().unwrap_or(&settings.1);
@@ -163,8 +163,8 @@ impl LocalApiDispatcher {
                 ) {
                     return ApiResponse::error(req.id, e.to_string());
                 }
-                let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
-                    custos_adapters::connectors::oauth::DEFAULT_OPENAI_AUTH_URL,
+                let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
+                    custos_integrations::connectors::oauth::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
                 );
 
@@ -183,7 +183,7 @@ impl LocalApiDispatcher {
                         // Upsert matching provider config so it appears in UI as active
                         let now = chrono::Utc::now().timestamp_millis();
                         let masked = "oauth".to_string();
-                        let prov_cfg = custos_domain::ProviderConfig {
+                        let prov_cfg = custos_contracts::ProviderConfig {
                             id: provider_id.to_string(),
                             name: identity.unwrap_or_else(|| format!("{provider_id} (OAuth)")),
                             service_type: service_type.to_string(),
@@ -237,16 +237,29 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
 
-                let settings = match custos_adapters::connectors::oauth::oauth_settings(
+                let settings = match custos_integrations::connectors::oauth::oauth_settings(
                     &existing.service_type,
                 ) {
                     Ok(v) => v,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
                 let client_id = params.client_id.as_deref().unwrap_or(&settings.2);
-                let token_url = params.token_endpoint.as_deref().unwrap_or(&settings.1);
-                let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
-                    custos_adapters::connectors::oauth::DEFAULT_OPENAI_AUTH_URL,
+                let token_url = match params.token_endpoint.as_deref() {
+                    Some(custom) => {
+                        let expected_host = settings.1.split('/').nth(2).unwrap_or("");
+                        let custom_host = custom.split('/').nth(2).unwrap_or("");
+                        if !custom.starts_with("https://") || custom_host != expected_host {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Untrusted OAuth token_endpoint '{custom}': host must match '{expected_host}'"),
+                            );
+                        }
+                        custom
+                    }
+                    None => &settings.1,
+                };
+                let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
+                    custos_integrations::connectors::oauth::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
                 );
 

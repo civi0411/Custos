@@ -11,7 +11,7 @@ export interface CreateTaskPrefill {
   description?: string;
   workspaceId?: string;
   sessionId?: string;
-  packId?: 'code' | 'research' | 'copilot';
+  packId?: 'code' | 'research' | 'quant' | 'copilot';
 }
 
 interface ShellModalsProps {

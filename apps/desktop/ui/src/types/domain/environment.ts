@@ -1,5 +1,5 @@
 // Sovereign Agent Execution Environment (AEE) Domain Models
-// Strictly mirrors platform/domain/src/environment and platform/core/src/contracts/environment.rs
+// Strictly mirrors platform/contracts (custos-contracts) and platform/engine (custos-engine)
 
 import type { AssuranceLevel } from './core';
 

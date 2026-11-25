@@ -98,7 +98,10 @@ async fn test_quant_pack_dynamic_admission_after_disable_and_enable() {
     };
     let disable_resp = dispatcher.handle_request(disable_req).await;
     assert!(disable_resp.is_success(), "{:?}", disable_resp.error);
-    assert!(!dispatcher.has_quant(), "Disabling quant must release in-memory quant repo");
+    assert!(
+        !dispatcher.has_quant(),
+        "Disabling quant must release in-memory quant repo"
+    );
 
     // 3. Subsequent execution call must be dynamically rejected without restart
     let resp2 = dispatcher.handle_request(backtest_req.clone()).await;
@@ -113,7 +116,10 @@ async fn test_quant_pack_dynamic_admission_after_disable_and_enable() {
     };
     let enable_resp = dispatcher.handle_request(enable_req).await;
     assert!(enable_resp.is_success(), "{:?}", enable_resp.error);
-    assert!(dispatcher.has_quant(), "Enabling quant must lazily reattach quant repo");
+    assert!(
+        dispatcher.has_quant(),
+        "Enabling quant must lazily reattach quant repo"
+    );
 
     // 5. Execution call succeeds again
     let resp3 = dispatcher.handle_request(backtest_req).await;

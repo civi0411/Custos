@@ -55,13 +55,16 @@ impl LocalApiDispatcher {
                 };
 
                 let all_reviews = self
-                    .workbenches.shared_capabilities
+                    .workbenches
+                    .shared_capabilities
                     .as_ref()
                     .and_then(|s| s.list_reviews(None, None).ok())
                     .unwrap_or_default();
-                let plan =
-                    match SynthesisService::prepare_coding_handoff(&research, &all_reviews, &params)
-                    {
+                let plan = match SynthesisService::prepare_coding_handoff(
+                    &research,
+                    &all_reviews,
+                    &params,
+                ) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
@@ -115,7 +118,7 @@ async fn create_task_batch(
                     let _ = task_service
                         .execute_advance(AdvanceTask {
                             task_id: id.clone(),
-                            next_status: custos_domain::task::TaskStatus::Failed,
+                            next_status: custos_contracts::task::TaskStatus::Failed,
                             expected_epoch: 1,
                             rationale: Some(format!("Handoff batch aborted: {e}")),
                         })

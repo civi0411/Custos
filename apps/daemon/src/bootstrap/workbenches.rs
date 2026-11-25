@@ -3,14 +3,14 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
-use custos_adapters::mcp::McpFederationHub;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_core::contracts::harness::AgentRuntimePort;
-use custos_core::contracts::kernel::TrustedKernel;
-use custos_packs::DomainPackRegistry;
-use custos_persistence::SqliteTaskStore;
-use custos_domain::ModelPort;
+use custos_contracts::ModelPort;
+use custos_engine::contracts::harness::AgentRuntimePort;
+use custos_engine::contracts::kernel::TrustedKernel;
+use custos_engine::DomainPackRegistry;
+use custos_integrations::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
+use custos_integrations::mcp::McpFederationHub;
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_storage::SqliteTaskStore;
 
 use crate::tool_executor::DaemonGovernedToolExecutor;
 
@@ -27,7 +27,7 @@ pub fn init_workbenches_and_harness(
     kernel: Arc<TrustedKernel>,
     model: Arc<dyn ModelPort>,
     sandbox: Arc<SovereignDeveloperAdapter>,
-    supervision: Option<Arc<dyn custos_core::contracts::supervision::SupervisionTraceSink>>,
+    supervision: Option<Arc<dyn custos_engine::contracts::supervision::SupervisionTraceSink>>,
 ) -> WorkbenchHarnessSetup {
     let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.to_path_buf());
 
@@ -35,7 +35,9 @@ pub fn init_workbenches_and_harness(
     let packages_dir = dirs::home_dir()
         .map(|h| h.join(".custos").join("packages"))
         .unwrap_or_else(|| std::path::PathBuf::from(".custos/packages"));
-    if let Ok(discovered) = custos_adapters::host::packages::inventory::scan_local_packages(&packages_dir) {
+    if let Ok(discovered) =
+        custos_integrations::host::packages::inventory::scan_local_packages(&packages_dir)
+    {
         for pkg in discovered {
             let _ = store.packages().register_discovered_candidate(
                 &pkg.component_id,
@@ -69,15 +71,15 @@ pub fn init_workbenches_and_harness(
         }
     };
     let enabled_refs: Vec<&str> = enabled_components.iter().map(String::as_str).collect();
-    let pack_registry = Arc::new(custos_packs::create_pack_registry_from_inventory(
+    let pack_registry = Arc::new(custos_engine::create_pack_registry_from_inventory(
         &enabled_refs,
     ));
 
     let mcp_hub = Arc::new(McpFederationHub::new());
 
     // Dynamic Tool Disclosure & Governed Tool Authorization (R4 / F4)
-    let default_tools = custos_packs::compile_governed_tools(
-        custos_domain::WorkbenchLens::Assistant,
+    let default_tools = custos_engine::compile_governed_tools(
+        custos_contracts::WorkbenchLens::Assistant,
         &pack_registry,
     );
 
@@ -91,11 +93,12 @@ pub fn init_workbenches_and_harness(
     mcp_hub.set_gate_sync(tool_executor.clone());
 
     let governed = Arc::new(
-        custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
+        custos_engine::agent::runtime_port::GovernedAgentRuntime::new(
             model,
             "Custos Governed Agent Runtime",
             default_tools,
         )
+        .with_pack_registry(pack_registry.clone())
         .with_tool_executor(tool_executor),
     );
     harness_reg.register(
@@ -109,7 +112,7 @@ pub fn init_workbenches_and_harness(
     // with SupervisedAgentRunner to guarantee telemetry spans, logging, and watchdog coverage.
     if let Some(ref sink) = supervision {
         for (id, runtime) in harness_reg.runtimes() {
-            let supervised = Arc::new(custos_runtime::agent::SupervisedAgentRunner::new(
+            let supervised = Arc::new(custos_engine::agent::SupervisedAgentRunner::new(
                 runtime,
                 sink.clone(),
             ));
@@ -118,20 +121,18 @@ pub fn init_workbenches_and_harness(
     }
 
     let harnesses = Arc::new(harness_reg);
-    let harness = harnesses
-        .get("claude-code")
-        .unwrap_or_else(|| {
-            let fallback: Arc<dyn AgentRuntimePort> =
-                Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root.to_path_buf()));
-            if let Some(ref sink) = supervision {
-                Arc::new(custos_runtime::agent::SupervisedAgentRunner::new(
-                    fallback,
-                    sink.clone(),
-                ))
-            } else {
-                fallback
-            }
-        });
+    let harness = harnesses.get("claude-code").unwrap_or_else(|| {
+        let fallback: Arc<dyn AgentRuntimePort> =
+            Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root.to_path_buf()));
+        if let Some(ref sink) = supervision {
+            Arc::new(custos_engine::agent::SupervisedAgentRunner::new(
+                fallback,
+                sink.clone(),
+            ))
+        } else {
+            fallback
+        }
+    });
 
     WorkbenchHarnessSetup {
         pack_registry,

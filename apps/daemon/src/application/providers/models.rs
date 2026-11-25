@@ -90,13 +90,13 @@ impl LocalApiDispatcher {
                     .or_else(|| token_record.as_ref().map(|tok| tok.access_token.clone()));
                 if oauth {
                     if let Some(tok) = token_record.as_ref().filter(|tok| tok.is_expired(120)) {
-                        let settings = match custos_adapters::connectors::oauth::oauth_settings(
+                        let settings = match custos_integrations::connectors::oauth::oauth_settings(
                             &tok.service_type,
                         ) {
                             Ok(v) => v,
                             Err(e) => return ApiResponse::error(req.id, e.to_string()),
                         };
-                        let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
+                        let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
                             &settings.0,
                             &settings.1,
                         );
@@ -123,9 +123,9 @@ impl LocalApiDispatcher {
                 let probe = if oauth && provider_type == "copilot" {
                     match api_key_owned.as_deref() {
                         Some(token) => {
-                            custos_provider::routing::probe::probe_copilot_models(token).await
+                            custos_integrations::routing::probe::probe_copilot_models(token).await
                         }
-                        None => Err(custos_domain::DomainError::Validation(
+                        None => Err(custos_contracts::DomainError::Validation(
                             "Copilot OAuth credentials missing".into(),
                         )),
                     }
@@ -135,7 +135,7 @@ impl LocalApiDispatcher {
                             let mut combined = Vec::new();
                             let mut seen_ids = std::collections::HashSet::new();
                             if let Ok(models) =
-                                custos_provider::cloud::google_codeassist::probe_codeassist_models(
+                                custos_integrations::cloud::google_codeassist::probe_codeassist_models(
                                     "antigravity",
                                     "https://cloudcode-pa.googleapis.com",
                                     token,
@@ -149,7 +149,7 @@ impl LocalApiDispatcher {
                                 }
                             }
                             if let Ok(models) =
-                                custos_provider::cloud::google_codeassist::probe_codeassist_models(
+                                custos_integrations::cloud::google_codeassist::probe_codeassist_models(
                                     "gemini",
                                     "https://cloudcode-pa.googleapis.com",
                                     token,
@@ -163,7 +163,7 @@ impl LocalApiDispatcher {
                                 }
                             }
                             if combined.is_empty() {
-                                custos_provider::cloud::google_codeassist::probe_codeassist_models(
+                                custos_integrations::cloud::google_codeassist::probe_codeassist_models(
                                     "antigravity",
                                     "https://cloudcode-pa.googleapis.com",
                                     token,
@@ -173,21 +173,21 @@ impl LocalApiDispatcher {
                                 Ok(combined)
                             }
                         }
-                        None => Err(custos_domain::DomainError::Validation(
+                        None => Err(custos_contracts::DomainError::Validation(
                             "Google OAuth credentials missing".into(),
                         )),
                     }
                 } else if oauth && matches!(provider_type, "openai" | "codex") {
                     match api_key_owned.as_deref() {
                         Some(token) => {
-                            custos_provider::routing::probe::probe_oauth_models(token).await
+                            custos_integrations::routing::probe::probe_oauth_models(token).await
                         }
-                        None => Err(custos_domain::DomainError::Validation(
+                        None => Err(custos_contracts::DomainError::Validation(
                             "OAuth credentials missing".into(),
                         )),
                     }
                 } else {
-                    custos_provider::routing::probe::probe_endpoint_models(
+                    custos_integrations::routing::probe::probe_endpoint_models(
                         &base_url,
                         api_key_owned.as_deref(),
                         if oauth && provider_type == "anthropic" {
@@ -201,7 +201,7 @@ impl LocalApiDispatcher {
                 match probe {
                     Ok(mut models) => {
                         models.retain(|model| {
-                            custos_provider::routing::probe::conversation_model_is_visible(
+                            custos_integrations::routing::probe::conversation_model_is_visible(
                                 &model.id,
                                 model.name.as_deref(),
                             )
@@ -231,7 +231,7 @@ impl LocalApiDispatcher {
                         }
                         if !matches!(provider_type, "openai" | "codex" | "copilot") {
                             for model in &mut models {
-                                if provider_type == "antigravity" && custos_provider::cloud::google_codeassist::supports_tiered_reasoning(&model.id) { continue; }
+                                if provider_type == "antigravity" && custos_integrations::cloud::google_codeassist::supports_tiered_reasoning(&model.id) { continue; }
                                 model.efforts.clear();
                                 model.default_effort = None;
                             }
@@ -240,15 +240,17 @@ impl LocalApiDispatcher {
                             (self.providers.repo.as_ref(), provider_id.as_deref())
                         {
                             let catalog_result = self
-                                .providers.model_catalog
+                                .providers
+                                .model_catalog
                                 .merge_probed_models(provider_type, models.clone());
-                            let cache_key = custos_provider::routing::probe::verified_catalog_key(
-                                pid,
-                                &base_url,
-                                oauth,
-                                token_record.as_ref().map(|t| t.created_at).unwrap_or(0),
-                                provider_type,
-                            );
+                            let cache_key =
+                                custos_integrations::routing::probe::verified_catalog_key(
+                                    pid,
+                                    &base_url,
+                                    oauth,
+                                    token_record.as_ref().map(|t| t.created_at).unwrap_or(0),
+                                    provider_type,
+                                );
                             if let Err(e) =
                                 repo.save_catalog_models(&cache_key, &catalog_result.models)
                             {
@@ -257,11 +259,11 @@ impl LocalApiDispatcher {
                             if let Err(e) = self.providers.model_availability.refresh(&cache_key) {
                                 return ApiResponse::error(req.id, e.to_string());
                             }
-                            unavailable_models = match self.providers.model_availability.snapshot(&cache_key)
-                            {
-                                Ok(value) => value,
-                                Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                            };
+                            unavailable_models =
+                                match self.providers.model_availability.snapshot(&cache_key) {
+                                    Ok(value) => value,
+                                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                                };
                             models.retain(|model| {
                                 !unavailable_models.contains_key("*")
                                     && !unavailable_models.contains_key(&model.id)
@@ -314,7 +316,7 @@ impl LocalApiDispatcher {
                             Err(error) => return ApiResponse::error(req.id, error.to_string()),
                         }
                     } else {
-                        custos_provider::routing::probe::verified_catalog_key(
+                        custos_integrations::routing::probe::verified_catalog_key(
                             pid, endpoint, false, 0, service,
                         )
                     };
@@ -324,12 +326,13 @@ impl LocalApiDispatcher {
                     };
                     return match repo.list_catalog_models(Some(&cache_key)) {
                         Ok(mut cached) => {
-                            let unavailable = match self.providers.model_availability.snapshot(&cache_key) {
-                                Ok(value) => value,
-                                Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                            };
+                            let unavailable =
+                                match self.providers.model_availability.snapshot(&cache_key) {
+                                    Ok(value) => value,
+                                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                                };
                             cached.retain(|model| {
-                                custos_provider::routing::probe::conversation_model_is_visible(
+                                custos_integrations::routing::probe::conversation_model_is_visible(
                                     &model.id,
                                     Some(&model.label),
                                 ) && !unavailable.contains_key("*")
@@ -410,8 +413,8 @@ impl LocalApiDispatcher {
                                             || provider.service_type == "copilot" =>
                                     {
                                         if token.is_expired(120) && token.refresh_token.is_some() {
-                                            let refreshed = match custos_adapters::connectors::oauth::oauth_settings(&token.service_type) {
-                                                Ok(settings) => custos_adapters::connectors::oauth::OAuthPkceManager::new(&settings.0,&settings.1).refresh_token(&settings.2,&token).await,
+                                            let refreshed = match custos_integrations::connectors::oauth::oauth_settings(&token.service_type) {
+                                                Ok(settings) => custos_integrations::connectors::oauth::OAuthPkceManager::new(&settings.0,&settings.1).refresh_token(&settings.2,&token).await,
                                                 Err(e) => Err(e),
                                             };
                                             match refreshed {
@@ -438,7 +441,7 @@ impl LocalApiDispatcher {
                                                 }
                                             }
                                         }
-                                        match custos_provider::routing::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
+                                        match custos_integrations::routing::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
                                             Ok(value) => {
                                                 if value["status"] == "available" && value["windows"].as_array().is_some_and(|windows| !windows.is_empty() && windows.iter().all(|window| window["used_percent"].as_f64().is_some_and(|used| (0.0..100.0).contains(&used)))) {
                                                     if let Ok(scope) = crate::runtime::provider_catalog_scope(repo, &provider.id) { if let Err(error) = self.providers.model_availability.quota_recovered(&scope) { tracing::debug!(%error, "Quota recovery projection failed"); } }
@@ -475,7 +478,7 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, "Missing model_id parameter");
                 }
 
-                let pricing = custos_provider::catalog::lookup_model_pricing(model_id);
+                let pricing = custos_integrations::catalog::lookup_model_pricing(model_id);
                 let input_tokens = req
                     .params
                     .get("input_tokens")
@@ -494,7 +497,7 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_u64());
 
                 let estimated_cost = pricing.as_ref().map(|p| {
-                    custos_provider::catalog::calculate_token_cost(
+                    custos_integrations::catalog::calculate_token_cost(
                         p,
                         input_tokens,
                         output_tokens,

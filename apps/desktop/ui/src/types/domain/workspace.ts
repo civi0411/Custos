@@ -1,5 +1,5 @@
 // Workspace and Terminal Domain Types
-// Strictly mirrors platform/domain (custos-domain) and apps/daemon (custos-daemon) API
+// Strictly mirrors platform/contracts (custos-contracts) and apps/daemon (custos-daemon) API
 
 export type WorkspaceKind =
   | { type: 'git'; repo_path: string; branch: string; base_commit?: string }

@@ -39,8 +39,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let database_path = profile.database_path();
 
-    // Bind TCP Listener on loopback
+    // Bind TCP Listener on loopback (non-loopback requires explicit opt-in)
     let bind_addr = std::env::var("CUSTOS_BIND").unwrap_or_else(|_| "127.0.0.1:0".to_string());
+    let tcp_loopback = bind_addr.starts_with("127.0.0.1:")
+        || bind_addr.starts_with("localhost:")
+        || bind_addr.starts_with("[::1]:");
+    if !tcp_loopback && std::env::var("CUSTOS_ALLOW_NON_LOOPBACK").is_err() {
+        return Err(format!(
+            "Refusing to bind TCP server to non-loopback address '{bind_addr}' without CUSTOS_ALLOW_NON_LOOPBACK=1"
+        )
+        .into());
+    }
     let tcp_listener = TcpListener::bind(&bind_addr).await?;
     let local_port = tcp_listener.local_addr()?.port();
     profile.write_port(local_port)?;
@@ -69,18 +78,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn TCP accept loop
     let tcp_api = local_api.clone();
+    let expected_ipc_token = std::env::var("CUSTOS_IPC_TOKEN")
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
     let tcp_task = tokio::spawn(async move {
+        const MAX_TCP_LINE_BYTES: usize = 10 * 1024 * 1024;
         while let Ok((mut socket, _peer)) = tcp_listener.accept().await {
             let api = tcp_api.clone();
+            let expected_token = expected_ipc_token.clone();
             tokio::spawn(async move {
                 let (reader, mut writer) = socket.split();
-                let mut lines = BufReader::new(reader).lines();
+                let mut lines = BufReader::new(tokio::io::AsyncReadExt::take(
+                    reader,
+                    MAX_TCP_LINE_BYTES as u64,
+                ))
+                .lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     if line.trim().is_empty() {
                         continue;
                     }
                     let response = match serde_json::from_str::<ApiRequest>(&line) {
-                        Ok(req) => api.handle_request(req).await,
+                        Ok(req) => {
+                            if let Some(ref expected) = expected_token {
+                                let provided = req
+                                    .params
+                                    .get("_ipc_token")
+                                    .and_then(|v| v.as_str())
+                                    .map(str::trim);
+                                if provided != Some(expected.as_str()) {
+                                    ApiResponse::error(
+                                        req.id,
+                                        "Unauthorized: invalid or missing IPC token",
+                                    )
+                                } else {
+                                    api.handle_request(req).await
+                                }
+                            } else {
+                                api.handle_request(req).await
+                            }
+                        }
                         Err(err) => ApiResponse::error("", format!("Invalid request JSON: {err}")),
                     };
                     if let Ok(mut encoded) = serde_json::to_vec(&response) {
@@ -123,19 +160,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         processed_any
     });
 
+    let mut stdio_closed_idle = false;
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             eprintln!("Custos daemon received interrupt signal, shutting down...");
         }
         _ = tcp_task => {}
         _ = http_task => {}
-        res = stdio_task => {
+        res = stdio_task, if !stdio_closed_idle => {
             if let Ok(true) = res {
                 eprintln!("Custos daemon stdio channel closed after processing requests, shutting down...");
             } else {
-                // Stdio was closed without any requests (e.g. background daemon spawned with /dev/null stdin).
-                // Keep the daemon running indefinitely for TCP and HTTP clients.
-                std::future::pending::<()>().await;
+                // Stdio was closed without requests (/dev/null stdin): keep ctrl_c, tcp, and http active.
+                stdio_closed_idle = true;
+            }
+        }
+    }
+    if stdio_closed_idle {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("Custos daemon received interrupt signal, shutting down...");
             }
         }
     }

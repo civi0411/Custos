@@ -7,7 +7,7 @@ export const engineeringContribution: WorkbenchContribution = {
   label: 'Engineering',
   icon: Code2,
   shortcut: '⌥1',
-  builtin: true,
+  builtin: false,
   color: '#38bdf8',
   description: 'Autonomous software engineering, Git worktrees, tests, and AST codebase intelligence.',
   supportedTabTypes: [

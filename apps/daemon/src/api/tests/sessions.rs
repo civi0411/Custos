@@ -3,9 +3,9 @@ use super::harness::*;
 use crate::application::capabilities::{
     browser_execution_adapter_connected, remote_execution_adapter_connected,
 };
-use custos_runtime::bridge::BridgeService;
-use custos_core::TaskService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::{Arc, Mutex};
 #[tokio::test]
 #[cfg(unix)]
@@ -43,7 +43,7 @@ async fn test_terminal_api_dispatch_lifecycle() {
         "Failed to spawn: {:?}",
         spawn_resp.error
     );
-    let session: custos_domain::TerminalSession =
+    let session: custos_contracts::TerminalSession =
         serde_json::from_value(spawn_resp.result.unwrap()).unwrap();
     assert_eq!(session.workspace_id, "ws-mock");
 
@@ -62,7 +62,7 @@ async fn test_terminal_api_dispatch_lifecycle() {
         .await;
 
     assert!(read_resp.is_success());
-    let chunk: custos_domain::TerminalOutputChunk =
+    let chunk: custos_contracts::TerminalOutputChunk =
         serde_json::from_value(read_resp.result.unwrap()).unwrap();
     assert!(chunk.data.contains("test_terminal_stream"));
 
@@ -89,7 +89,7 @@ async fn test_terminal_api_dispatch_lifecycle() {
         })
         .await;
     assert!(list_resp.is_success());
-    let sessions: Vec<custos_domain::TerminalSession> =
+    let sessions: Vec<custos_contracts::TerminalSession> =
         serde_json::from_value(list_resp.result.unwrap()).unwrap();
     assert_eq!(sessions.len(), 1);
 
@@ -112,17 +112,17 @@ async fn test_terminal_api_dispatch_lifecycle() {
         })
         .await;
     assert!(get_resp.is_success());
-    let got_sess: custos_domain::TerminalSession =
+    let got_sess: custos_contracts::TerminalSession =
         serde_json::from_value(get_resp.result.unwrap()).unwrap();
     assert_eq!(
         got_sess.status,
-        custos_domain::TerminalSessionStatus::Terminated
+        custos_contracts::TerminalSessionStatus::Terminated
     );
 }
 
 #[tokio::test]
 async fn task_conversation_attachment_uses_existing_task_without_duplicate_creation() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store));
     let task = service
         .execute_create(CreateTask {
@@ -197,7 +197,7 @@ async fn task_conversation_attachment_uses_existing_task_without_duplicate_creat
 
 #[tokio::test]
 async fn test_browser_fleet_automation_api() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::with_store(store.clone()));
     let bridge_service = Arc::new(BridgeService::new(
@@ -234,7 +234,7 @@ async fn test_browser_fleet_automation_api() {
     assert!(t_res.is_success());
     let tab: BrowserTab = serde_json::from_value(t_res.result.unwrap()).unwrap();
     assert_eq!(tab.url, "https://example.com");
-    assert_eq!(tab.status, custos_domain::BrowserTabStatus::Idle);
+    assert_eq!(tab.status, custos_contracts::BrowserTabStatus::Idle);
 
     let list_tabs_req = ApiRequest {
         id: "bt_list_1".into(),
@@ -392,7 +392,7 @@ async fn test_browser_fleet_automation_api() {
 
 #[tokio::test]
 async fn test_emulator_api_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::new());
     let bridge_service = Arc::new(BridgeService::new(
@@ -441,18 +441,18 @@ mod conversation_effort_api_tests {
     use super::*;
     struct EffortModel;
     #[async_trait::async_trait]
-    impl custos_domain::ModelPort for EffortModel {
+    impl custos_contracts::ModelPort for EffortModel {
         fn provider_id(&self) -> &str {
             "fixture"
         }
         async fn generate(
             &self,
-            request: &custos_domain::inference::ProviderRequest,
-        ) -> Result<custos_domain::inference::ModelResponse, DomainError> {
+            request: &custos_contracts::inference::ProviderRequest,
+        ) -> Result<custos_contracts::inference::ModelResponse, DomainError> {
             assert_eq!(request.reasoning_effort.as_deref(), Some("ultra"));
             assert_eq!(request.provider_account_id.as_deref(), Some("account-A"));
             assert_eq!(request.model, "gpt-6.1-sol");
-            Ok(custos_domain::inference::ModelResponse::text(
+            Ok(custos_contracts::inference::ModelResponse::text(
                 "answer",
                 "gpt-6.1-sol",
                 3,
@@ -461,7 +461,7 @@ mod conversation_effort_api_tests {
     }
     #[tokio::test]
     async fn background_start_api_preserves_effort_through_persisted_run_and_provider_request() {
-        use custos_core::contracts::storage::RunPort;
+        use custos_engine::contracts::storage::RunPort;
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("reasoning-api.db");
         let runtime = crate::runtime::CustosRuntime::bootstrap_with_model(
@@ -494,7 +494,7 @@ mod conversation_effort_api_tests {
             .unwrap();
         let response=runtime.local_api.handle_request(request("v1.workflow.start_run",serde_json::json!({"background":true,"task_id":task["id"],"session_id":session["id"],"turn_id":"turn-fixture","preferred_mode":"model","prompt":"hello","model":"gpt-6.1-sol","provider_account_id":"account-A","reasoning_effort":"ultra"}))).await;
         assert!(response.is_success(), "{:?}", response.error);
-        let handle: custos_domain::RunHandle =
+        let handle: custos_contracts::RunHandle =
             serde_json::from_value(response.result.unwrap()).unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
@@ -505,7 +505,7 @@ mod conversation_effort_api_tests {
                     .unwrap()
                     .unwrap();
                 if run.status.is_terminal() {
-                    assert_eq!(run.status, custos_domain::RunStatus::Completed);
+                    assert_eq!(run.status, custos_contracts::RunStatus::Completed);
                     assert_eq!(run.metadata["reasoning_effort"], "ultra");
                     assert_eq!(run.metadata["provider_account_id"], "account-A");
                     break;

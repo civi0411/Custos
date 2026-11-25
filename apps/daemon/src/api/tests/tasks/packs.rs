@@ -1,22 +1,21 @@
 use crate::api::*;
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_packs_api_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("custos_packs_test.db");
-    let store =
-        Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::with_store(store.clone()));
     let bridge_service = Arc::new(BridgeService::new(
         session_manager.clone(),
         task_service.clone(),
     ));
-    let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+    let pack_registry = Arc::new(custos_engine::create_default_pack_registry());
     let dispatcher = LocalApiDispatcher::new(
         task_service.clone(),
         session_manager.clone(),
@@ -32,7 +31,7 @@ async fn test_packs_api_lifecycle() {
     };
     let man_res = dispatcher.handle_request(man_req).await;
     assert!(man_res.is_success(), "man_res failed: {:?}", man_res.error);
-    let manifests: Vec<custos_packs::DomainPackManifest> =
+    let manifests: Vec<custos_engine::DomainPackManifest> =
         serde_json::from_value(man_res.result.unwrap()).unwrap();
     assert_eq!(manifests.len(), 4);
     assert!(manifests.iter().any(|m| m.id == "engineering"));
@@ -163,7 +162,7 @@ async fn test_packs_api_lifecycle() {
     };
     let roles_res = dispatcher.handle_request(roles_req).await;
     assert!(roles_res.is_success());
-    let all_roles: Vec<custos_packs::WorkerRole> =
+    let all_roles: Vec<custos_engine::WorkerRole> =
         serde_json::from_value(roles_res.result.unwrap()).unwrap();
     assert_eq!(all_roles.len(), 16, "Expected 16 specialized Worker Roles");
 
@@ -173,13 +172,13 @@ async fn test_packs_api_lifecycle() {
         params: serde_json::json!({ "pack_id": "engineering" }),
     };
     let eng_roles_res = dispatcher.handle_request(eng_roles_req).await;
-    let eng_roles: Vec<custos_packs::WorkerRole> =
+    let eng_roles: Vec<custos_engine::WorkerRole> =
         serde_json::from_value(eng_roles_res.result.unwrap()).unwrap();
     assert_eq!(eng_roles.len(), 4, "Expected 4 Engineering Worker Roles");
 
     // 5. Run Workbench Job via v1.packs.jobs.run
     let session = session_manager
-        .create_session(custos_domain::SessionMode::Bare)
+        .create_session(custos_contracts::SessionMode::Bare)
         .await;
     let run_req = ApiRequest {
         id: "pack_5".into(),

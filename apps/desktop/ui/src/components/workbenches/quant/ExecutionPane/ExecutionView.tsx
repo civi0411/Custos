@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Shield, RotateCw, Play } from 'lucide-react';
 import { WorkbenchPane } from '@/components/common/WorkbenchPane';
 import { daemonClient } from '@/api/daemon_client';
+import { quantSelectionStore, useQuantSelection } from '../quantSelectionStore';
 import type { ExecutionPaneProps, OrderTicketItem, PositionItem, MarketBar, OrderBookLevel } from './types';
 import { VERIFIED_HISTORICAL_BENCHMARK_BARS } from '../quantBenchmarkData';
 import { CandlestickChart } from './CandlestickChart';
@@ -10,16 +11,19 @@ import { OrderTicketForm } from './OrderTicketForm';
 import { PositionsTable } from './PositionsTable';
 import { OrderTicketsQueue } from './OrderTicketsQueue';
 
-export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
+export function ExecutionView({ sessionId, onShowToast }: ExecutionPaneProps) {
+  const selection = useQuantSelection();
+  const activeTaskId = sessionId || 'quant_session_active';
+  const activeStrategyId = selection.strategyId || 'strat_manual_discretionary';
   const [loading, setLoading] = useState<boolean>(false);
   const [orders, setOrders] = useState<OrderTicketItem[]>([]);
   const [positions, setPositions] = useState<PositionItem[]>([]);
 
   // Order Ticket Form State
-  const [ticketSymbol, setTicketSymbol] = useState<string>('NVDA');
+  const [ticketSymbol, setTicketSymbol] = useState<string>(selection.symbol || 'SPY');
   const [ticketDirection, setTicketDirection] = useState<'buy' | 'sell' | 'sell_short' | 'buy_to_cover'>('buy');
-  const [ticketQty, setTicketQty] = useState<number>(100);
-  const [ticketPrice, setTicketPrice] = useState<number>(135.5);
+  const [ticketQty, setTicketQty] = useState<number>(10);
+  const [ticketPrice, setTicketPrice] = useState<number>(500.0);
   const [gateVerdict, setGateVerdict] = useState<string | null>(null);
   const [serverOrderBook, setServerOrderBook] = useState<{
     symbol: string;
@@ -28,13 +32,14 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
     spread_bps: number;
     microprice: number;
     imbalance_pct: number;
+    data_mode?: string;
     asks: Array<{ price: number; size: number; total: number }>;
     bids: Array<{ price: number; size: number; total: number }>;
     timestamp: number;
   } | null>(null);
 
   // Candlestick Chart State
-  const [timeframe, setTimeframe] = useState<string>('15m');
+  const [timeframe, setTimeframe] = useState<string>(selection.timeframe || '1d');
   const [bars, setBars] = useState<MarketBar[]>([]);
 
   // Ingesting pipeline modal/drawer
@@ -46,6 +51,10 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
       const res = await daemonClient.getQuantMarketBars({ symbol: sym, timeframe: tf });
       if (res && res.bars && res.bars.length > 0) {
         setBars(res.bars);
+        const lastClose = res.bars[res.bars.length - 1]?.close;
+        if (typeof lastClose === 'number' && Number.isFinite(lastClose) && lastClose > 0) {
+          setTicketPrice(Number(lastClose.toFixed(2)));
+        }
         return;
       }
     } catch {
@@ -53,6 +62,15 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
     }
     setBars([]);
   }, []);
+
+  useEffect(() => {
+    if (selection.symbol && selection.symbol !== ticketSymbol) {
+      setTicketSymbol(selection.symbol);
+    }
+    if (selection.timeframe && selection.timeframe !== timeframe) {
+      setTimeframe(selection.timeframe);
+    }
+  }, [selection.symbol, selection.timeframe]);
 
   const handleIngestBenchmarkData = async (sym: string, tf: string) => {
     if (sym !== 'SPY') {
@@ -99,7 +117,9 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
     void loadMarketBars(ticketSymbol, timeframe);
     void fetchOrderBook(ticketSymbol);
     const interval = setInterval(() => {
-      void fetchOrderBook(ticketSymbol);
+      if (!document.hidden) {
+        void fetchOrderBook(ticketSymbol);
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [ticketSymbol, timeframe, loadMarketBars, fetchOrderBook]);
@@ -140,23 +160,48 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
     };
   }, [serverOrderBook, ticketSymbol]);
 
-  const fetchOrders = async () => {
+  const latestBarClose = bars.length > 0 ? bars[bars.length - 1]?.close : undefined;
+
+  const fetchOrdersAndPositions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await daemonClient.listQuantOrders({ task_id: 'task_quant_active' });
-      if (res && res.orders) {
-        setOrders(res.orders);
+      const [ordersRes, posRes] = await Promise.all([
+        daemonClient.listQuantOrders({}),
+        daemonClient.listQuantPositions({}),
+      ]);
+      if (ordersRes?.orders) {
+        setOrders(ordersRes.orders);
+      }
+      if (posRes?.positions) {
+        setPositions(
+          posRes.positions.map((p) => {
+            const markPrice =
+              p.symbol === ticketSymbol && typeof latestBarClose === 'number' && latestBarClose > 0
+                ? latestBarClose
+                : p.avg_entry_price;
+            const sign = p.direction === 'short' ? -1 : 1;
+            const unrealizedPnl = (markPrice - p.avg_entry_price) * p.quantity * sign;
+            return {
+              symbol: p.symbol,
+              direction: p.direction === 'short' ? 'short' : 'long',
+              quantity: p.quantity,
+              entryPrice: p.avg_entry_price,
+              markPrice,
+              unrealizedPnl,
+            };
+          })
+        );
       }
     } catch {
-      // Clean fallback if daemon has no stored orders
+      // Clean fallback if daemon has no stored orders/positions yet
     } finally {
       setLoading(false);
     }
-  };
+  }, [ticketSymbol, latestBarClose]);
 
   useEffect(() => {
-    void fetchOrders();
-  }, []);
+    void fetchOrdersAndPositions();
+  }, [fetchOrdersAndPositions, selection.revision]);
 
   const handleEvaluateGate = async () => {
     try {
@@ -166,8 +211,8 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
         direction: ticketDirection,
         estimated_price: ticketPrice,
         quantity: ticketQty,
-        daily_executed_notional: 150_000,
-        current_drawdown: 0.012,
+        daily_executed_notional: 0,
+        current_drawdown: 0,
         consecutive_losses: 0,
         max_order_notional: 200_000,
         max_daily_notional: 1_000_000,
@@ -187,8 +232,8 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
     try {
       onShowToast?.(`Submitting ${ticketDirection.toUpperCase()} ${ticketQty} ${ticketSymbol}...`);
       const res = await daemonClient.createQuantOrders({
-        strategy_id: 'strat_manual_discretionary',
-        task_id: 'task_quant_active',
+        strategy_id: activeStrategyId,
+        task_id: activeTaskId,
         orders: [
           {
             symbol: ticketSymbol,
@@ -201,7 +246,8 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
         ],
       });
       if (res.created_orders && res.created_orders.length > 0) {
-        setOrders((prev) => [...res.created_orders, ...prev]);
+        await fetchOrdersAndPositions();
+        quantSelectionStore.notifyMutation();
         onShowToast?.(`Order ticket drafted: ${res.created_orders[0].id}`);
       }
     } catch (err: unknown) {
@@ -214,29 +260,21 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
 
   const handleApproveOrder = async (orderId: string) => {
     try {
-      await daemonClient.approveQuantOrder({
-        order_id: orderId,
-        permit_id: 'permit_operator_approved',
-        task_id: 'task_quant_active',
-      });
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: 'approved' } : o))
-      );
       const approvedOrder = orders.find((o) => o.id === orderId);
-      if (approvedOrder) {
-        setPositions((prev) => [
-          ...prev.filter((p) => p.symbol !== approvedOrder.symbol),
-          {
-            symbol: approvedOrder.symbol,
-            direction: approvedOrder.direction.includes('short') ? 'short' : 'long',
-            quantity: approvedOrder.quantity,
-            entryPrice: ticketPrice,
-            markPrice: ticketPrice,
-            unrealizedPnl: 0,
-          },
-        ]);
-      }
-      onShowToast?.(`Order ${orderId} approved and recorded to Outbox`);
+      const execPrice =
+        approvedOrder && approvedOrder.symbol === ticketSymbol && typeof latestBarClose === 'number'
+          ? latestBarClose
+          : ticketPrice;
+      const res = await daemonClient.approveQuantOrder({
+        order_id: orderId,
+        permit_id: 'auto_issue',
+        task_id: activeTaskId,
+        execute_paper: true,
+        execution_price: execPrice,
+      });
+      await fetchOrdersAndPositions();
+      quantSelectionStore.notifyMutation();
+      onShowToast?.(`Order ${orderId} settled (${res.status}) with permit ${res.permit_id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       onShowToast?.(`Approval failed: ${msg}`);
@@ -246,15 +284,21 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
   const handleClosePosition = async (pos: PositionItem) => {
     try {
       onShowToast?.(`Closing position ${pos.symbol} (Exit Immunity Active)...`);
-      const gate = await daemonClient.evaluateQuantGate({
+      const res = await daemonClient.closeQuantPosition({
+        strategy_id: activeStrategyId,
+        task_id: activeTaskId,
         symbol: pos.symbol,
-        direction: pos.direction === 'long' ? 'sell' : 'buy_to_cover',
-        estimated_price: pos.markPrice,
+        direction: pos.direction,
         quantity: pos.quantity,
-        is_risk_reducing: true,
+        mark_price: pos.markPrice,
+        permit_id: 'auto_issue',
+        execute_paper: true,
       });
-      onShowToast?.(`Exit Gate: ${gate.outcome.status} — position liquidation queued`);
-      setPositions((prev) => prev.filter((p) => p.symbol !== pos.symbol));
+      await fetchOrdersAndPositions();
+      quantSelectionStore.notifyMutation();
+      onShowToast?.(
+        `Closed ${pos.symbol} (${res.gate_outcome?.status ?? 'BypassExitImmunity'}) — order ${res.ticket?.id ?? 'queued'} (${res.ticket?.status ?? 'filled'})`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       onShowToast?.(`Close position failed: ${msg}`);
@@ -266,17 +310,19 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
       const res = await daemonClient.triggerQuantKillSwitch({
         reason: 'Operator Emergency Kill-Switch Triggered via Execution Pane',
       });
+      await fetchOrdersAndPositions();
+      quantSelectionStore.notifyMutation();
       onShowToast?.(`EMERGENCY KILL-SWITCH: Cancelled ${res.cancelled_orders_count} pending orders`);
-      setOrders((prev) => prev.map((o) => ({ ...o, status: 'cancelled' })));
-    } catch {
-      onShowToast?.('Emergency kill-switch executed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      onShowToast?.(`Emergency kill-switch failed: ${msg}`);
     }
   };
 
   const circuitBreakers = [
-    { rule: 'Portfolio Daily Drawdown Stop', threshold: '2.5%', action: 'Liquidate all positions immediately' },
-    { rule: 'Single Symbol Max Weight', threshold: '15.0%', action: 'Hard clip on order generation' },
-    { rule: 'Max Adverse Slippage Tolerance', threshold: '15.0 bps', action: 'Cancel order and requote' },
+    { rule: 'Max Single Order Notional', threshold: '$200,000', action: 'Enforced by PreTradeDecisionGate' },
+    { rule: 'Max Daily Executed Notional', threshold: '$1,000,000', action: 'Summed from live SQLite fills' },
+    { rule: 'Portfolio Max Drawdown Stop', threshold: '5.0%', action: 'Reject new entries when breached' },
   ];
 
   return (
@@ -291,7 +337,7 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
             <button
               type="button"
               disabled={loading}
-              onClick={() => void fetchOrders()}
+              onClick={() => void fetchOrdersAndPositions()}
               className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-xs font-medium text-[var(--color-fg-muted)]"
             >
               <RotateCw size={12} className={loading ? 'animate-spin' : ''} />
@@ -324,6 +370,7 @@ export function ExecutionView({ onShowToast }: ExecutionPaneProps) {
           <OrderBookLadder
             ticketSymbol={ticketSymbol}
             orderBook={orderBook}
+            dataMode={serverOrderBook?.data_mode}
             onSelectPrice={(price, dir) => {
               setTicketPrice(price);
               setTicketDirection(dir);

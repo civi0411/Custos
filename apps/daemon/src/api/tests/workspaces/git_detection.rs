@@ -1,8 +1,8 @@
-use custos_adapters::host::workspace::git_discovery::{
+use custos_engine::contracts::TerminalPort;
+use custos_engine::terminal::TerminalCoordinator;
+use custos_integrations::host::workspace::git_discovery::{
     github_auth_metadata, github_login_command, parse_github_remote, resolve_deep_git_paths,
 };
-use custos_core::contracts::TerminalPort;
-use custos_runtime::terminal::TerminalCoordinator;
 
 use crate::api::*;
 
@@ -37,7 +37,7 @@ async fn github_login_pty_supports_real_prompts_and_cancellation_without_credent
     std::fs::write(&fake_gh, "#!/bin/sh\nprintf 'Code: TEST-CODE\\nPress Enter\\n'\nread reply\nprintf 'Browser approval pending\\n'\nread reply\n").unwrap();
     std::fs::set_permissions(&fake_gh, std::fs::Permissions::from_mode(0o700)).unwrap();
     let terminal = TerminalCoordinator::new(std::sync::Arc::new(
-        custos_adapters::terminal::NativePtyDriver,
+        custos_integrations::terminal::NativePtyDriver,
     ));
     let command = github_login_command(&fake_gh);
     let session = terminal
@@ -83,7 +83,7 @@ async fn github_login_pty_supports_real_prompts_and_cancellation_without_credent
             .await
             .unwrap()
             .status,
-        custos_domain::TerminalSessionStatus::Terminated
+        custos_contracts::TerminalSessionStatus::Terminated
     ));
 }
 

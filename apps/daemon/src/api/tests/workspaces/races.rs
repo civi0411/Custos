@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use custos_core::contracts::WorkspaceRepository;
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::contracts::WorkspaceRepository;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 
 use crate::api::*;
 
@@ -11,17 +11,17 @@ use crate::api::*;
 async fn test_candidate_race_api_validation() {
     let temp = tempfile::tempdir().unwrap();
     let store = Arc::new(
-        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+        custos_storage::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
             .unwrap(),
     );
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
-    let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new());
+    let workflow = Arc::new(custos_engine::workflow::TaskRuntime::new());
     let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
         .with_workspace(coordinator)
         .with_workflow(workflow);
@@ -111,20 +111,22 @@ async fn test_candidate_race_end_to_end_trial() {
     git(&repo, &["commit", "-m", "initial commit"]);
 
     let store = Arc::new(
-        custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
+        custos_storage::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy())
             .unwrap(),
     );
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+    let coordinator = Arc::new(custos_engine::workspace::WorkspaceCoordinator::new(
         store.clone(),
-        Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new()),
+        Arc::new(custos_integrations::workspace::LocalWorkspaceProvider::new()),
     ));
     let workflow = Arc::new(
-        custos_runtime::workflow::TaskRuntime::new()
+        custos_engine::workflow::TaskRuntime::new()
             .with_workspace_coordinator(coordinator.clone())
-            .with_command_runner(Arc::new(custos_adapters::operations::LocalCommandRunner)),
+            .with_command_runner(Arc::new(
+                custos_integrations::operations::LocalCommandRunner,
+            )),
     );
     let dispatcher = LocalApiDispatcher::new(service.clone(), sessions, bridge)
         .with_workspace(coordinator.clone())
@@ -142,17 +144,17 @@ async fn test_candidate_race_end_to_end_trial() {
         .0;
 
     // 2. Register base workspace
-    let mut base_ws = custos_domain::ExecutionWorkspace::new(
-        custos_domain::WorkspaceId::new("base_ws"),
+    let mut base_ws = custos_contracts::ExecutionWorkspace::new(
+        custos_contracts::WorkspaceId::new("base_ws"),
         "base_ws",
-        custos_domain::WorkspaceKind::Git {
+        custos_contracts::WorkspaceKind::Git {
             repo_path: repo.to_string_lossy().into(),
             branch: "main".into(),
             base_commit: None,
         },
         repo.to_string_lossy().to_string(),
     );
-    base_ws.status = custos_domain::WorkspaceStatus::Ready;
+    base_ws.status = custos_contracts::WorkspaceStatus::Ready;
     store.save_workspace(&base_ws).await.unwrap();
 
     // 3. Spawn 2 Candidates via API

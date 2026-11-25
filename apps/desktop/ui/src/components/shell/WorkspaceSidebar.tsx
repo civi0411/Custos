@@ -18,9 +18,14 @@ import {
   type WorkspaceSidebarProps,
 } from './sidebar/types';
 import { CopilotTaskHub } from './sidebar/CopilotTaskHub';
-import { ResearchStudyExplorer } from './sidebar/ResearchStudyExplorer';
-import { QuantStrategyExplorer } from './sidebar/QuantStrategyExplorer';
 import { EngineeringWorkspaceTree } from './sidebar/EngineeringWorkspaceTree';
+
+const ResearchStudyExplorer = React.lazy(() =>
+  import('./sidebar/ResearchStudyExplorer').then((m) => ({ default: m.ResearchStudyExplorer }))
+);
+const QuantStrategyExplorer = React.lazy(() =>
+  import('./sidebar/QuantStrategyExplorer').then((m) => ({ default: m.QuantStrategyExplorer }))
+);
 import { RecentActivityFlyout } from './sidebar/RecentActivityFlyout';
 import { useProjectGroups } from './sidebar/useProjectGroups';
 import { buildWorkbenchSidebarConfig, hasActiveRecentActivity } from './sidebar/workbenchConfig';
@@ -439,13 +444,17 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             formatRelativeTime={formatRelativeTime}
           />
         ) : activeWorkbench === 'research' ? (
-          <ResearchStudyExplorer
-            researchPath={researchPath}
-            researchDetection={researchDetection}
-            handleOpenStudyFolder={handleOpenStudyFolder}
-          />
+          <React.Suspense fallback={null}>
+            <ResearchStudyExplorer
+              researchPath={researchPath}
+              researchDetection={researchDetection}
+              handleOpenStudyFolder={handleOpenStudyFolder}
+            />
+          </React.Suspense>
         ) : activeWorkbench === 'quant' ? (
-          <QuantStrategyExplorer onShowToast={onShowToast} onOpenTab={_onOpenTab} />
+          <React.Suspense fallback={null}>
+            <QuantStrategyExplorer onShowToast={onShowToast} onOpenTab={_onOpenTab} />
+          </React.Suspense>
         ) : (
           <EngineeringWorkspaceTree
             projectGroups={projectGroups}

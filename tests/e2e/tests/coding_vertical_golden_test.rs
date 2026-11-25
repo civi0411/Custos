@@ -7,32 +7,16 @@
 //! 4. Agent-Edited Tests Containment: Agent attempting to tamper with test files to bypass failure cannot fool the trusted evidence verifier.
 //! 5. Containment: Directory traversal and symlink escape attempts are rejected with zero mutations outside workspace.
 
-
-#[allow(unused_extern_crates)]
-extern crate custos_contracts as custos_domain;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_core;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_runtime;
-#[allow(unused_extern_crates)]
-extern crate custos_engine as custos_packs;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_provider;
-#[allow(unused_extern_crates)]
-extern crate custos_integrations as custos_adapters;
-#[allow(unused_extern_crates)]
-extern crate custos_storage as custos_persistence;
-
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_adapters::workspace::LocalWorkspaceProvider;
-use custos_core::contracts::sandbox::SandboxPort;
-use custos_core::contracts::workspace::WorkspaceProvider;
-use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_daemon::runtime::DaemonGovernedToolExecutor;
-use custos_domain::{
+use custos_contracts::{
     ActionIntent, DomainError, ExecutionPermit, ExecutionWorkspace, ReceiptStatus, RiskClass,
     RiskLevel, WorkspaceId, WorkspaceKind, WorkspaceStatus,
 };
+use custos_daemon::runtime::DaemonGovernedToolExecutor;
+use custos_engine::contracts::sandbox::SandboxPort;
+use custos_engine::contracts::workspace::WorkspaceProvider;
+use custos_engine::evidence::{EvidenceBundle, EvidencePipeline};
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_integrations::workspace::LocalWorkspaceProvider;
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
@@ -234,7 +218,7 @@ async fn test_g09_fault_path_user_bytes_preserved_under_dirty_repo() {
     )
     .with_task_id("task_fix");
     let dummy_permit = make_permit("task_fix", &agent_fix_intent.id);
-    custos_core::contracts::sandbox::SandboxPort::execute(
+    custos_engine::contracts::sandbox::SandboxPort::execute(
         &adapter,
         &agent_fix_intent,
         &dummy_permit,
@@ -352,7 +336,7 @@ async fn test_g09_path_traversal_and_symlink_escape_denied() {
     )
     .with_task_id("task_esc");
     let dummy_permit = make_permit("task_esc", &escape_intent.id);
-    let receipt = custos_core::contracts::sandbox::SandboxPort::execute(
+    let receipt = custos_engine::contracts::sandbox::SandboxPort::execute(
         &adapter,
         &escape_intent,
         &dummy_permit,
