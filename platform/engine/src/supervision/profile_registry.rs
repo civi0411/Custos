@@ -1,7 +1,7 @@
 //! Lazy registry holding workbench-contributed supervision profiles.
 //! Unenabled workbenches allocate zero profiles in memory.
 
-use custos_domain::supervision::SupervisionProfile;
+use custos_contracts::supervision::SupervisionProfile;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
@@ -66,4 +66,3 @@ impl SupervisionProfileRegistry {
             .collect()
     }
 }
-

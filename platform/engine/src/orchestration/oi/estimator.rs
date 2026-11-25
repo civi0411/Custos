@@ -16,7 +16,7 @@
 //!   snapshot complexity heuristics + harness baseline. Upgrade to real tokenizer when
 //!   the runtime has access to the prompt text before dispatch.
 
-use custos_domain::oi::{Candidate, DecisionSnapshot};
+use custos_contracts::oi::{Candidate, DecisionSnapshot};
 
 /// Per-model pricing constants (USD per million tokens).
 struct ModelPricing {
@@ -38,12 +38,11 @@ impl ModelPricing {
         let output_tok_m = tok_m * 0.4;
 
         // Apply cache affinity discount on eligible input tokens
-        let effective_input_rate = self.input_per_mtok
-            * (1.0 - self.cache_discount_fraction * cache_hit_rate);
+        let effective_input_rate =
+            self.input_per_mtok * (1.0 - self.cache_discount_fraction * cache_hit_rate);
 
         let min_cost = effective_input_rate * input_tok_m * 0.5; // optimistic: short output
-        let max_cost =
-            effective_input_rate * input_tok_m + self.output_per_mtok * output_tok_m;
+        let max_cost = effective_input_rate * input_tok_m + self.output_per_mtok * output_tok_m;
 
         (min_cost, max_cost)
     }
@@ -185,7 +184,7 @@ impl Estimator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::oi::{Candidate, ExecutionTopology};
+    use custos_contracts::oi::{Candidate, ExecutionTopology};
 
     fn cand(id: &str) -> Candidate {
         Candidate {
@@ -219,7 +218,7 @@ mod tests {
 
     #[test]
     fn more_unknowns_raises_tokens_and_latency() {
-        use custos_domain::oi::DecisionSnapshot;
+        use custos_contracts::oi::DecisionSnapshot;
         let snap_empty = DecisionSnapshot {
             task_id: "t".into(),
             unknowns: vec![],
@@ -244,7 +243,7 @@ mod tests {
 
     #[test]
     fn cache_affinity_reduces_cost_for_simple_tasks() {
-        use custos_domain::oi::DecisionSnapshot;
+        use custos_contracts::oi::DecisionSnapshot;
         let snap_simple = DecisionSnapshot {
             task_id: "t".into(),
             unknowns: vec![],

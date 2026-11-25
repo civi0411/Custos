@@ -4,8 +4,8 @@ impl TaskRuntime {
     /// Executes an Orca multi-candidate race across isolated model candidates and optional Test Oracle.
     pub async fn execute_candidate_race(
         &self,
-        spec: custos_domain::CandidateRaceSpec,
-    ) -> Result<custos_domain::CandidateRaceResult, DomainError> {
+        spec: custos_contracts::CandidateRaceSpec,
+    ) -> Result<custos_contracts::CandidateRaceResult, DomainError> {
         let race_id = spec.id.clone();
         let task_id = spec.task_id.clone();
         let candidates_count = spec.candidates.len();
@@ -39,7 +39,7 @@ impl TaskRuntime {
                     .as_deref()
                     .unwrap_or(&base_workspace_id);
                 let (worktree_path, workspace_id) = if let Some(ref ws_coord) = runtime.workspace_coordinator {
-                    let ws_id = custos_domain::WorkspaceId::new(target_ws_id);
+                    let ws_id = custos_contracts::WorkspaceId::new(target_ws_id);
                     if let Ok(Some(ws)) = ws_coord.get_workspace(&ws_id).await {
                         (ws.path.clone(), ws.id.to_string())
                     } else {
@@ -50,7 +50,7 @@ impl TaskRuntime {
                 };
 
                 // 2. Dispatch the candidate run with scoped node_id
-                let cmd = custos_domain::StartRunCommand::new(&task_id, &candidate.candidate_id)
+                let cmd = custos_contracts::StartRunCommand::new(&task_id, &candidate.candidate_id)
                     .with_node_id(&node_id)
                     .with_model(&candidate.model_id)
                     .with_harness_id(&candidate.harness_id)
@@ -124,13 +124,13 @@ impl TaskRuntime {
                 // 4. Collect modified files from workspace if workspace_coordinator is available
                 let mut modified_files = Vec::new();
                 if let Some(ref ws_coord) = runtime.workspace_coordinator {
-                    let ws_id = custos_domain::WorkspaceId::new(&workspace_id);
+                    let ws_id = custos_contracts::WorkspaceId::new(&workspace_id);
                     if let Ok(dirty) = ws_coord.inspect_dirty(&ws_id).await {
                         modified_files = dirty.modified_files;
                     }
                 }
 
-                custos_domain::CandidateExecutionReport {
+                custos_contracts::CandidateExecutionReport {
                     candidate_id: candidate.candidate_id,
                     model_id: candidate.model_id,
                     workspace_id,
@@ -159,7 +159,7 @@ impl TaskRuntime {
             })
             .map(|r| r.candidate_id.clone());
 
-        Ok(custos_domain::CandidateRaceResult {
+        Ok(custos_contracts::CandidateRaceResult {
             race_id,
             task_id,
             winner_candidate_id,
@@ -198,4 +198,3 @@ pub(super) fn parse_test_counts(output: &str) -> (u32, u32) {
     }
     (passed, failed)
 }
-

@@ -1,11 +1,10 @@
 use super::*;
-use custos_domain::{ExecutionRecord, Recipe, RecipeEnvironmentSpec};
+use custos_contracts::{ExecutionRecord, Recipe, RecipeEnvironmentSpec};
 use rusqlite::params;
 
 fn protected_execution(recipe_id: &str) -> ExecutionRecord {
-    use custos_domain::{
-        CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind,
-        TrainingCheckpointManifest,
+    use custos_contracts::{
+        CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, TrainingCheckpointManifest,
     };
     let mut checkpoint = TrainingCheckpointManifest::new(
         "checkpoint400",
@@ -53,7 +52,7 @@ fn checkpoint_execution_survives_restart_and_preserves_continuation() {
         parent_id = parent.id.clone();
         repo.save_execution_record(&parent).unwrap();
         let child = ExecutionRecord::new(&recipe_id)
-            .with_backend(custos_domain::ComputeBackendKind::Kaggle)
+            .with_backend(custos_contracts::ComputeBackendKind::Kaggle)
             .with_resume_from(&parent_id)
             .with_resumed_from_checkpoint("checkpoint400")
             .with_output_namespace("attempt-b");
@@ -66,7 +65,7 @@ fn checkpoint_execution_survives_restart_and_preserves_continuation() {
     assert_eq!(parent.latest_protected_checkpoint_step, Some(400));
     assert_eq!(
         parent.checkpoint.as_ref().unwrap().commit_status,
-        custos_domain::CheckpointCommitStatus::CommittedProtected
+        custos_contracts::CheckpointCommitStatus::CommittedProtected
     );
     {
         let conn = db.lock().unwrap();
@@ -84,7 +83,7 @@ fn checkpoint_execution_survives_restart_and_preserves_continuation() {
         child.resumed_from_checkpoint_id.as_deref(),
         Some("checkpoint400")
     );
-    let mut next_ckpt = custos_domain::TrainingCheckpointManifest::new(
+    let mut next_ckpt = custos_contracts::TrainingCheckpointManifest::new(
         "checkpoint450",
         450,
         1.1,
@@ -92,8 +91,8 @@ fn checkpoint_execution_survives_restart_and_preserves_continuation() {
         "b".repeat(64),
     )
     .with_full_state("model@immutable", "unsloth@pinned", "sample450")
-    .with_commit_status(custos_domain::CheckpointCommitStatus::CommittedProtected);
-    next_ckpt.files.push(custos_domain::CheckpointFileEntry {
+    .with_commit_status(custos_contracts::CheckpointCommitStatus::CommittedProtected);
+    next_ckpt.files.push(custos_contracts::CheckpointFileEntry {
         path: "adapter_model.safetensors".into(),
         size_bytes: 1,
         digest: "b".repeat(64),

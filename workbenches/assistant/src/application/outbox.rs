@@ -17,7 +17,10 @@ impl OutboxService {
         Self { outbox }
     }
 
-    pub async fn list(&self, status: Option<OutboxStatus>) -> Result<Vec<OutboxEntry>, DomainError> {
+    pub async fn list(
+        &self,
+        status: Option<OutboxStatus>,
+    ) -> Result<Vec<OutboxEntry>, DomainError> {
         match status {
             Some(s) => self.outbox.list_by_status(s).await,
             None => self.outbox.list_by_status(OutboxStatus::Pending).await,

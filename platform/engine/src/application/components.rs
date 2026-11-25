@@ -1,8 +1,8 @@
 //! Component & Pack Lifecycle Application Use Cases
 
-use std::sync::Arc;
-use crate::components::registry::DomainPackRegistry;
 use crate::components::module::ModuleRegistry;
+use crate::components::registry::DomainPackRegistry;
+use std::sync::Arc;
 
 /// Application handler for component/pack discovery and lifecycle.
 pub struct ComponentApplicationService {
@@ -11,7 +11,10 @@ pub struct ComponentApplicationService {
 }
 
 impl ComponentApplicationService {
-    pub fn new(pack_registry: Arc<DomainPackRegistry>, module_registry: Arc<ModuleRegistry>) -> Self {
+    pub fn new(
+        pack_registry: Arc<DomainPackRegistry>,
+        module_registry: Arc<ModuleRegistry>,
+    ) -> Self {
         Self {
             pack_registry,
             module_registry,

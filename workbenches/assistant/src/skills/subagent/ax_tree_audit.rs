@@ -5,7 +5,7 @@
 //! element roles, and navigation hierarchy.
 
 use async_trait::async_trait;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput,
 };
 use serde::{Deserialize, Serialize};

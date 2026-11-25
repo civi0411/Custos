@@ -1,8 +1,8 @@
 use super::super::*;
 use chrono::Utc;
-use custos_core::contracts::harness::RunObserver;
-use custos_core::contracts::storage::{OutboxEntry, OutboxStatus};
-use custos_domain::{new_id, Assurance, ContextPack, StartRunCommand};
+use custos_contracts::contracts::harness::RunObserver;
+use custos_contracts::contracts::storage::{OutboxEntry, OutboxStatus};
+use custos_contracts::{new_id, Assurance, ContextPack, StartRunCommand};
 
 impl TaskRuntime {
     pub(super) async fn execute_native_turn(
@@ -19,7 +19,7 @@ impl TaskRuntime {
         let profile = harness.profile();
         let harness_id = profile.harness_id.clone();
 
-        let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
+        let mut launch = custos_contracts::LaunchAttempt::new(&wrun.id, requested_mode)?;
         if let Some(ref store) = self.run_store {
             store.save_launch_attempt(&launch).await?;
         }
@@ -29,30 +29,29 @@ impl TaskRuntime {
         wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
         // Resolve execution workspace & effective directory
-        let (base_workspace_dir, maybe_resolved_ws_id) =
-            if let Some(ref ws_coord) = self.workspace_coordinator {
-                let ws_id_str = cmd.workspace_id.as_deref().ok_or_else(|| {
-                    DomainError::Validation("Native run requires a registered workspace_id".into())
-                })?;
-                let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
-                let ws = ws_coord.get_workspace(&ws_id).await?.ok_or_else(|| {
-                    DomainError::Validation(format!(
-                        "Native workspace '{ws_id_str}' no longer exists"
-                    ))
-                })?;
-                if !ws.is_ready() {
-                    return Err(DomainError::Validation(format!(
-                        "Native workspace '{ws_id_str}' is not ready for execution"
-                    )));
-                }
-                (std::path::PathBuf::from(ws.path), Some(ws_id))
-            } else if let Some(ref root) = cmd.workspace_root {
-                (std::path::PathBuf::from(root), None)
-            } else {
-                return Err(DomainError::Validation(
-                    "Native run has no execution workspace".into(),
-                ));
-            };
+        let (base_workspace_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) =
+            self.workspace_coordinator
+        {
+            let ws_id_str = cmd.workspace_id.as_deref().ok_or_else(|| {
+                DomainError::Validation("Native run requires a registered workspace_id".into())
+            })?;
+            let ws_id = custos_contracts::WorkspaceId::new(ws_id_str);
+            let ws = ws_coord.get_workspace(&ws_id).await?.ok_or_else(|| {
+                DomainError::Validation(format!("Native workspace '{ws_id_str}' no longer exists"))
+            })?;
+            if !ws.is_ready() {
+                return Err(DomainError::Validation(format!(
+                    "Native workspace '{ws_id_str}' is not ready for execution"
+                )));
+            }
+            (std::path::PathBuf::from(ws.path), Some(ws_id))
+        } else if let Some(ref root) = cmd.workspace_root {
+            (std::path::PathBuf::from(root), None)
+        } else {
+            return Err(DomainError::Validation(
+                "Native run has no execution workspace".into(),
+            ));
+        };
 
         let (effective_dir, isolation_level) = if let Some(ref l) = lease {
             (l.lease_path().to_path_buf(), "isolated_worktree_lease")
@@ -159,7 +158,8 @@ impl TaskRuntime {
             if let Some(ref store) = self.run_store {
                 store.save_launch_attempt(&launch).await?;
             }
-            let context_pack = ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
+            let context_pack =
+                ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
             harness.execute_turn(wrun, &context_pack).await?
         };
 
@@ -169,7 +169,7 @@ impl TaskRuntime {
             harness.profile().validate_intent_assurance(&intent)?;
 
             // C1 Invariant: If already executed under GovernedToolExecutor, receipt is complete; skip re-execution
-            if intent.lifecycle_state == custos_domain::ActionLifecycleState::Receipt {
+            if intent.lifecycle_state == custos_contracts::ActionLifecycleState::Receipt {
                 continue;
             }
 
@@ -245,12 +245,12 @@ impl TaskRuntime {
 
                     // Record effect attempt in effect ledger if available
                     let effect_id = if let Some(ref ledger) = self.effect_ledger {
-                        let mut effect = custos_domain::EffectAttempt::new(
+                        let mut effect = custos_contracts::EffectAttempt::new(
                             wrun.id.clone(),
                             burned_permit.id.clone(),
                             idempotency_key.clone(),
                         );
-                        effect.status = custos_domain::EffectStatus::InFlight;
+                        effect.status = custos_contracts::EffectStatus::InFlight;
                         ledger.record_effect(&effect).await?;
                         Some(effect.id)
                     } else {
@@ -279,7 +279,7 @@ impl TaskRuntime {
                     if let Some(ref sandbox) = self.sandbox {
                         match sandbox.execute(&intent, &burned_permit).await {
                             Ok(receipt) => {
-                                let status = custos_domain::EffectStatus::from(receipt.status);
+                                let status = custos_contracts::EffectStatus::from(receipt.status);
                                 // Update Outbox and EffectLedger with verified receipt
                                 if let Some(ref outbox) = self.outbox {
                                     outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
@@ -287,11 +287,7 @@ impl TaskRuntime {
                                 if let Some(ref ledger) = self.effect_ledger {
                                     if let Some(eff_id) = effect_id {
                                         ledger
-                                            .update_effect_status(
-                                                &eff_id,
-                                                status,
-                                                Some(&receipt),
-                                            )
+                                            .update_effect_status(&eff_id, status, Some(&receipt))
                                             .await?;
                                     }
                                 }
@@ -305,7 +301,7 @@ impl TaskRuntime {
                                         let _ = ledger
                                             .update_effect_status(
                                                 &eff_id,
-                                                custos_domain::EffectStatus::Uncertain,
+                                                custos_contracts::EffectStatus::Uncertain,
                                                 None,
                                             )
                                             .await;
@@ -323,12 +319,12 @@ impl TaskRuntime {
                     .idempotency_key
                     .clone()
                     .unwrap_or_else(|| intent.id.clone());
-                let mut effect = custos_domain::EffectAttempt::new(
+                let mut effect = custos_contracts::EffectAttempt::new(
                     wrun.id.clone(),
                     "native-unmediated",
                     idempotency_key,
                 );
-                effect.status = custos_domain::EffectStatus::Uncertain;
+                effect.status = custos_contracts::EffectStatus::Uncertain;
                 if let Err(e) = ledger.record_effect(&effect).await {
                     tracing::warn!(error = %e, "Failed to record unmediated effect attempt in ledger");
                 }

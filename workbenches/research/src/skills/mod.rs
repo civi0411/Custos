@@ -11,7 +11,7 @@ pub use claims::ClaimExtractSkill;
 pub use verification::DoiVerifySkill;
 pub use web::WebExtractSkill;
 
-use custos_core::contracts::skill::SkillSink;
+use custos_engine::contracts::skill::SkillSink;
 use std::sync::Arc;
 
 /// Register all research skills into the central SkillSink

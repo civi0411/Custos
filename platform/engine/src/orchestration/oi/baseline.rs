@@ -5,7 +5,7 @@
 //! proposes the single-agent sovereign Native Baseline candidate (Claude 3.5 / Governed),
 //! records alternatives considered, measures decision latency overhead, and yields an audit `DecisionRecord`.
 
-use custos_domain::{
+use custos_contracts::{
     DecisionRecord, DecisionSnapshot, DomainError, ExecutionTopology, StrategyProposal,
 };
 use std::time::Instant;
@@ -34,7 +34,7 @@ impl DumbOiPlanner {
         // RFC 003 §3: The Baseline Fallback is ALWAYS a single, strong native coding agent.
         // Complex DAG topologies are only chosen if baseline cannot satisfy localization.
         let proposal = StrategyProposal {
-            id: custos_domain::new_id("prop"),
+            id: custos_contracts::new_id("prop"),
             task_id: snapshot.task_id.clone(),
             chosen_topology: ExecutionTopology::NativeBaseline,
             candidate_harness: self.default_harness_id.clone(),

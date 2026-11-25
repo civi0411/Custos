@@ -5,9 +5,9 @@
 //! that changes introduce no test regressions before Gate 4 completion.
 
 use async_trait::async_trait;
-use custos_adapters::host::operations::process::SandboxedProcess;
+use custos_integrations::host::operations::process::SandboxedProcess;
 
-use custos_core::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
+use custos_engine::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 
 pub struct CargoTestOracle {
     timeout_ms: u64,
@@ -67,6 +67,11 @@ impl PackVerifier for CargoTestOracle {
             .timeout_ms(self.timeout_ms);
 
         if let Some(f) = filter {
+            if f.trim().starts_with('-') || f.split_whitespace().any(|tok| tok.starts_with('-')) {
+                return VerificationResult::Fail {
+                    reason: format!("Invalid cargo test filter '{f}': flags such as --list or --skip are forbidden"),
+                };
+            }
             proc = proc.arg(f);
         }
 

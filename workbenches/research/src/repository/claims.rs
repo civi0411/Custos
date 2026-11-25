@@ -2,7 +2,7 @@ use super::ResearchRepository;
 use crate::domain::claim::{
     ClaimEvidenceLink, ClaimGroundingLevel, EvidenceRelation, ResearchClaim,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::params;
 
 impl ResearchRepository {

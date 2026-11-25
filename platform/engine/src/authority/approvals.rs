@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_domain::{ApprovalDecision, ApprovalRequest, ApprovalStatus, DomainError};
+use custos_contracts::{ApprovalDecision, ApprovalRequest, ApprovalStatus, DomainError};
 
 #[derive(Debug, Default, Clone)]
 pub struct ApprovalManager {
@@ -18,17 +18,17 @@ impl ApprovalManager {
     }
 
     pub fn request_approval(&self, req: ApprovalRequest) {
-        let mut guard = self.requests.write().expect("lock poisoned");
+        let mut guard = self.requests.write().unwrap_or_else(|e| e.into_inner());
         guard.insert(req.id.clone(), req);
     }
 
     pub fn get(&self, id: &str) -> Option<ApprovalRequest> {
-        let guard = self.requests.read().expect("lock poisoned");
+        let guard = self.requests.read().unwrap_or_else(|e| e.into_inner());
         guard.get(id).cloned()
     }
 
     pub fn list_pending(&self, task_id: &str) -> Vec<ApprovalRequest> {
-        let guard = self.requests.read().expect("lock poisoned");
+        let guard = self.requests.read().unwrap_or_else(|e| e.into_inner());
         guard
             .values()
             .filter(|r| r.task_id == task_id && r.status == ApprovalStatus::Pending)
@@ -37,7 +37,7 @@ impl ApprovalManager {
     }
 
     pub fn decide(&self, decision: &ApprovalDecision) -> Result<ApprovalRequest, DomainError> {
-        let mut guard = self.requests.write().expect("lock poisoned");
+        let mut guard = self.requests.write().unwrap_or_else(|e| e.into_inner());
         let req = guard
             .get_mut(&decision.request_id)
             .ok_or_else(|| DomainError::NotFound {

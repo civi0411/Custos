@@ -1,17 +1,17 @@
 //! Terminal Coordinator
 //!
 //! Orchestrates bounded PTY streams scoped to ExecutionWorkspaces:
-//! - Implements `custos_core::contracts::terminal::TerminalPort`
+//! - Implements `custos_contracts::contracts::terminal::TerminalPort`
 //! - Validates workspace scoping and working directory bounds
 //! - Retains bounded output history per session for reliable reconnection
 //! - Handles dynamic resizing, stdin writes, and clean termination
 
 use super::buffer::BoundedTerminalBuffer;
 use async_trait::async_trait;
-use custos_core::contracts::terminal::{
+use custos_contracts::contracts::terminal::{
     TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
 };
-use custos_domain::{
+use custos_contracts::{
     DomainError, TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
 };
 use std::collections::HashMap;
@@ -376,7 +376,8 @@ mod tests {
     #[cfg(unix)]
     async fn test_terminal_coordinator_lifecycle() {
         let temp = tempfile::tempdir().unwrap();
-        let coord = TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
+        let coord =
+            TerminalCoordinator::new(Arc::new(custos_integrations::terminal::NativePtyDriver));
 
         // 1. Spawn echo command
         let session = coord
@@ -405,7 +406,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_terminal_coordinator_rejects_missing_directory() {
-        let coord = TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
+        let coord =
+            TerminalCoordinator::new(Arc::new(custos_integrations::terminal::NativePtyDriver));
         let res = coord
             .spawn(
                 "ws-test",
@@ -424,7 +426,7 @@ mod tests {
     async fn terminal_eof_preserves_trailing_output() {
         let directory = tempfile::tempdir().unwrap();
         let coordinator =
-            TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
+            TerminalCoordinator::new(Arc::new(custos_integrations::terminal::NativePtyDriver));
         let session = coordinator
             .spawn(
                 "output-drain",

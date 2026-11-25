@@ -3,9 +3,9 @@
 //! Models risk limits, position sizing constraints, leverage boundaries,
 //! Value at Risk (VaR 95%), and Deflated Sharpe Ratio hurdles for automated execution.
 
-use custos_domain::DomainError;
-use custos_domain::new_id;
 use crate::domain::backtest::BacktestTearsheet;
+use custos_contracts::new_id;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

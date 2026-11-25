@@ -5,8 +5,8 @@
 use custos_contracts::{
     identity::error::DomainError,
     resources::{
-        workspace::{DirtyManifest, ExecutionWorkspace, WorkspaceId, WorkspaceStatus},
         ports::{WorkspaceProvider, WorkspaceRepository},
+        workspace::{DirtyManifest, ExecutionWorkspace, WorkspaceId, WorkspaceStatus},
     },
 };
 use std::sync::Arc;
@@ -21,7 +21,10 @@ impl WorkspaceApplicationService {
         Self { repo, provider }
     }
 
-    pub async fn get_workspace(&self, id: &WorkspaceId) -> Result<Option<ExecutionWorkspace>, DomainError> {
+    pub async fn get_workspace(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<Option<ExecutionWorkspace>, DomainError> {
         self.repo.get_workspace(id).await
     }
 
@@ -29,7 +32,10 @@ impl WorkspaceApplicationService {
         self.repo.list_workspaces().await
     }
 
-    pub async fn inspect_dirty(&self, workspace: &ExecutionWorkspace) -> Result<DirtyManifest, DomainError> {
+    pub async fn inspect_dirty(
+        &self,
+        workspace: &ExecutionWorkspace,
+    ) -> Result<DirtyManifest, DomainError> {
         self.provider.inspect_dirty(workspace).await
     }
 
@@ -37,7 +43,11 @@ impl WorkspaceApplicationService {
         self.provider.diff(workspace).await
     }
 
-    pub async fn update_status(&self, id: &WorkspaceId, status: WorkspaceStatus) -> Result<(), DomainError> {
+    pub async fn update_status(
+        &self,
+        id: &WorkspaceId,
+        status: WorkspaceStatus,
+    ) -> Result<(), DomainError> {
         self.repo.update_workspace_status(id, status).await
     }
 }

@@ -4,7 +4,7 @@
 //! cascading failure/skip handling, and generating execution reports.
 
 use async_trait::async_trait;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};

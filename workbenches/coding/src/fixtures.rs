@@ -1,6 +1,6 @@
 //! Engineering Pack Task Fixtures (RFC 003 §4)
 
-use custos_domain::task::{ContractEvidence, EvidenceKind, TaskContract};
+use custos_contracts::task::{ContractEvidence, EvidenceKind, TaskContract};
 
 /// Fixture: Multi-crate build and test repair task.
 pub fn engineering_repair_fixture() -> TaskContract {

@@ -3,7 +3,7 @@
 //! Controls token and span quotas with atomic Reserve & Settle cycles,
 //! enforcing the Anti-Gaming Invariant to prevent models from gaming execution limits.
 
-use custos_domain::{new_id, Budget, DomainError, Headroom, ReservationToken};
+use custos_contracts::{new_id, Budget, DomainError, Headroom, ReservationToken};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -28,7 +28,7 @@ impl BudgetGovernor {
         spans: u32,
         tokens: u64,
     ) -> Result<ReservationToken, DomainError> {
-        let mut budget_guard = self.budget.write().expect("lock poisoned");
+        let mut budget_guard = self.budget.write().unwrap_or_else(|e| e.into_inner());
         budget_guard.reserve(spans, tokens)?;
 
         let token = ReservationToken {
@@ -38,7 +38,10 @@ impl BudgetGovernor {
             reserved_tokens: tokens,
         };
 
-        let mut res_guard = self.active_reservations.write().expect("lock poisoned");
+        let mut res_guard = self
+            .active_reservations
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         res_guard.insert(token.token_id.clone(), token.clone());
 
         Ok(token)
@@ -51,7 +54,10 @@ impl BudgetGovernor {
         actual_spans: u32,
         actual_tokens: u64,
     ) -> Result<(), DomainError> {
-        let mut res_guard = self.active_reservations.write().expect("lock poisoned");
+        let mut res_guard = self
+            .active_reservations
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         let token = res_guard
             .remove(token_id)
             .ok_or_else(|| DomainError::NotFound {
@@ -59,7 +65,7 @@ impl BudgetGovernor {
                 id: token_id.into(),
             })?;
 
-        let mut budget_guard = self.budget.write().expect("lock poisoned");
+        let mut budget_guard = self.budget.write().unwrap_or_else(|e| e.into_inner());
         // Settle reservation against actuals
         budget_guard.settle(actual_spans, actual_tokens)?;
 
@@ -75,7 +81,10 @@ impl BudgetGovernor {
 
     /// Refunds the entire reservation upon action cancellation or dispatch failure.
     pub fn refund(&self, token_id: &str) -> Result<(), DomainError> {
-        let mut res_guard = self.active_reservations.write().expect("lock poisoned");
+        let mut res_guard = self
+            .active_reservations
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         let token = res_guard
             .remove(token_id)
             .ok_or_else(|| DomainError::NotFound {
@@ -83,7 +92,7 @@ impl BudgetGovernor {
                 id: token_id.into(),
             })?;
 
-        let mut budget_guard = self.budget.write().expect("lock poisoned");
+        let mut budget_guard = self.budget.write().unwrap_or_else(|e| e.into_inner());
         budget_guard.refund(token.reserved_spans, token.reserved_tokens)?;
 
         Ok(())
@@ -91,13 +100,13 @@ impl BudgetGovernor {
 
     /// Provides abstract headroom signal (Abundant, Constrained, Critical) without leaking raw counters (Anti-Gaming).
     pub fn headroom(&self) -> Headroom {
-        let budget_guard = self.budget.read().expect("lock poisoned");
+        let budget_guard = self.budget.read().unwrap_or_else(|e| e.into_inner());
         budget_guard.headroom()
     }
 
     /// Returns a snapshot of the current budget metrics.
     pub fn snapshot(&self) -> Budget {
-        let budget_guard = self.budget.read().expect("lock poisoned");
+        let budget_guard = self.budget.read().unwrap_or_else(|e| e.into_inner());
         budget_guard.clone()
     }
 }

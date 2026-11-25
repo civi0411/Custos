@@ -5,10 +5,10 @@
 //! full stdout/stderr and exit codes for deliberation and proof verification.
 
 use async_trait::async_trait;
-use custos_adapters::host::operations::process::SandboxedProcess;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
+use custos_integrations::host::operations::process::SandboxedProcess;
 use serde_json::json;
 
 pub struct CargoTestSkill;
@@ -39,7 +39,37 @@ impl Skill for CargoTestSkill {
             .and_then(|v| v.as_str())
             .ok_or_else(|| SkillError::MissingArg("workspace_path".to_string()))?;
 
+        if let Some(ref scope) = ctx.scope_root {
+            let canon_root = scope.root.canonicalize().map_err(|e| {
+                SkillError::SandboxViolation(format!(
+                    "Invalid scope_root '{}': {e}",
+                    scope.root.display()
+                ))
+            })?;
+            let canon_ws = std::path::Path::new(workspace)
+                .canonicalize()
+                .map_err(|e| {
+                    SkillError::InvalidArg(format!("Invalid workspace_path '{workspace}': {e}"))
+                })?;
+            if !canon_ws.starts_with(&canon_root) {
+                return Err(SkillError::SandboxViolation(format!(
+                    "workspace_path '{}' escapes scope_root '{}'",
+                    workspace,
+                    canon_root.display()
+                )));
+            }
+        }
+
         let test_filter = ctx.args.get("filter").and_then(|v| v.as_str());
+        if let Some(filter) = test_filter {
+            if filter.trim().starts_with('-')
+                || filter.split_whitespace().any(|tok| tok.starts_with('-'))
+            {
+                return Err(SkillError::InvalidArg(format!(
+                    "Invalid cargo test filter '{filter}': CLI flags like --list or --skip are forbidden"
+                )));
+            }
+        }
 
         let mut proc = SandboxedProcess::new("cargo")
             .arg("test")

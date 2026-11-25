@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
-use custos_domain::{digest, new_id};
+use custos_contracts::{digest, new_id};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
@@ -38,7 +38,7 @@ impl AuditLog {
         actor: &str,
         details: serde_json::Value,
     ) -> AuditEntry {
-        let mut guard = self.entries.write().expect("lock poisoned");
+        let mut guard = self.entries.write().unwrap_or_else(|e| e.into_inner());
         let prev_digest = guard
             .last()
             .map(|e| e.entry_digest.clone())
@@ -72,7 +72,7 @@ impl AuditLog {
     }
 
     pub fn len(&self) -> usize {
-        let guard = self.entries.read().expect("lock poisoned");
+        let guard = self.entries.read().unwrap_or_else(|e| e.into_inner());
         guard.len()
     }
 

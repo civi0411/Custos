@@ -3,7 +3,7 @@
 //! Provides pure Zero-I/O Level 2 (L2) Order Book representations,
 //! microprice analytics, volume weighted spreads, and synthetic book generation.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// A single price level in the Order Book with aggregate depth.
@@ -92,7 +92,8 @@ impl OrderBookSnapshot {
         })
     }
 
-    /// Builds an L2 Order Book around an observed reference close price.
+    /// Builds an L2 Order Book around an observed reference close price (test-only helper).
+    #[cfg(test)]
     pub fn synthesize(
         symbol: &str,
         close_price: f64,
@@ -106,14 +107,22 @@ impl OrderBookSnapshot {
         let close = close_price;
 
         let depth = depth_levels.clamp(1, 50);
-        let spread = (close * 0.0002).max(0.1);
+        let tick_factor = if close < 10.0 {
+            10_000.0
+        } else if close < 2_500.0 {
+            100.0
+        } else {
+            1.0
+        };
+        let spread = (close * 0.0002).max(2.0 / tick_factor);
         let half_spread = spread / 2.0;
 
         let mut asks = Vec::with_capacity(depth);
         let mut cum_ask = 0.0;
         for i in 1..=depth {
             let step = (i as f64) * (spread * 0.8);
-            let price = (close + half_spread + step * 0.5 * (i as f64)).round();
+            let price = ((close + half_spread + step * 0.5 * (i as f64)) * tick_factor).round()
+                / tick_factor;
             let size = ((1.2 + (i as f64) * 0.35) * 100.0).round() / 100.0;
             cum_ask += size;
             asks.push(OrderBookLevel::new(
@@ -127,7 +136,8 @@ impl OrderBookSnapshot {
         let mut cum_bid = 0.0;
         for i in 1..=depth {
             let step = (i as f64) * (spread * 0.8);
-            let price = (close - half_spread - step * 0.5 * (i as f64)).round();
+            let price = ((close - half_spread - step * 0.5 * (i as f64)) * tick_factor).round()
+                / tick_factor;
             let size = ((1.0 + (i as f64) * 0.4) * 100.0).round() / 100.0;
             cum_bid += size;
             bids.push(OrderBookLevel::new(

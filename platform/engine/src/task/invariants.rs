@@ -2,7 +2,7 @@
 //!
 //! Enforces business logic rules, optimistic concurrency checks, and state transitions.
 
-use custos_domain::{DomainError, Task, TaskStatus};
+use custos_contracts::{DomainError, Task, TaskStatus};
 
 pub struct TaskInvariants;
 

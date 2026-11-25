@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
-use custos_domain::StartRunCommand;
 use custos_contracts::inference::{ModelPort, ModelResponse, ProviderRequest};
+use custos_contracts::StartRunCommand;
 
 struct MeasuredAccountModel;
 #[async_trait]
@@ -9,27 +9,18 @@ impl ModelPort for MeasuredAccountModel {
     fn provider_id(&self) -> &str {
         "test"
     }
-    async fn generate(
-        &self,
-        req: &ProviderRequest,
-    ) -> Result<ModelResponse, DomainError> {
+    async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         assert_eq!(req.provider_account_id.as_deref(), Some("account-A"));
         assert_eq!(req.reasoning_effort.as_deref(), Some("ultra"));
-        Ok(
-            ModelResponse::text("answer", "ollama/test", 10).with_usage(
-                Some(7),
-                Some(3),
-                Some(10),
-            ),
-        )
+        Ok(ModelResponse::text("answer", "ollama/test", 10).with_usage(Some(7), Some(3), Some(10)))
     }
 }
 #[tokio::test]
 async fn measured_usage_and_account_are_persisted_with_model_run() {
     use crate::TrustedKernel;
-    use custos_core::TaskStore;
+    use custos_contracts::TaskStore;
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let mut task = custos_domain::Task::new("usage-task".into(), "Measured usage".into());
+    let mut task = custos_contracts::Task::new("usage-task".into(), "Measured usage".into());
     task.metadata = serde_json::json!({"provider_account_id":"account-A"});
     store.save_task(&task).await.unwrap();
     let runtime = TaskRuntime::new()
@@ -60,10 +51,7 @@ impl ModelPort for TestFailingModel {
         "test-fail"
     }
 
-    async fn generate(
-        &self,
-        _req: &ProviderRequest,
-    ) -> Result<ModelResponse, DomainError> {
+    async fn generate(&self, _req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         Err(DomainError::Validation(
             "Simulated model provider failure".into(),
         ))
@@ -73,8 +61,8 @@ impl ModelPort for TestFailingModel {
 #[tokio::test]
 async fn test_task_runtime_failed_model_turn_transitions_to_failed_and_releases_lock() {
     use crate::TrustedKernel;
-    use custos_core::TaskStore;
-    use custos_domain::Task;
+    use custos_contracts::Task;
+    use custos_contracts::TaskStore;
     use custos_storage::SqliteTaskStore;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
@@ -167,8 +155,8 @@ async fn native_run_uses_requested_harness_and_workspace() {
 
 #[tokio::test]
 async fn test_terminal_run_evicts_from_active_maps_to_persistence() {
-    use custos_core::TaskStore;
-    use custos_domain::Task;
+    use custos_contracts::Task;
+    use custos_contracts::TaskStore;
     use custos_storage::SqliteTaskStore;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
@@ -202,8 +190,10 @@ async fn test_terminal_run_evicts_from_active_maps_to_persistence() {
 
 #[tokio::test]
 async fn test_tool_receipt_not_reexecuted_double_execution_prevention() {
-    use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
-    use custos_domain::{
+    use custos_contracts::contracts::harness::{
+        AgentRuntimePort, HarnessProfile, ToolMediationLevel,
+    };
+    use custos_contracts::{
         Action, ActionLifecycleState, Assurance, ContextPack, RiskLevel, WorkerRun,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -227,7 +217,7 @@ async fn test_tool_receipt_not_reexecuted_double_execution_prevention() {
             &self,
             worker_run: &WorkerRun,
             _ctx: &ContextPack,
-        ) -> Result<Vec<custos_domain::ActionIntent>, DomainError> {
+        ) -> Result<Vec<custos_contracts::ActionIntent>, DomainError> {
             self.exec_count.fetch_add(1, Ordering::SeqCst);
             let mut intent = Action::new(
                 "act_executed".into(),
@@ -245,8 +235,8 @@ async fn test_tool_receipt_not_reexecuted_double_execution_prevention() {
     }
 
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let task = custos_domain::Task::new("task_receipt_01".into(), "Receipt Test".into());
-    custos_core::TaskStore::save_task(&*store, &task)
+    let task = custos_contracts::Task::new("task_receipt_01".into(), "Receipt Test".into());
+    custos_contracts::TaskStore::save_task(&*store, &task)
         .await
         .unwrap();
 
@@ -271,7 +261,7 @@ async fn test_tool_receipt_not_reexecuted_double_execution_prevention() {
 
 #[tokio::test]
 async fn test_task_runtime_execute_candidate_race() {
-    use custos_domain::{CandidateRaceSpec, ModelCandidateConfig};
+    use custos_contracts::{CandidateRaceSpec, ModelCandidateConfig};
     let runtime = TaskRuntime::new();
     let candidates = vec![
         ModelCandidateConfig::new("cand_a", "model_alpha", "mock_harness"),

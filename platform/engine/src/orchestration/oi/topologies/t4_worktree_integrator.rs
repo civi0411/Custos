@@ -3,13 +3,11 @@
 //! Allocates isolated workspace leases for concurrent branch workers, prevents write-set
 //! conflicts prior to execution, and merges clean diffs into base workspace via Integrator.
 
-use crate::oi::join_policy::{
-    JoinEvaluation, JoinEvaluator, JoinPolicy, WriteSetConflictChecker,
-};
+use crate::oi::join_policy::{JoinEvaluation, JoinEvaluator, JoinPolicy, WriteSetConflictChecker};
 use crate::workspace::lease::{WorkspaceLease, WorkspaceLeaseManager};
-use custos_domain::oi::{NodePlacement, WorkerResult};
-use custos_domain::workflow::RevisionNode;
-use custos_domain::DomainError;
+use custos_contracts::oi::{NodePlacement, WorkerResult};
+use custos_contracts::workflow::RevisionNode;
+use custos_contracts::DomainError;
 
 pub struct T4WorktreeCoordinator;
 

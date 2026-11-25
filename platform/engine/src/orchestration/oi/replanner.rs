@@ -3,10 +3,10 @@
 //! Generates delta ReplanBrief upon failed assumptions or verification triggers.
 //! Enforces INV-03: nodes that produced an Uncertain outbox effect are NEVER blind-retried.
 
-use custos_core::contracts::storage::{OutboxEntry, OutboxStatus};
-use custos_domain::oi::{ReplanBrief, ReplanTrigger};
-use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-use custos_domain::DomainError;
+use custos_contracts::contracts::storage::{OutboxEntry, OutboxStatus};
+use custos_contracts::oi::{ReplanBrief, ReplanTrigger};
+use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
+use custos_contracts::DomainError;
 use std::collections::{HashMap, HashSet};
 
 pub struct Replanner;

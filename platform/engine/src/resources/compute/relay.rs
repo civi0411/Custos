@@ -4,8 +4,8 @@
 //! hardware adaptation planning, single-writer generation-CAS promotion fencing,
 //! and crash recovery without data loss or silent divergence.
 
-use custos_core::contracts::checkpoint_store::{CheckpointStorePort, PromotionOutcome};
-use custos_domain::{
+use custos_contracts::contracts::checkpoint_store::{CheckpointStorePort, PromotionOutcome};
+use custos_contracts::{
     new_id, AcceleratorSpec, CompatibilityVerdict, ComputeBackendKind, DomainError, ExecEvent,
     ExecState, ExecutionAttempt, HardwareAdaptationPlan, ResourceState, TrainingCheckpointManifest,
 };

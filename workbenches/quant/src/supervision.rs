@@ -1,6 +1,6 @@
 //! Supervision policy tailored to the Quant Workbench.
 
-use custos_domain::supervision::{StepSpanKind, SupervisionProfile, ThresholdPolicy};
+use custos_contracts::supervision::{StepSpanKind, SupervisionProfile, ThresholdPolicy};
 
 pub fn quant_supervision_profile() -> SupervisionProfile {
     SupervisionProfile::for_workbench(
@@ -21,4 +21,3 @@ pub fn quant_supervision_profile() -> SupervisionProfile {
         StepSpanKind::Verification,
     ])
 }
-

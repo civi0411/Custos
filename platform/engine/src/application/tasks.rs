@@ -1,9 +1,9 @@
 //! Task Application Service & Lifecycle Use Cases
 
-use std::sync::Arc;
-use custos_contracts::{DomainError, Task};
 use crate::task::{AdvanceTask, CancelTask, CompleteTask, CreateTask, TaskService};
 use crate::task::{TaskAdvanced, TaskCancelled, TaskCompleted, TaskCreated};
+use custos_contracts::{DomainError, Task};
+use std::sync::Arc;
 
 /// Primary application service orchestrating task lifecycle and transitions.
 pub struct TaskApplicationService {
@@ -19,11 +19,17 @@ impl TaskApplicationService {
         self.task_service.execute_create(cmd).await
     }
 
-    pub async fn advance_task(&self, cmd: AdvanceTask) -> Result<(Task, TaskAdvanced), DomainError> {
+    pub async fn advance_task(
+        &self,
+        cmd: AdvanceTask,
+    ) -> Result<(Task, TaskAdvanced), DomainError> {
         self.task_service.execute_advance(cmd).await
     }
 
-    pub async fn complete_task(&self, cmd: CompleteTask) -> Result<(Task, TaskCompleted), DomainError> {
+    pub async fn complete_task(
+        &self,
+        cmd: CompleteTask,
+    ) -> Result<(Task, TaskCompleted), DomainError> {
         self.task_service.execute_complete(cmd).await
     }
 

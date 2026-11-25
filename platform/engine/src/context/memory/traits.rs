@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_domain::{DomainError, Fact};
+use custos_contracts::{DomainError, Fact};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -5,8 +5,8 @@
 //! Contract (Custos.md §12.4). The resulting digest is locked into the Permit.
 
 use async_trait::async_trait;
-use custos_domain::ids::digest;
-use custos_runtime::agent::skills::{
+use custos_contracts::ids::digest;
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 use serde_json::json;
@@ -55,9 +55,18 @@ impl Skill for PayloadLockSkill {
             ));
         }
 
-        // Canonical canonicalization: recipient + "\n" + subject + "\n" + body
-        let canonical_bytes = format!("{}\n{}\n{}", recipient, subject, body);
-        let payload_digest = digest(canonical_bytes.as_bytes());
+        let attachments = ctx
+            .args
+            .get("attachments")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(vec![]));
+        let canonical = json!({
+            "recipient": recipient,
+            "subject": subject,
+            "body": body,
+            "attachments": attachments,
+        });
+        let payload_digest = digest(canonical.to_string().as_bytes());
 
         Ok(SkillOutput {
             skill_id: self.skill_id().to_string(),

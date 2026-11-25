@@ -1,6 +1,6 @@
 //! Research Worker Roles
 
-use custos_core::contracts::pack::WorkerRole;
+use custos_engine::contracts::pack::WorkerRole;
 
 pub fn research_roles() -> Vec<WorkerRole> {
     vec![

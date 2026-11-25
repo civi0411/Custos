@@ -1,9 +1,9 @@
 use super::*;
 use async_trait::async_trait;
-use custos_domain::{
+use custos_contracts::inference::{ModelResponse, ProviderRequest, ToolCall};
+use custos_contracts::{
     ActionLifecycleState, ContextItem, ContextPack, DomainError, RiskLevel, WorkerRun,
 };
-use custos_contracts::inference::{ModelResponse, ProviderRequest, ToolCall};
 
 pub(super) struct MockTestProvider {
     pub(super) tool_to_return: Option<ToolCall>,
@@ -128,9 +128,8 @@ async fn test_governed_agent_runtime_yields_action_intent() {
             is_tainted: false,
         }],
         total_tokens: 10,
-        context_digest:
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string(),
+        context_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            .to_string(),
     };
 
     let intents = runtime
@@ -186,8 +185,7 @@ async fn test_multi_step_agent_loop_model_tool_result_continuation() {
     .with_max_iterations(5);
 
     let worker_run = WorkerRun::new("task_multi".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     let intents = runtime
         .execute_turn(&worker_run, &context_pack)
@@ -228,8 +226,7 @@ async fn test_rejected_tool_clean_error_no_hang() {
     .with_max_iterations(3);
 
     let worker_run = WorkerRun::new("task_reject".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     let intents = runtime
         .execute_turn(&worker_run, &context_pack)
@@ -269,8 +266,7 @@ async fn test_tool_output_cap_truncation_no_panic() {
     .with_max_iterations(2);
 
     let worker_run = WorkerRun::new("task_trunc".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     let intents = runtime
         .execute_turn(&worker_run, &context_pack)

@@ -1,7 +1,7 @@
 use super::super::*;
-use custos_core::contracts::harness::RunObserver;
-use custos_domain::{new_id, SessionId, StartRunCommand};
+use custos_contracts::contracts::harness::RunObserver;
 use custos_contracts::inference::{ModelResponse, ProviderEventType, ProviderRequest, TokenUsage};
+use custos_contracts::{new_id, SessionId, StartRunCommand};
 
 impl TaskRuntime {
     pub(super) async fn execute_model_turn(
@@ -14,10 +14,11 @@ impl TaskRuntime {
     ) -> Result<Option<String>, DomainError> {
         let mut turn_output: Option<String> = None;
         if let Some(ref model) = self.model {
-            let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
-            let mut prompt_text = cmd.prompt.clone().unwrap_or_else(|| {
-                format!("Initial run turn for task {}", cmd.task_id)
-            });
+            let mut launch = custos_contracts::LaunchAttempt::new(&wrun.id, requested_mode)?;
+            let mut prompt_text = cmd
+                .prompt
+                .clone()
+                .unwrap_or_else(|| format!("Initial run turn for task {}", cmd.task_id));
             let target_model = cmd
                 .model
                 .as_deref()
@@ -41,11 +42,8 @@ impl TaskRuntime {
                     )));
                 }
                 let journal = session_store.get_journal(&session_id).await?;
-                let compiled = crate::context::compile_session_history(
-                    &journal,
-                    &prompt_text,
-                    12_000,
-                );
+                let compiled =
+                    crate::context::compile_session_history(&journal, &prompt_text, 12_000);
                 run.metadata["session_context"] = serde_json::json!({
                     "compiler_version": "journal-recent-v1",
                     "session_id": session_id.0,
@@ -57,13 +55,8 @@ impl TaskRuntime {
                 prompt_text = compiled.prompt;
             }
 
-            let mut req = ProviderRequest::new(
-                new_id("req"),
-                &cmd.task_id,
-                1,
-                prompt_text,
-                target_model,
-            );
+            let mut req =
+                ProviderRequest::new(new_id("req"), &cmd.task_id, 1, prompt_text, target_model);
             req.reasoning_effort = run
                 .metadata
                 .get("reasoning_effort")
@@ -122,14 +115,14 @@ impl TaskRuntime {
                         if let Some(ref calls) = event.tool_calls {
                             let now_ms = chrono::Utc::now().timestamp_millis();
                             for call in calls {
-                                self.supervision.record_span(custos_domain::supervision::RunStepSpan {
+                                self.supervision.record_span(custos_contracts::supervision::RunStepSpan {
                                     id: new_id("step"),
                                     run_id: run.id.clone(),
                                     worker_run_id: Some(wrun.id.clone()),
                                     parent_id: None,
-                                    kind: custos_domain::supervision::StepSpanKind::Tool,
+                                    kind: custos_contracts::supervision::StepSpanKind::Tool,
                                     name: call.name.clone(),
-                                    status: custos_domain::supervision::StepSpanStatus::Success,
+                                    status: custos_contracts::supervision::StepSpanStatus::Success,
                                     started_at_ms: now_ms,
                                     ended_at_ms: Some(now_ms),
                                     duration_ms: Some(0),
@@ -153,24 +146,27 @@ impl TaskRuntime {
                         completed = true;
                     }
                     ProviderEventType::Failed => {
-                        let msg = event.error.unwrap_or_else(|| "Provider stream failed".into());
+                        let msg = event
+                            .error
+                            .unwrap_or_else(|| "Provider stream failed".into());
                         let now_ms = chrono::Utc::now().timestamp_millis();
-                        let (_, sig) = custos_domain::supervision::compute_error_signature(
+                        let (_, sig) = custos_contracts::supervision::compute_error_signature(
                             "ProviderStreamError",
                             &msg,
                         );
-                        self.supervision.record_error(custos_domain::supervision::StepError {
-                            id: new_id("serr"),
-                            run_id: run.id.clone(),
-                            worker_run_id: Some(wrun.id.clone()),
-                            span_id: None,
-                            error_type: "ProviderStreamError".into(),
-                            message: msg.clone(),
-                            stack: None,
-                            agent: target_model.to_string(),
-                            signature_hash: sig,
-                            timestamp_ms: now_ms,
-                        });
+                        self.supervision
+                            .record_error(custos_contracts::supervision::StepError {
+                                id: new_id("serr"),
+                                run_id: run.id.clone(),
+                                worker_run_id: Some(wrun.id.clone()),
+                                span_id: None,
+                                error_type: "ProviderStreamError".into(),
+                                message: msg.clone(),
+                                stack: None,
+                                agent: target_model.to_string(),
+                                signature_hash: sig,
+                                timestamp_ms: now_ms,
+                            });
                         return Err(DomainError::Validation(msg));
                     }
                 }

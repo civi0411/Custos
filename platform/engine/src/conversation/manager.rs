@@ -1,7 +1,7 @@
 use crate::session::journal::SessionJournal;
 use crate::task::SessionStateMachine;
 use custos_contracts::SessionStore;
-use custos_domain::{
+use custos_contracts::{
     DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId,
     WorkbenchLens,
 };
@@ -206,7 +206,6 @@ impl SessionManager {
     ) -> Result<(), DomainError> {
         self.ensure_session_loaded(id).await?;
         let lens_value = match &lens {
-
             WorkbenchLens::Assistant => "chat",
             WorkbenchLens::Coding => "code",
             WorkbenchLens::Research => "research",

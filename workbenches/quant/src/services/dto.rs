@@ -2,7 +2,7 @@
 //!
 //! Enforces compile-time schema validation and eliminates manual untyped JSON navigation.
 
-use crate::{MonthlyReturn, OhlcvBar, TradeFillRecord};
+use crate::{EvidenceObservation, MonthlyReturn, OhlcvBar, TradeFillRecord};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -140,6 +140,63 @@ pub struct ApproveOrderRequest {
     pub permit_id: String,
     #[serde(default = "default_task_id")]
     pub task_id: String,
+    #[serde(default)]
+    pub execute_paper: bool,
+    pub execution_price: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClosePositionRequest {
+    pub strategy_id: String,
+    pub task_id: String,
+    pub symbol: String,
+    pub direction: String,
+    pub quantity: f64,
+    pub mark_price: f64,
+    pub permit_id: Option<String>,
+    #[serde(default)]
+    pub execute_paper: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SaveStrategyRequest {
+    pub id: Option<String>,
+    pub name: String,
+    #[serde(default = "default_market")]
+    pub market: String,
+    #[serde(default = "default_venue")]
+    pub venue: String,
+    pub symbol: String,
+    #[serde(default = "default_timeframe")]
+    pub timeframe: String,
+    pub formula: String,
+    #[serde(default = "default_direction_mode")]
+    pub direction_mode: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListPositionsRequest {
+    pub strategy_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListFillsRequest {
+    pub strategy_id: Option<String>,
+    pub symbol: Option<String>,
+    #[serde(default = "default_bars_limit")]
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AssessEvidenceRequest {
+    #[serde(default = "default_task_id")]
+    pub task_id: String,
+    pub symbol: String,
+    #[serde(default = "default_market")]
+    pub market: String,
+    #[serde(default)]
+    pub required_metrics: Vec<String>,
+    pub observations: Vec<EvidenceObservation>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -166,6 +223,7 @@ pub struct DiscoverFactorsRequest {
     pub symbol: String,
     #[serde(default = "default_timeframe")]
     pub timeframe: String,
+    pub formulas: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -173,6 +231,10 @@ pub struct IngestMarketBarsRequest {
     pub symbol: String,
     #[serde(default = "default_timeframe")]
     pub timeframe: String,
+    #[serde(default = "default_market")]
+    pub market: String,
+    #[serde(default = "default_venue")]
+    pub venue: String,
     pub bars: Vec<OhlcvBarDto>,
 }
 
@@ -218,6 +280,7 @@ pub struct ComputeReviewRequest {
     pub strategy_id: String,
     #[serde(default = "default_review_symbol")]
     pub symbol: String,
+    #[serde(default)]
     pub fills: Vec<TradeFillRecord>,
 }
 
@@ -386,8 +449,17 @@ fn default_max_consecutive_losses() -> usize {
     5
 }
 fn default_strategy_id() -> String {
-    "strategy_default".into()
+    String::new()
 }
 fn default_review_symbol() -> String {
     "ALL".into()
+}
+fn default_market() -> String {
+    "USStock".into()
+}
+fn default_venue() -> String {
+    "local".into()
+}
+fn default_direction_mode() -> String {
+    "long_only".into()
 }

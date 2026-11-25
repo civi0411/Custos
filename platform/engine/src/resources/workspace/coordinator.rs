@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use custos_core::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
-use custos_domain::{
+use custos_contracts::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
+use custos_contracts::{
     DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage,
     WorkspaceStatus,
 };
@@ -283,7 +283,7 @@ impl WorkspaceCoordinator {
     pub async fn inspect_environment_assurance(
         &self,
         id: &WorkspaceId,
-    ) -> Result<custos_domain::environment::EnvironmentAssurance, DomainError> {
+    ) -> Result<custos_contracts::environment::EnvironmentAssurance, DomainError> {
         let workspace =
             self.repository
                 .get_workspace(id)

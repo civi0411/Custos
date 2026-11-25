@@ -1,6 +1,6 @@
 //! Assistant Pack Task Fixtures (RFC 003 §4)
 
-use custos_domain::task::TaskContract;
+use custos_contracts::task::TaskContract;
 
 /// Fixture: Daily agenda triage and schedule consolidation.
 pub fn assistant_agenda_fixture() -> TaskContract {

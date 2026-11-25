@@ -2,8 +2,8 @@
 //!
 //! Direct single-turn synthesis without tool execution or side effects.
 
-use custos_domain::oi::{WorkerResult, WorkerStatus};
-use custos_domain::DomainError;
+use custos_contracts::oi::{WorkerResult, WorkerStatus};
+use custos_contracts::DomainError;
 
 pub struct T0DirectCoordinator;
 

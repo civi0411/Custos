@@ -5,7 +5,7 @@
 //! before dispatching to the Custos orchestration engine.
 
 use async_trait::async_trait;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput,
 };
 use serde_json::json;

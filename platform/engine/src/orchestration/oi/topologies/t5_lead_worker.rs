@@ -7,9 +7,9 @@
 //!   runtime has AgentDriver injection support inside topology coordinators.
 
 use crate::oi::join_policy::{JoinEvaluation, JoinEvaluator, JoinPolicy};
-use custos_domain::oi::{WorkerResult, WorkerStatus};
-use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-use custos_domain::DomainError;
+use custos_contracts::oi::{WorkerResult, WorkerStatus};
+use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
+use custos_contracts::DomainError;
 use std::collections::{HashMap, VecDeque};
 
 pub struct T5LeadWorkerCoordinator;
@@ -48,28 +48,27 @@ impl T5LeadWorkerCoordinator {
         let deps = &revision.dependencies;
 
         if nodes.is_empty() {
-            return Err(DomainError::Validation(
-                "T5: revision has no nodes".into(),
-            ));
+            return Err(DomainError::Validation("T5: revision has no nodes".into()));
         }
 
         // Build in-degree and adjacency for Kahn's sort
         let node_map: HashMap<&str, &RevisionNode> =
             nodes.iter().map(|n| (n.node_id.as_str(), n)).collect();
 
-        let mut in_degree: HashMap<&str, usize> =
-            node_map.keys().map(|k| (*k, 0usize)).collect();
-        let mut adj: HashMap<&str, Vec<&str>> =
-            node_map.keys().map(|k| (*k, vec![])).collect();
+        let mut in_degree: HashMap<&str, usize> = node_map.keys().map(|k| (*k, 0usize)).collect();
+        let mut adj: HashMap<&str, Vec<&str>> = node_map.keys().map(|k| (*k, vec![])).collect();
 
         for (from, to) in deps {
-            if !node_map.contains_key(from.as_str()) || !node_map.contains_key(to.as_str()) {
+            if let (Some(edges), Some(deg)) =
+                (adj.get_mut(from.as_str()), in_degree.get_mut(to.as_str()))
+            {
+                edges.push(to.as_str());
+                *deg += 1;
+            } else {
                 return Err(DomainError::Validation(format!(
                     "T5: dependency references unknown node: {from} → {to}"
                 )));
             }
-            adj.get_mut(from.as_str()).unwrap().push(to.as_str());
-            *in_degree.get_mut(to.as_str()).unwrap() += 1;
         }
 
         let mut queue: VecDeque<&str> = in_degree
@@ -81,11 +80,14 @@ impl T5LeadWorkerCoordinator {
 
         while let Some(id) = queue.pop_front() {
             topo.push(id);
-            for &next in adj.get(id).unwrap_or(&vec![]) {
-                let d = in_degree.get_mut(next).unwrap();
-                *d -= 1;
-                if *d == 0 {
-                    queue.push_back(next);
+            if let Some(neighbors) = adj.get(id) {
+                for &next in neighbors {
+                    if let Some(d) = in_degree.get_mut(next) {
+                        *d -= 1;
+                        if *d == 0 {
+                            queue.push_back(next);
+                        }
+                    }
                 }
             }
         }
@@ -100,7 +102,9 @@ impl T5LeadWorkerCoordinator {
         let mut pred_map: HashMap<&str, Vec<String>> =
             node_map.keys().map(|k| (*k, vec![])).collect();
         for (from, to) in deps {
-            pred_map.get_mut(to.as_str()).unwrap().push(from.clone());
+            if let Some(preds) = pred_map.get_mut(to.as_str()) {
+                preds.push(from.clone());
+            }
         }
 
         let ordered = topo
@@ -179,7 +183,10 @@ impl T5LeadWorkerCoordinator {
                     "T5 synthesis rejected: {reason}"
                 )));
             }
-            JoinEvaluation::RetryRequired { next_iteration, feedback } => {
+            JoinEvaluation::RetryRequired {
+                next_iteration,
+                feedback,
+            } => {
                 return Err(DomainError::Validation(format!(
                     "T5 synthesis needs retry (iteration {next_iteration}): {feedback}"
                 )));
@@ -200,15 +207,19 @@ impl T5LeadWorkerCoordinator {
             &fragment[..fragment.len().min(300)]
         );
 
-        Ok(T5SynthesisResult { payload, worker_results, join_evaluation })
+        Ok(T5SynthesisResult {
+            payload,
+            worker_results,
+            join_evaluation,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::workflow::{RevisionNode, WorkflowRevision};
-    use custos_domain::oi::WorkerResult;
+    use custos_contracts::oi::WorkerResult;
+    use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
 
     fn revision_with(node_ids: &[&str], deps: &[(&str, &str)]) -> WorkflowRevision {
         let mut rev = WorkflowRevision::new("task-t", "prop-p", 1);
@@ -242,7 +253,11 @@ mod tests {
     fn linear_dag_a_before_b_before_c() {
         let rev = revision_with(&["c", "b", "a"], &[("a", "b"), ("b", "c")]);
         let decomp = T5LeadWorkerCoordinator::lead_decompose(&rev).unwrap();
-        let order: Vec<&str> = decomp.ordered.iter().map(|n| n.node.node_id.as_str()).collect();
+        let order: Vec<&str> = decomp
+            .ordered
+            .iter()
+            .map(|n| n.node.node_id.as_str())
+            .collect();
         let pos = |x: &str| order.iter().position(|&v| v == x).unwrap();
         assert!(pos("a") < pos("b"));
         assert!(pos("b") < pos("c"));

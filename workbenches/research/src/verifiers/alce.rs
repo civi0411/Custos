@@ -6,7 +6,7 @@
 use crate::domain::claim::{
     AssessmentStatus, ClaimAssessmentRecord, EntailmentVerdict, PassageAnchor, ResearchClaim,
 };
-use custos_domain::error::DomainError;
+use custos_contracts::error::DomainError;
 
 pub struct AlceEntailmentEngine {
     evaluator_id: String,
@@ -46,8 +46,27 @@ impl AlceEntailmentEngine {
             };
         }
 
-        // Direct containment: premise verbatim contains hypothesis statement
-        if p.contains(&h) {
+        // Check negation polarity FIRST using whole-word tokenization so "not" never matches "note"/"notebook"
+        let negations = [
+            "not",
+            "never",
+            "fails",
+            "refutes",
+            "contradicts",
+            "opposite",
+            "decreases",
+        ];
+        let has_negation_word = |text: &str| -> bool {
+            text.contains("no evidence")
+                || text
+                    .split(|c: char| !c.is_alphanumeric())
+                    .any(|w| negations.contains(&w))
+        };
+        let p_has_neg = has_negation_word(&p);
+        let h_has_neg = has_negation_word(&h);
+
+        // Direct containment is only valid when polarity matches
+        if p.contains(&h) && p_has_neg == h_has_neg {
             return EntailmentVerdict::Entailed {
                 confidence: 0.98,
                 rationale: "Premise verbatim contains the hypothesis statement".into(),
@@ -79,20 +98,6 @@ impl AlceEntailmentEngine {
         }
 
         let overlap_ratio = (matched as f32) / (h_tokens.len() as f32);
-
-        // Check for direct polarity contradiction
-        let negations = [
-            "not",
-            "never",
-            "fails",
-            "refutes",
-            "contradicts",
-            "opposite",
-            "decreases",
-            "no evidence",
-        ];
-        let p_has_neg = negations.iter().any(|&neg| p.contains(neg));
-        let h_has_neg = negations.iter().any(|&neg| h.contains(neg));
 
         if overlap_ratio >= 0.60 && p_has_neg != h_has_neg {
             return EntailmentVerdict::Contradicted {

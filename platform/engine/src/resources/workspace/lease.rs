@@ -3,8 +3,8 @@
 //! Enforces worktree isolation per DAG task node to ensure absolute zero-cross-contamination.
 //! Changes from tasks are committed back to the main workspace via bounded write prefixes.
 
-use custos_core::contracts::workspace::RepositoryGitPort;
-use custos_domain::{new_id, DomainError};
+use custos_contracts::contracts::workspace::RepositoryGitPort;
+use custos_contracts::{new_id, DomainError};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

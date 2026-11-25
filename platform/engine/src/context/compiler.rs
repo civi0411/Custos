@@ -4,7 +4,7 @@
 
 use crate::context::traits::{ContextBuilder, ContextSlice};
 use async_trait::async_trait;
-use custos_domain::{new_id, ContextItem, ContextPack, DomainError, SessionJournalEntry};
+use custos_contracts::{new_id, ContextItem, ContextPack, DomainError, SessionJournalEntry};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -218,7 +218,10 @@ impl TokenAwareContextCompiler {
             let doc_tokens = Self::estimate_tokens(&doc.content);
 
             if total_tokens + doc_tokens <= effective_budget {
-                let prov_hash = format!("sha256:{}", custos_domain::digest(doc.content.as_bytes()));
+                let prov_hash = format!(
+                    "sha256:{}",
+                    custos_contracts::digest(doc.content.as_bytes())
+                );
                 items.push(ContextItem {
                     id: new_id("ctx"),
                     source: doc.path.clone(),
@@ -236,8 +239,10 @@ impl TokenAwareContextCompiler {
                     let sliced_content: String = doc.content.chars().take(approx_chars).collect();
                     let actual_tokens = Self::estimate_tokens(&sliced_content);
                     if actual_tokens > 0 {
-                        let prov_hash =
-                            format!("sha256:{}", custos_domain::digest(sliced_content.as_bytes()));
+                        let prov_hash = format!(
+                            "sha256:{}",
+                            custos_contracts::digest(sliced_content.as_bytes())
+                        );
                         items.push(ContextItem {
                             id: new_id("ctx"),
                             source: format!("{} (truncated)", doc.path),
@@ -262,7 +267,10 @@ impl TokenAwareContextCompiler {
             digest_payload.push_str(&it.content);
             digest_payload.push('\n');
         }
-        let context_digest = format!("sha256:{}", custos_domain::digest(digest_payload.as_bytes()));
+        let context_digest = format!(
+            "sha256:{}",
+            custos_contracts::digest(digest_payload.as_bytes())
+        );
 
         Ok(ContextPack::new(
             new_id("ctxpack"),
@@ -341,7 +349,7 @@ mod tests {
 
     #[test]
     fn session_history_uses_recent_turns_without_repeating_current_request() {
-        let session_id = custos_domain::SessionId::new("session-test");
+        let session_id = custos_contracts::SessionId::new("session-test");
         let entry = |id, kind: &str, data: &str| SessionJournalEntry {
             entry_id: Some(id),
             session_id: session_id.clone(),
@@ -432,7 +440,11 @@ mod tests {
         assert!(!pack.items.is_empty());
         assert_eq!(pack.items[0].source, "src/core.rs");
         assert!(pack.items[0].provenance_hash.is_some());
-        assert!(pack.items[0].provenance_hash.as_ref().unwrap().starts_with("sha256:"));
+        assert!(pack.items[0]
+            .provenance_hash
+            .as_ref()
+            .unwrap()
+            .starts_with("sha256:"));
         assert!(pack.context_digest.starts_with("sha256:"));
     }
 }

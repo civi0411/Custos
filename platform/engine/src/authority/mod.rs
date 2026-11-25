@@ -24,7 +24,7 @@ pub use policy::{
 };
 pub use risk::RiskEvaluator;
 
-use custos_domain::{Action, DomainError, Permit};
+use custos_contracts::{Action, DomainError, Permit};
 use std::sync::Arc;
 
 /// AuthorityEngine acts as the central authority enforcement point for tasks
@@ -137,7 +137,7 @@ impl AuthorityEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{Grant, RiskLevel};
+    use custos_contracts::{Grant, RiskLevel};
 
     #[tokio::test]
     async fn test_authorize_low_risk_action() {

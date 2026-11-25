@@ -3,8 +3,8 @@
 //! Transforms an Admitted Strategy Proposal into an executable, typed `WorkflowRevision`.
 //! Pure, deterministic, zero-I/O function.
 
-use custos_domain::oi::{ExecutionTopology, NodePlacement, StrategyProposal};
-use custos_domain::workflow::{RevisionNode, WorkflowRevision};
+use custos_contracts::oi::{ExecutionTopology, NodePlacement, StrategyProposal};
+use custos_contracts::workflow::{RevisionNode, WorkflowRevision};
 
 pub struct PlanCompiler;
 

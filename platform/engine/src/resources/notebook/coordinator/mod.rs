@@ -8,11 +8,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use custos_domain::DomainError;
-use custos_core::contracts::notebook::{
-    ExecuteCellResult, KernelStatus, NotebookDriverPort, NotebookKernelState,
-    NotebookStoragePort, NotebookWorkerSession,
+use custos_contracts::contracts::notebook::{
+    ExecuteCellResult, KernelStatus, NotebookDriverPort, NotebookKernelState, NotebookStoragePort,
+    NotebookWorkerSession,
 };
+use custos_contracts::DomainError;
 
 pub(crate) mod execution;
 
@@ -34,7 +34,8 @@ pub(crate) struct ActiveKernel {
 pub struct PythonKernelCoordinator {
     pub(crate) driver: Arc<dyn NotebookDriverPort>,
     pub(crate) kernels: Arc<RwLock<HashMap<String, ActiveKernel>>>,
-    pub(crate) admission: Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>>,
+    pub(crate) admission:
+        Option<Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>>,
 }
 
 impl PythonKernelCoordinator {
@@ -48,7 +49,7 @@ impl PythonKernelCoordinator {
 
     pub fn with_admission_coordinator(
         mut self,
-        admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+        admission: Arc<dyn custos_contracts::contracts::compute::WorkloadAdmissionPort>,
     ) -> Self {
         self.admission = Some(admission);
         self

@@ -4,7 +4,7 @@
 //! and high-performance in-memory slice inspection for algorithmic strategies in Rust.
 
 use super::engine::OhlcvBar;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Standard market bar timeframes with deterministic duration semantics.
@@ -161,37 +161,10 @@ impl<'a> NativeDataPortal<'a> {
         Some(ema)
     }
 
-    /// Calculate Relative Strength Index (RSI) on the visible closed slice.
+    /// Calculate Relative Strength Index (RSI) using Wilder's exponential smoothing (TA-Lib standard).
     pub fn calculate_rsi(&self, reference_ts: i64, period: usize) -> Option<f64> {
-        if period == 0 {
-            return None;
-        }
-        let window = self.history_window(reference_ts, period + 1);
-        if window.len() <= period {
-            return None;
-        }
-
-        let mut gains = 0.0;
-        let mut losses = 0.0;
-
-        for w in window.windows(2) {
-            let change = w[1].close - w[0].close;
-            if change > 0.0 {
-                gains += change;
-            } else {
-                losses += change.abs();
-            }
-        }
-
-        let avg_gain = gains / period as f64;
-        let avg_loss = losses / period as f64;
-
-        if avg_loss == 0.0 {
-            return Some(100.0);
-        }
-
-        let rs = avg_gain / avg_loss;
-        Some(100.0 - (100.0 / (1.0 + rs)))
+        let visible = self.slice_point_in_time(reference_ts);
+        compute_wilder_rsi_slice(visible, period)
     }
 
     /// Calculate Bollinger Bands on the visible closed slice.
@@ -233,27 +206,37 @@ impl<'a> NativeDataPortal<'a> {
         slow_period: usize,
         signal_period: usize,
     ) -> Option<MacdResult> {
-        if fast_period >= slow_period || signal_period == 0 {
+        if fast_period == 0 || fast_period >= slow_period || signal_period == 0 {
             return None;
         }
-        let fast_ema = self.calculate_ema(reference_ts, fast_period)?;
-        let slow_ema = self.calculate_ema(reference_ts, slow_period)?;
-        let macd = fast_ema - slow_ema;
+        let visible = self.slice_point_in_time(reference_ts);
+        if visible.len() < slow_period {
+            return None;
+        }
 
-        let prev_fast = self
-            .history_window(reference_ts, 2)
-            .first()
-            .and_then(|b| self.calculate_ema(b.timestamp, fast_period))
-            .unwrap_or(fast_ema);
-        let prev_slow = self
-            .history_window(reference_ts, 2)
-            .first()
-            .and_then(|b| self.calculate_ema(b.timestamp, slow_period))
-            .unwrap_or(slow_ema);
-        let prev_macd = prev_fast - prev_slow;
-
+        let alpha_fast = 2.0 / (fast_period as f64 + 1.0);
+        let alpha_slow = 2.0 / (slow_period as f64 + 1.0);
         let alpha_sig = 2.0 / (signal_period as f64 + 1.0);
-        let signal = alpha_sig * macd + (1.0 - alpha_sig) * prev_macd;
+
+        let mut fast_ema = visible[0].close;
+        let mut slow_ema = visible[0].close;
+        let mut macd_series = Vec::with_capacity(visible.len() - slow_period + 1);
+
+        for (idx, bar) in visible.iter().enumerate() {
+            if idx > 0 {
+                fast_ema = alpha_fast * bar.close + (1.0 - alpha_fast) * fast_ema;
+                slow_ema = alpha_slow * bar.close + (1.0 - alpha_slow) * slow_ema;
+            }
+            if idx + 1 >= slow_period {
+                macd_series.push(fast_ema - slow_ema);
+            }
+        }
+
+        let macd = *macd_series.last()?;
+        let mut signal = macd_series[0];
+        for &m in &macd_series[1..] {
+            signal = alpha_sig * m + (1.0 - alpha_sig) * signal;
+        }
         let histogram = macd - signal;
 
         Some(MacdResult {
@@ -263,26 +246,10 @@ impl<'a> NativeDataPortal<'a> {
         })
     }
 
-    /// Calculate Average True Range (ATR) for volatility and risk-adjusted position sizing.
+    /// Calculate Average True Range (ATR) using Wilder's exponential smoothing (TA-Lib standard).
     pub fn calculate_atr(&self, reference_ts: i64, period: usize) -> Option<f64> {
-        if period == 0 {
-            return None;
-        }
-        let window = self.history_window(reference_ts, period + 1);
-        if window.len() <= period {
-            return None;
-        }
-
-        let mut tr_sum = 0.0;
-        for i in 1..window.len() {
-            let high_low = window[i].high - window[i].low;
-            let high_prev_close = (window[i].high - window[i - 1].close).abs();
-            let low_prev_close = (window[i].low - window[i - 1].close).abs();
-            let true_range = high_low.max(high_prev_close).max(low_prev_close);
-            tr_sum += true_range;
-        }
-
-        Some(tr_sum / period as f64)
+        let visible = self.slice_point_in_time(reference_ts);
+        compute_wilder_atr_slice(visible, period)
     }
 
     /// Calculate Volume Weighted Average Price (VWAP) on visible closed slice.
@@ -324,4 +291,89 @@ pub struct MacdResult {
     pub macd: f64,
     pub signal: f64,
     pub histogram: f64,
+}
+
+/// Wilder-smoothed RSI (alpha = 1 / period, SMA-seeded on first `period` changes).
+pub fn compute_wilder_rsi_slice(bars: &[OhlcvBar], period: usize) -> Option<f64> {
+    if period == 0 || bars.len() <= period {
+        return None;
+    }
+    let mut avg_gain = 0.0;
+    let mut avg_loss = 0.0;
+    for i in 1..=period {
+        let change = bars[i].close - bars[i - 1].close;
+        if change > 0.0 {
+            avg_gain += change;
+        } else {
+            avg_loss += change.abs();
+        }
+    }
+    let p = period as f64;
+    avg_gain /= p;
+    avg_loss /= p;
+
+    for i in (period + 1)..bars.len() {
+        let change = bars[i].close - bars[i - 1].close;
+        let gain = if change > 0.0 { change } else { 0.0 };
+        let loss = if change < 0.0 { change.abs() } else { 0.0 };
+        avg_gain = (avg_gain * (p - 1.0) + gain) / p;
+        avg_loss = (avg_loss * (p - 1.0) + loss) / p;
+    }
+
+    if avg_loss == 0.0 {
+        return Some(100.0);
+    }
+    let rs = avg_gain / avg_loss;
+    Some(100.0 - (100.0 / (1.0 + rs)))
+}
+
+/// Wilder-smoothed ATR (alpha = 1 / period, SMA-seeded on first `period` true ranges).
+pub fn compute_wilder_atr_slice(bars: &[OhlcvBar], period: usize) -> Option<f64> {
+    if period == 0 || bars.len() <= period {
+        return None;
+    }
+    let true_range = |i: usize| -> f64 {
+        let hl = bars[i].high - bars[i].low;
+        let hc = (bars[i].high - bars[i - 1].close).abs();
+        let lc = (bars[i].low - bars[i - 1].close).abs();
+        hl.max(hc).max(lc)
+    };
+
+    let mut atr = 0.0;
+    for i in 1..=period {
+        atr += true_range(i);
+    }
+    let p = period as f64;
+    atr /= p;
+
+    for i in (period + 1)..bars.len() {
+        atr = (atr * (p - 1.0) + true_range(i)) / p;
+    }
+    Some(atr)
+}
+
+#[cfg(test)]
+mod wilder_tests {
+    use super::*;
+
+    #[test]
+    fn test_wilder_rsi_and_atr_stockcharts_reference() {
+        // Classic StockCharts RSI(14) 16-bar series: bar 14 (seed) = 70.464, bar 15 (Wilder) = 66.250
+        let closes = [
+            44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08, 45.89, 46.03,
+            45.61, 46.28, 46.28, 46.00,
+        ];
+        let bars: Vec<OhlcvBar> = closes
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| OhlcvBar::new(i as i64 * 86400, c, c + 0.5, c - 0.5, c, 1000.0))
+            .collect();
+        let rsi_seed = compute_wilder_rsi_slice(&bars[..15], 14).unwrap();
+        let rsi_wilder = compute_wilder_rsi_slice(&bars, 14).unwrap();
+        assert!((rsi_seed - 70.464).abs() < 0.05, "seed={rsi_seed}");
+        assert!((rsi_wilder - 66.250).abs() < 0.05, "wilder={rsi_wilder}");
+
+        let atr = compute_wilder_atr_slice(&bars, 14).unwrap();
+        assert!(atr > 0.5 && atr < 2.0, "atr={atr}");
+    }
 }

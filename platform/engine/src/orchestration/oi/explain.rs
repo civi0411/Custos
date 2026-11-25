@@ -5,9 +5,9 @@
 
 use super::compiler::PlanCompiler;
 use super::hard_filters::HardFilters;
-pub use custos_domain::oi::{CandidateExplanation, ExplainReport};
-use custos_domain::oi::{DecisionSnapshot, StrategyProposal};
-use custos_domain::DomainError;
+pub use custos_contracts::oi::{CandidateExplanation, ExplainReport};
+use custos_contracts::oi::{DecisionSnapshot, StrategyProposal};
+use custos_contracts::DomainError;
 
 use super::candidate_builder::CandidateBuilder;
 use super::estimator::Estimator;
@@ -49,7 +49,7 @@ impl ExplainService {
             }
 
             let temp_proposal = StrategyProposal {
-                id: custos_domain::new_id("prop"),
+                id: custos_contracts::new_id("prop"),
                 task_id: snapshot.task_id.clone(),
                 chosen_topology: cand.topology,
                 candidate_harness: cand.harness_id.clone(),

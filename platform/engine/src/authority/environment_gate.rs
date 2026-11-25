@@ -4,8 +4,8 @@
 //! and measured host observations.
 
 use crate::contracts::environment::GateReport;
-use custos_domain::authority::action::Assurance;
-use custos_domain::environment::{
+use custos_contracts::authority::action::Assurance;
+use custos_contracts::environment::{
     EnvironmentAssurance, EnvironmentProfile, EnvironmentSpec, EnvironmentState,
 };
 
@@ -77,7 +77,8 @@ impl EnvironmentGate {
         {
             if !assurance.network_restricted {
                 violations.push(
-                    "ENV-05: Quant backtest environment requires strictly restricted network".into(),
+                    "ENV-05: Quant backtest environment requires strictly restricted network"
+                        .into(),
                 );
             }
         }
@@ -85,7 +86,8 @@ impl EnvironmentGate {
         // ENV-07: Degraded state must specify an explicit, non-empty reason
         if let EnvironmentState::Degraded { reason } = state {
             if reason.trim().is_empty() {
-                violations.push("ENV-07: Degraded environment state requires explicit reason".into());
+                violations
+                    .push("ENV-07: Degraded environment state requires explicit reason".into());
             }
         }
 
@@ -103,10 +105,8 @@ mod tests {
 
     #[test]
     fn test_env_01_ready_passes_failed_rejected() {
-        let spec = EnvironmentSpec::new(
-            "env_01",
-            EnvironmentProfile::Assistant { project_id: None },
-        );
+        let spec =
+            EnvironmentSpec::new("env_01", EnvironmentProfile::Assistant { project_id: None });
         let mut assurance = EnvironmentAssurance::unconstrained();
         assurance.measured_assurance = Assurance::CustosMediated;
 
@@ -142,8 +142,7 @@ mod tests {
             isolation_driver: "seatbelt".into(),
         };
 
-        let report =
-            EnvironmentGate::evaluate(&invalid_spec, &EnvironmentState::Ready, &assurance);
+        let report = EnvironmentGate::evaluate(&invalid_spec, &EnvironmentState::Ready, &assurance);
         assert!(!report.passed);
         assert!(report.violations.iter().any(|v| v.contains("ENV-02")));
     }
@@ -185,10 +184,12 @@ mod tests {
             isolation_driver: "bwrap".into(),
         };
 
-        let report =
-            EnvironmentGate::evaluate(&quant_spec, &EnvironmentState::Ready, &unrestricted_assurance);
+        let report = EnvironmentGate::evaluate(
+            &quant_spec,
+            &EnvironmentState::Ready,
+            &unrestricted_assurance,
+        );
         assert!(!report.passed);
         assert!(report.violations.iter().any(|v| v.contains("ENV-05")));
     }
 }
-

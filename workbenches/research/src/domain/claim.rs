@@ -1,8 +1,8 @@
 //! Verifiable Research Claim, Source, Passage Anchor, and Lineage Domain Models
 //! Strictly enforces Invariant Grounding Levels (L0-L3) and Cryptographic Proofs.
 
-use custos_domain::{new_id, DomainError};
-pub use custos_domain::ArtifactLineageNode;
+pub use custos_contracts::ArtifactLineageNode;
+use custos_contracts::{new_id, DomainError};
 pub use custos_protocol::research::ClaimGroundingLevel;
 use serde::{Deserialize, Serialize};
 
@@ -192,7 +192,7 @@ impl SourceProposal {
     }
 }
 
-pub use custos_domain::environment::EnvSnapshot;
+pub use custos_contracts::environment::EnvSnapshot;
 
 /// Experiment run execution receipt
 #[derive(Debug, Clone, Serialize, Deserialize)]

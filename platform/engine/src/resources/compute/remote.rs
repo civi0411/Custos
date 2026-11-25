@@ -14,11 +14,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use custos_core::contracts::compute::{
+use custos_contracts::contracts::compute::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
     WorkloadAdmissionPort,
 };
-use custos_domain::{
+use custos_contracts::{
     ComputeWorkloadKind, DomainError, ExecEvent, ExecState, ExecutionArtifact, ExecutionAttempt,
     ExternalJobRef, ProgressTriplet, ResourceEvent, WorkloadAdmissionRequest,
     WorkloadAdmissionVerdict,
@@ -78,7 +78,7 @@ impl RemoteExecutionCoordinator {
             preferred_device_id,
             require_exclusive: true,
             required_memory_mb: Some(16384),
-            lane: Some(custos_domain::ExecutionLane::Batch),
+            lane: Some(custos_contracts::ExecutionLane::Batch),
         };
 
         let verdict = self.admission.admit_workload(&admission_req).await?;

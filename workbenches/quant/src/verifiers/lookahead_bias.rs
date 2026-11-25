@@ -1,9 +1,9 @@
 //! Lookahead Bias Checker
 //! Lookahead bias = strategy accidentally uses future info during historical simulation.
 
-use async_trait::async_trait;
-use custos_core::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 use crate::domain::detect_lookahead_bias;
+use async_trait::async_trait;
+use custos_engine::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 
 pub struct LookaheadBiasChecker;
 

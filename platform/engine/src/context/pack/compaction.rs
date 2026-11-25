@@ -5,7 +5,7 @@
 //! 2. Strip single-line comments
 //! 3. Prune lowest-ranked items until within token budget
 
-use custos_domain::ContextItem;
+use custos_contracts::ContextItem;
 
 pub struct ProgressiveCompactor;
 

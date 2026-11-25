@@ -3,7 +3,7 @@
 //! Validates proposed topologies and candidates before passing to the compiler.
 
 use super::hard_filters::HardFilters;
-use custos_domain::oi::{DecisionSnapshot, RejectionReason, StrategyProposal};
+use custos_contracts::oi::{DecisionSnapshot, RejectionReason, StrategyProposal};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdmissibilityResult {

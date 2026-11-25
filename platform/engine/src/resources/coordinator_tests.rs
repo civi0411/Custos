@@ -1,9 +1,9 @@
 use super::*;
-use custos_core::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
-use custos_domain::authority::action::Assurance;
-use custos_domain::environment::EnvironmentAssurance;
-use custos_domain::WorkspaceId;
-use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
+use custos_contracts::authority::action::Assurance;
+use custos_contracts::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
+use custos_contracts::environment::EnvironmentAssurance;
+use custos_contracts::WorkspaceId;
+use custos_contracts::{ExecutionWorkspace, WorkspaceStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 struct MockWorkspaceRepo {

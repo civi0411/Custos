@@ -13,7 +13,7 @@ pub use verifier::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::EvidenceRequirement;
+    use custos_contracts::EvidenceRequirement;
 
     #[tokio::test]
     async fn test_command_exit_code_verifier_success() {
@@ -127,11 +127,11 @@ mod tests {
             &self,
             path_or_uri: &str,
             _base_path: Option<&str>,
-        ) -> Result<String, custos_domain::DomainError> {
+        ) -> Result<String, custos_contracts::DomainError> {
             if path_or_uri == "sample.rs" {
                 Ok("line 1: fn main() {\nline 2:     println!(\"hello\");\nline 3: }\n".into())
             } else {
-                Err(custos_domain::DomainError::Validation(format!(
+                Err(custos_contracts::DomainError::Validation(format!(
                     "File not found: {path_or_uri}"
                 )))
             }

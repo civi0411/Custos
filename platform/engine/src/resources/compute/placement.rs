@@ -9,7 +9,7 @@
 //! 2. Fail-Closed Egress Protection: Local datasets cannot be egressed to cloud targets without explicit consent.
 //! 3. Graceful CPU Fallback: When an accelerator is held exclusively, background work drops to CPU rather than stalling or competing for VRAM.
 
-use custos_domain::{
+use custos_contracts::{
     ComputeDeviceRef, ComputeWorkloadKind, DeviceKind, DomainError, OptionalConsumerPlacement,
     WorkloadLease, WorkloadLeaseStatus,
 };

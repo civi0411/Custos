@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_domain::{ContextItem, DomainError};
+use custos_contracts::{ContextItem, DomainError};
 
 #[derive(Debug, Clone)]
 pub struct ContextSlice {

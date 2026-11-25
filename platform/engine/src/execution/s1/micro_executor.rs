@@ -6,7 +6,7 @@
 //! - INV-04 / INV-06: Strictly CANNOT grant authority, issue capability tokens, or self-issue permits.
 //! - Execution time is strictly bounded to < 5 seconds.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;

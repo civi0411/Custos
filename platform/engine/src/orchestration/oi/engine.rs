@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use custos_core::contracts::OiPlannerPort;
-use custos_domain::oi::{DecisionSnapshot, StrategyProposal};
-use custos_domain::DomainError;
+use custos_contracts::contracts::OiPlannerPort;
+use custos_contracts::oi::{DecisionSnapshot, StrategyProposal};
+use custos_contracts::DomainError;
 
 use super::candidate_builder::CandidateBuilder;
 use super::estimator::Estimator;

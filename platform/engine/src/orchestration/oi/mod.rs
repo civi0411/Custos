@@ -19,7 +19,7 @@ pub use baseline::*;
 pub use benchmark::{BenchmarkComparison, BenchmarkSuiteReport, OiBenchmarkRunner};
 pub use candidate_builder::*;
 pub use compiler::PlanCompiler;
-pub use custos_domain::oi::evaluation::*;
+pub use custos_contracts::oi::evaluation::*;
 pub use engine::*;
 pub use estimator::*;
 pub use explain::*;
