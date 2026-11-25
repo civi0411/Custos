@@ -11,11 +11,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use custos_core::contracts::harness::{
+use custos_contracts::contracts::harness::{
     AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
     WorktreeOwnership,
 };
-use custos_domain::{ActionIntent, ContextPack, DomainError, WorkerRun};
+use custos_contracts::{ActionIntent, ContextPack, DomainError, WorkerRun};
 
 use super::catalog::find_spec;
 #[cfg(any(test, feature = "test-support"))]
@@ -238,7 +238,7 @@ impl AgentRuntimePort for CliHarness {
         struct TurnObserver {
             run_id: String,
         }
-        impl custos_core::contracts::harness::RunObserver for TurnObserver {
+        impl custos_contracts::contracts::harness::RunObserver for TurnObserver {
             fn emit(&self, _kind: &str, _payload: serde_json::Value) {}
             fn is_cancelled(&self) -> bool {
                 false
@@ -285,7 +285,7 @@ impl AgentRuntimePort for CliHarness {
         &self,
         instruction: &str,
         cwd: &Path,
-        observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
+        observer: std::sync::Arc<dyn custos_contracts::contracts::harness::RunObserver>,
     ) -> Result<HarnessExecutionResult, DomainError> {
         #[cfg(any(test, feature = "test-support"))]
         if self.mock_state.enabled {
@@ -399,7 +399,7 @@ impl AgentRuntimePort for ClaudeCodeHarnessAdapter {
         &self,
         instruction: &str,
         cwd: &Path,
-        observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
+        observer: std::sync::Arc<dyn custos_contracts::contracts::harness::RunObserver>,
     ) -> Result<HarnessExecutionResult, DomainError> {
         self.0.run_native_observed(instruction, cwd, observer).await
     }
@@ -460,7 +460,7 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
         &self,
         instruction: &str,
         cwd: &Path,
-        observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
+        observer: std::sync::Arc<dyn custos_contracts::contracts::harness::RunObserver>,
     ) -> Result<HarnessExecutionResult, DomainError> {
         self.0.run_native_observed(instruction, cwd, observer).await
     }

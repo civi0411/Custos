@@ -1,6 +1,6 @@
 //! Core streaming wire types and helpers.
 
-use custos_provider::{ProviderEvent, ProviderEventType};
+use crate::{ProviderEvent, ProviderEventType};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

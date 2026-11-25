@@ -9,8 +9,8 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tokio_util::io::StreamReader;
 
 use crate::base::MessageStream;
-use crate::errors::ProviderError;
 use crate::cloud::codecs::ollama::response_to_streaming_message_ollama;
+use crate::errors::ProviderError;
 use crate::request_log::{LoggerHandleExt, RequestLogHandle};
 
 /// Wraps a line stream with a per-item timeout at the raw SSE level.

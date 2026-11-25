@@ -12,10 +12,10 @@ pub use packages::*;
 pub use telemetry::*;
 pub use worker::*;
 
+pub use crate::connectors::documents;
+pub use crate::credentials as vault;
 pub use crate::filesystem::operations;
 pub use crate::filesystem::workspace;
-pub use crate::terminal;
 pub use crate::notebook;
 pub use crate::sandbox;
-pub use crate::credentials as vault;
-pub use crate::connectors::documents;
+pub use crate::terminal;

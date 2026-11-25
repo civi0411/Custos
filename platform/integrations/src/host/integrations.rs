@@ -115,7 +115,9 @@ pub async fn exec_ssh_command(
     let mut cmd = build_ssh_command(ssh_bin, host, user, port, 10, key_path, command);
     let out = tokio::time::timeout(Duration::from_secs(60), cmd.output())
         .await
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "SSH command timed out"))??;
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "SSH command timed out")
+        })??;
     let elapsed_ms = start.elapsed().as_millis() as u64;
     Ok((
         out.status.code(),
@@ -124,4 +126,3 @@ pub async fn exec_ssh_command(
         elapsed_ms,
     ))
 }
-

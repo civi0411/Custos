@@ -1,5 +1,5 @@
 use super::SharedCapabilitiesRepository;
-use custos_domain::{
+use custos_contracts::{
     DomainError, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType, ReviewerRecord,
 };
 use rusqlite::params;
@@ -202,4 +202,3 @@ impl SharedCapabilitiesRepository {
         })
     }
 }
-

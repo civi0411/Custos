@@ -1,6 +1,6 @@
 //! Bounded integrity checks for caller-authorized checkpoint directories.
 
-use custos_domain::{DomainError, TrainingCheckpointManifest};
+use custos_contracts::{DomainError, TrainingCheckpointManifest};
 use sha2::{Digest, Sha256};
 use std::{fs, io::Read, path::Path};
 
@@ -91,7 +91,7 @@ pub fn verify_local_checkpoint_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::CheckpointFileEntry;
+    use custos_contracts::CheckpointFileEntry;
 
     #[test]
     fn verifies_bytes_and_rejects_corruption_limits_and_traversal() {

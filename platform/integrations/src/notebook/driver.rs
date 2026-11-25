@@ -4,7 +4,7 @@
 //! strict frame byte caps to prevent OOM, and guarantees process-tree termination.
 
 use async_trait::async_trait;
-use custos_core::contracts::notebook::{
+use custos_contracts::contracts::notebook::{
     NotebookDriverPort, NotebookWorkerResponse, NotebookWorkerSession,
 };
 use custos_contracts::DomainError;
@@ -161,6 +161,9 @@ async fn read_bounded_line<R: AsyncBufRead + Unpin>(
 
 /// Terminates an entire process tree given its root process ID.
 fn terminate_process_tree(pid: u32) {
+    if pid == 0 {
+        return;
+    }
     #[cfg(unix)]
     unsafe {
         // Send SIGKILL to negative PGID to wipe the whole process group

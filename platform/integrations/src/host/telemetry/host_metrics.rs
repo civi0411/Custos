@@ -241,4 +241,3 @@ pub fn collect_system_telemetry() -> SystemTelemetrySnapshot {
         listening_ports,
     }
 }
-

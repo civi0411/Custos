@@ -4,8 +4,8 @@ use llama_cpp_2::model::{ChatTemplateResult, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::openai::OpenAIChatTemplateParams;
 
 use super::inference_engine::{LoadedChatTemplates, LoadedModel};
+use crate::errors::ProviderError;
 use crate::local::local_inference::model::{ChatTemplate, ModelSettings, ToolCallingMode};
-use custos_provider::errors::ProviderError;
 
 pub(crate) fn builtin_chat_template_names() -> Vec<String> {
     let count = unsafe { llama_cpp_sys_2::llama_chat_builtin_templates(std::ptr::null_mut(), 0) };

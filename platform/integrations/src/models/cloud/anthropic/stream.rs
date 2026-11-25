@@ -7,19 +7,19 @@ use tokio::pin;
 use tokio_util::io::StreamReader;
 
 use super::types::AnthropicProvider;
-use crate::cloud::transport::api_client::ApiClient;
 use crate::base::MessageStream;
-use crate::cloud::transport::openai_compatible::handle_status;
-use crate::retry::ProviderRetry;
-use crate::conversation::message::Message;
-use crate::errors::ProviderError;
 use crate::cloud::codecs::anthropic::{
     block_binding_behavior, create_request_for_model, is_thinking_signature_error,
     response_to_streaming_message, AnthropicFormatOptions, PrefixMismatchBehavior,
     ANTHROPIC_PROVIDER_NAME, INPUT_TRANSFORMATIONS_FIELD, THINKING_BINDING_CONTROLS_BETA,
 };
+use crate::cloud::transport::api_client::ApiClient;
+use crate::cloud::transport::openai_compatible::handle_status;
+use crate::conversation::message::Message;
+use crate::errors::ProviderError;
 use crate::model::ModelConfig;
 use crate::request_log::{start_log, LoggerHandleExt};
+use crate::retry::ProviderRetry;
 use rmcp::model::Tool;
 
 impl AnthropicProvider {

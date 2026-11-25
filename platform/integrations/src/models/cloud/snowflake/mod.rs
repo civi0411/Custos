@@ -5,12 +5,14 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig};
 use crate::base::{ConfigKey, MessageStream, Provider, ProviderMetadata};
+use crate::cloud::codecs::snowflake::{create_request, get_usage, response_to_message};
+use crate::cloud::transport::api_client::{
+    ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig,
+};
+use crate::cloud::transport::openai_compatible::{map_http_error_to_provider_error, sanitize_url};
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
-use crate::cloud::codecs::snowflake::{create_request, get_usage, response_to_message};
-use crate::cloud::transport::openai_compatible::{map_http_error_to_provider_error, sanitize_url};
 use crate::retry::ProviderRetry;
 use crate::utils::get_model;
 

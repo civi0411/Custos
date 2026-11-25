@@ -9,13 +9,13 @@
 
 use super::SqliteTaskStore;
 use async_trait::async_trait;
-use custos_core::contracts::storage::{
+use custos_contracts::contracts::storage::{
     CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort,
     OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort, WorkflowRevisionPort,
 };
-use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
-use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
-use custos_domain::{
+use custos_contracts::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
+use custos_contracts::kernel::{SessionStore, TaskEvent, TaskStore};
+use custos_contracts::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
     ExecutionWorkspace, LaunchAttempt, NodePlacement, ReplanRecord, Run, Session, SessionId,
     SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
@@ -154,7 +154,7 @@ impl OutboxPort for SqliteTaskStore {
 impl EffectLedgerPort for SqliteTaskStore {
     async fn record_effect(
         &self,
-        effect: &custos_domain::EffectAttempt,
+        effect: &custos_contracts::EffectAttempt,
     ) -> Result<(), DomainError> {
         self.outbox_repo.record_effect(effect)
     }
@@ -162,7 +162,7 @@ impl EffectLedgerPort for SqliteTaskStore {
     async fn update_effect_status(
         &self,
         id: &str,
-        status: custos_domain::EffectStatus,
+        status: custos_contracts::EffectStatus,
         receipt: Option<&ExecutionReceipt>,
     ) -> Result<(), DomainError> {
         self.outbox_repo.update_effect_status(id, status, receipt)
@@ -171,7 +171,7 @@ impl EffectLedgerPort for SqliteTaskStore {
     async fn get_effect_by_idempotency_key(
         &self,
         key: &str,
-    ) -> Result<Option<custos_domain::EffectAttempt>, DomainError> {
+    ) -> Result<Option<custos_contracts::EffectAttempt>, DomainError> {
         self.outbox_repo.get_effect_by_idempotency_key(key)
     }
 
@@ -388,14 +388,14 @@ impl WorkspaceRepoPort for SqliteTaskStore {
 }
 
 #[async_trait]
-impl custos_core::contracts::storage::SupervisionStorePort for SqliteTaskStore {
+impl custos_contracts::contracts::storage::SupervisionStorePort for SqliteTaskStore {
     async fn persist_batch(
         &self,
-        runs: &[custos_domain::SupervisionRunRecord],
-        spans: &[custos_domain::RunStepSpan],
-        logs: &[custos_domain::SupervisionLogEntry],
-        errors: &[custos_domain::StepError],
-        findings: &[custos_domain::SupervisionFinding],
+        runs: &[custos_contracts::SupervisionRunRecord],
+        spans: &[custos_contracts::RunStepSpan],
+        logs: &[custos_contracts::SupervisionLogEntry],
+        errors: &[custos_contracts::StepError],
+        findings: &[custos_contracts::SupervisionFinding],
     ) -> Result<(), DomainError> {
         self.run_repo
             .persist_telemetry_batch(runs, spans, logs, errors, findings)
@@ -404,35 +404,35 @@ impl custos_core::contracts::storage::SupervisionStorePort for SqliteTaskStore {
     async fn get_run_record(
         &self,
         run_id: &str,
-    ) -> Result<Option<custos_domain::SupervisionRunRecord>, DomainError> {
+    ) -> Result<Option<custos_contracts::SupervisionRunRecord>, DomainError> {
         self.run_repo.get_telemetry_run_record(run_id)
     }
 
     async fn list_runs(
         &self,
-        filter: &custos_core::contracts::workflow::SupervisionRunFilter,
-    ) -> Result<Vec<custos_domain::SupervisionRunRecord>, DomainError> {
+        filter: &custos_contracts::contracts::workflow::SupervisionRunFilter,
+    ) -> Result<Vec<custos_contracts::SupervisionRunRecord>, DomainError> {
         self.run_repo.list_telemetry_runs(filter)
     }
 
     async fn list_run_spans(
         &self,
         run_id: &str,
-    ) -> Result<Vec<custos_domain::RunStepSpan>, DomainError> {
+    ) -> Result<Vec<custos_contracts::RunStepSpan>, DomainError> {
         self.run_repo.list_run_spans(run_id)
     }
 
     async fn list_logs(
         &self,
-        filter: &custos_core::contracts::workflow::SupervisionLogFilter,
-    ) -> Result<Vec<custos_domain::SupervisionLogEntry>, DomainError> {
+        filter: &custos_contracts::contracts::workflow::SupervisionLogFilter,
+    ) -> Result<Vec<custos_contracts::SupervisionLogEntry>, DomainError> {
         self.run_repo.list_logs(filter)
     }
 
     async fn list_run_errors(
         &self,
         run_id: &str,
-    ) -> Result<Vec<custos_domain::StepError>, DomainError> {
+    ) -> Result<Vec<custos_contracts::StepError>, DomainError> {
         self.run_repo.list_run_errors(run_id)
     }
 
@@ -440,18 +440,20 @@ impl custos_core::contracts::storage::SupervisionStorePort for SqliteTaskStore {
         &self,
         workbench_id: Option<&str>,
         limit: usize,
-    ) -> Result<Vec<custos_domain::StepError>, DomainError> {
+    ) -> Result<Vec<custos_contracts::StepError>, DomainError> {
         self.run_repo.list_errors(workbench_id, limit)
     }
 
     async fn list_findings(
         &self,
-        filter: &custos_core::contracts::workflow::SupervisionFindingFilter,
-    ) -> Result<Vec<custos_domain::SupervisionFinding>, DomainError> {
+        filter: &custos_contracts::contracts::workflow::SupervisionFindingFilter,
+    ) -> Result<Vec<custos_contracts::SupervisionFinding>, DomainError> {
         self.run_repo.list_findings(filter)
     }
 
-    async fn count_overview_stats(&self) -> Result<(usize, usize, usize, usize, usize), DomainError> {
+    async fn count_overview_stats(
+        &self,
+    ) -> Result<(usize, usize, usize, usize, usize), DomainError> {
         self.run_repo.count_overview_stats()
     }
 
@@ -460,6 +462,7 @@ impl custos_core::contracts::storage::SupervisionStorePort for SqliteTaskStore {
         log_cutoff_ms: i64,
         span_cutoff_ms: i64,
     ) -> Result<usize, DomainError> {
-        self.run_repo.prune_telemetry_before(log_cutoff_ms, span_cutoff_ms)
+        self.run_repo
+            .prune_telemetry_before(log_cutoff_ms, span_cutoff_ms)
     }
 }

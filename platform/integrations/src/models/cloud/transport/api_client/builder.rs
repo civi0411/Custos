@@ -51,7 +51,10 @@ impl<'a> ApiRequestBuilder<'a> {
 
     async fn send_bounded(&self, request: reqwest::RequestBuilder) -> Result<Response> {
         if self.streaming {
-            Ok(crate::cloud::transport::http_status::send_bounded(request, self.client.timeout).await?)
+            Ok(
+                crate::cloud::transport::http_status::send_bounded(request, self.client.timeout)
+                    .await?,
+            )
         } else {
             Ok(request.send().await?)
         }
@@ -77,7 +80,10 @@ impl<'a> ApiRequestBuilder<'a> {
         self.send_bounded(request).await
     }
 
-    pub(crate) async fn send_request<F>(&self, request_builder: F) -> Result<reqwest::RequestBuilder>
+    pub(crate) async fn send_request<F>(
+        &self,
+        request_builder: F,
+    ) -> Result<reqwest::RequestBuilder>
     where
         F: FnOnce(url::Url, &Client) -> reqwest::RequestBuilder,
     {
@@ -109,4 +115,3 @@ impl<'a> ApiRequestBuilder<'a> {
         Ok(request)
     }
 }
-

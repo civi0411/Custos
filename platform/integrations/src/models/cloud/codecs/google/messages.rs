@@ -1,8 +1,8 @@
+use crate::cloud::codecs::openai::sanitize_function_name;
 use crate::conversation::message::{Message, MessageContentBlock, ProviderMetadata};
 use crate::documents::{
     document_media_type_is_supported, unsupported_document_text, UNSUPPORTED_MEDIA_TYPE_REASON,
 };
-use crate::cloud::codecs::openai::sanitize_function_name;
 use crate::mcp_utils::extract_text_from_resource;
 use rmcp::model::{ContentBlock, ResourceContents, Role};
 use serde_json::{json, Map, Value};
@@ -262,4 +262,3 @@ pub fn format_messages(messages: &[Message], nested_function_response_media: boo
         })
         .collect()
 }
-

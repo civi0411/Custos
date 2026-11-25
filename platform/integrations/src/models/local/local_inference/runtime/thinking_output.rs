@@ -1,4 +1,4 @@
-use custos_provider::thinking::{FilterOut, ThinkFilter};
+use crate::thinking::{FilterOut, ThinkFilter};
 
 #[allow(dead_code)]
 pub(crate) struct ThinkingOutputFilter {

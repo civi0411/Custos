@@ -1,5 +1,5 @@
 use super::ProviderRepository;
-use custos_domain::{
+use custos_contracts::{
     DomainError, LocalModelDescriptor, LocalModelFolder, LocalModelLoadProfile, ModelCompatibility,
 };
 use rusqlite::params;

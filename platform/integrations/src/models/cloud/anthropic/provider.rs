@@ -2,17 +2,15 @@ use async_trait::async_trait;
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use super::types::{
-    AnthropicProvider, ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_DOC_URL,
-};
+use super::types::{AnthropicProvider, ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_DOC_URL};
 use crate::base::{
     known_models_from_registry, ConfigKey, MessageStream, Provider, ProviderDescriptor,
     ProviderMetadata,
 };
+use crate::cloud::codecs::anthropic::ANTHROPIC_PROVIDER_NAME;
 use crate::cloud::transport::openai_compatible::handle_status;
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
-use crate::cloud::codecs::anthropic::ANTHROPIC_PROVIDER_NAME;
 use crate::model::ModelConfig;
 use rmcp::model::Tool;
 

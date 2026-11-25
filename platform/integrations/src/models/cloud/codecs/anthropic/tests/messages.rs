@@ -1,9 +1,7 @@
 use super::super::*;
 use super::helpers::*;
 use crate::conversation::message::{Message, MessageContent, MessageContentBlock};
-use rmcp::model::{
-    CallToolRequestParams, ContentBlock, ResourceContents, Tool,
-};
+use rmcp::model::{CallToolRequestParams, ContentBlock, ResourceContents, Tool};
 use rmcp::object;
 use serde_json::json;
 #[test]
@@ -347,8 +345,7 @@ fn test_tool_response_unsupported_image_mime_falls_back_to_text() {
     });
 
     let messages = vec![
-        Message::assistant()
-            .with_tool_request("tool_1", Ok(CallToolRequestParams::new("render"))),
+        Message::assistant().with_tool_request("tool_1", Ok(CallToolRequestParams::new("render"))),
         Message::user().with_tool_response("tool_1", Ok(CallToolResult::success(vec![svg]))),
     ];
 
@@ -390,8 +387,7 @@ fn test_tool_response_unsupported_raw_image_mime_falls_back_to_text() {
     let image = ContentBlock::image("aGVsbG8=", "image/svg+xml");
 
     let messages = vec![
-        Message::assistant()
-            .with_tool_request("tool_1", Ok(CallToolRequestParams::new("render"))),
+        Message::assistant().with_tool_request("tool_1", Ok(CallToolRequestParams::new("render"))),
         Message::user().with_tool_response("tool_1", Ok(CallToolResult::success(vec![image]))),
     ];
 
@@ -471,4 +467,3 @@ fn test_parameterless_tool_request_serializes_input_as_empty_object() {
     assert!(!input.is_null());
     assert_eq!(input, &json!({}));
 }
-

@@ -10,8 +10,10 @@
 //! 4. Every effect produces an append-only `ExecutionReceipt` with a Blake3 digest of the output.
 
 use async_trait::async_trait;
-use custos_core::contracts::sandbox::{verify_permit_binding, SandboxPort};
-use custos_domain::{digest, new_id, ActionIntent, DomainError, ExecutionReceipt, ReceiptStatus};
+use custos_contracts::contracts::sandbox::{verify_permit_binding, SandboxPort};
+use custos_contracts::{
+    digest, new_id, ActionIntent, DomainError, ExecutionReceipt, ReceiptStatus,
+};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -54,7 +56,7 @@ impl SovereignDeveloperAdapter {
         } else {
             root.join(path)
         };
-        let sandbox = custos_core::authority::PathSandbox::new(root.clone())?;
+        let sandbox = custos_contracts::authority::PathSandbox::new(root.clone())?;
         let mut ancestor = sandbox.resolve_and_contain(&requested).map_err(|error| {
             DomainError::Unauthorized(format!("Path traversal violation: {error}"))
         })?;
@@ -112,6 +114,21 @@ impl SovereignDeveloperAdapter {
             .ok_or_else(|| DomainError::Validation("Missing 'path' parameter for read".into()))?;
 
         let safe_path = self.canonicalize_safe_path(path_str).await?;
+        const MAX_READ_BYTES: u64 = 10 * 1024 * 1024;
+        let meta = tokio::fs::metadata(&safe_path).await.map_err(|e| {
+            DomainError::Validation(format!(
+                "Failed to inspect file '{}': {}",
+                safe_path.display(),
+                e
+            ))
+        })?;
+        if meta.len() > MAX_READ_BYTES {
+            return Err(DomainError::Validation(format!(
+                "File '{}' exceeds 10 MiB read limit ({} bytes)",
+                safe_path.display(),
+                meta.len()
+            )));
+        }
         let content = tokio::fs::read_to_string(&safe_path).await.map_err(|e| {
             DomainError::Validation(format!(
                 "Failed to read file '{}': {}",
@@ -278,12 +295,22 @@ impl SovereignDeveloperAdapter {
         let timeout_secs = params
             .get("timeout_secs")
             .and_then(|v| v.as_u64())
-            .map(Duration::from_secs)
+            .map(|s| Duration::from_secs(s.clamp(1, 300)))
             .unwrap_or(self.default_timeout);
 
         let mut cmd = tokio::process::Command::new("sh");
         cmd.arg("-c").arg(command);
         cmd.current_dir(&self.workspace_root);
+        for sensitive in [
+            "CUSTOS_IPC_TOKEN",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+        ] {
+            cmd.env_remove(sensitive);
+        }
+        cmd.kill_on_drop(true);
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
@@ -328,7 +355,7 @@ impl SandboxPort for SovereignDeveloperAdapter {
     async fn execute(
         &self,
         action: &ActionIntent,
-        permit: &custos_domain::Permit,
+        permit: &custos_contracts::Permit,
     ) -> Result<ExecutionReceipt, DomainError> {
         // 1. Invariant I2: Strict permit correlation & TTL expiration via Kernel's verify_permit_binding
         verify_permit_binding(permit, action)?;
@@ -388,7 +415,7 @@ impl SandboxPort for SovereignDeveloperAdapter {
                     error_message: None,
                     duration_ms: Some(duration_ms),
                     executed_at: chrono::Utc::now(),
-                    assurance: custos_domain::Assurance::CustosMediated,
+                    assurance: custos_contracts::Assurance::CustosMediated,
                 })
             }
             Err(err) => {
@@ -400,17 +427,23 @@ impl SandboxPort for SovereignDeveloperAdapter {
                     format!("blake3:{}", digest(err_msg.as_bytes()))
                 };
 
+                let status = if err_msg.contains("timed out") {
+                    ReceiptStatus::Timeout
+                } else {
+                    ReceiptStatus::Failure
+                };
+
                 Ok(ExecutionReceipt {
                     receipt_id: new_id("rcpt"),
                     permit_id: permit.id.clone(),
                     action_id: action.id.clone(),
-                    status: ReceiptStatus::Failure,
+                    status,
                     output_digest: output_hash,
                     output_data: None,
                     error_message: Some(err_msg),
                     duration_ms: Some(duration_ms),
                     executed_at: chrono::Utc::now(),
-                    assurance: custos_domain::Assurance::CustosMediated,
+                    assurance: custos_contracts::Assurance::CustosMediated,
                 })
             }
         }

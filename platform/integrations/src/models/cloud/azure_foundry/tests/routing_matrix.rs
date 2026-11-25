@@ -1,8 +1,8 @@
-use crate::cloud::transport::api_client::AuthMethod;
 use crate::cloud::azure_foundry::types::{
     configured_client, endpoint_kind, inference_route, is_project_endpoint, with_api_version,
     DeploymentCache, DeploymentMetadataLookup, EndpointKind, InferenceRoute, ModelPublisher,
 };
+use crate::cloud::transport::api_client::AuthMethod;
 use std::time::Instant;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};

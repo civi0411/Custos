@@ -101,4 +101,3 @@ fn test_get_usage_falls_back_when_openai_fields_are_null() {
     assert_eq!(result.output_tokens, Some(128));
     assert_eq!(result.total_tokens, Some(170));
 }
-

@@ -118,4 +118,3 @@ async fn test_model_port_to_provider_roundtrip() {
     assert_eq!(usage.usage.input_tokens, Some(10));
     assert_eq!(usage.usage.output_tokens, Some(20));
 }
-

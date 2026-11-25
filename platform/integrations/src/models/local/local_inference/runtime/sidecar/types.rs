@@ -1,4 +1,4 @@
-use custos_domain::LoadedModelInstance;
+use custos_contracts::LoadedModelInstance;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
@@ -106,7 +106,7 @@ pub async fn get_loaded_sidecar_instance() -> Option<LoadedModelInstance> {
 
     let instance_id = format!(
         "sidecar_{}",
-        &custos_domain::digest(model_name.as_bytes())[..12]
+        &custos_contracts::digest(model_name.as_bytes())[..12]
     );
 
     Some(LoadedModelInstance {

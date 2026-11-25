@@ -34,7 +34,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../../migrations/0010_harden_outbox_and_effects.sql"
     ))?;
-    conn.execute_batch(include_str!("../../migrations/0011_runs_and_worker_runs.sql"))?;
+    conn.execute_batch(include_str!(
+        "../../migrations/0011_runs_and_worker_runs.sql"
+    ))?;
     let has_run_version = conn
         .prepare("PRAGMA table_info(runs)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -50,7 +52,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../../migrations/0013_workflow_revisions.sql"))?;
     conn.execute_batch(include_str!("../../migrations/0014_node_placements.sql"))?;
     conn.execute_batch(include_str!("../../migrations/0015_replan_records.sql"))?;
-    conn.execute_batch(include_str!("../../migrations/0016_execution_workspaces.sql"))?;
+    conn.execute_batch(include_str!(
+        "../../migrations/0016_execution_workspaces.sql"
+    ))?;
     conn.execute_batch(include_str!("../../migrations/0019_providers_and_keys.sql"))?;
     conn.execute_batch(include_str!(
         "../../migrations/0024_browser_fleet_automation.sql"
@@ -62,29 +66,31 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if !existing_provider_cols.iter().any(|c| c == "default_model") {
-        let _ = conn.execute(
+        conn.execute(
             "ALTER TABLE providers_config ADD COLUMN default_model TEXT",
             [],
-        );
+        )?;
     }
     if !existing_provider_cols.iter().any(|c| c == "context_window") {
-        let _ = conn.execute(
+        conn.execute(
             "ALTER TABLE providers_config ADD COLUMN context_window INTEGER",
             [],
-        );
+        )?;
     }
     if !existing_provider_cols.iter().any(|c| c == "fast_mode") {
-        let _ = conn.execute(
+        conn.execute(
             "ALTER TABLE providers_config ADD COLUMN fast_mode INTEGER",
             [],
-        );
+        )?;
     }
 
     conn.execute_batch(include_str!(
         "../../migrations/0025_provider_model_catalog.sql"
     ))?;
 
-    conn.execute_batch(include_str!("../../migrations/0026_provider_oauth_tokens.sql"))?;
+    conn.execute_batch(include_str!(
+        "../../migrations/0026_provider_oauth_tokens.sql"
+    ))?;
 
     conn.execute_batch(include_str!(
         "../../migrations/0027_dispatch_claims_and_fencing.sql"
@@ -121,7 +127,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     if !ledger_columns.iter().any(|column| column == "state") {
         conn.execute_batch(include_str!("../../migrations/0037_command_ledger_v2.sql"))?;
     }
-    conn.execute_batch(include_str!("../../migrations/0038_experiment_attempts.sql"))?;
+    conn.execute_batch(include_str!(
+        "../../migrations/0038_experiment_attempts.sql"
+    ))?;
     let outbox_columns = conn
         .prepare("PRAGMA table_info(outbox_entries)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -135,8 +143,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../../migrations/0044_universal_resource_registry.sql"
     ))?;
-    conn.execute_batch(include_str!("../../migrations/0045_shared_capabilities.sql"))?;
+    conn.execute_batch(include_str!(
+        "../../migrations/0045_shared_capabilities.sql"
+    ))?;
     conn.execute_batch(include_str!("../../migrations/0046_run_supervision.sql"))?;
     Ok(())
 }
-

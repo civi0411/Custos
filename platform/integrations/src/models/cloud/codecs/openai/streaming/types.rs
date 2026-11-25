@@ -94,7 +94,9 @@ pub(crate) struct StreamingChoice {
     pub(crate) finish_reason: Option<String>,
 }
 
-pub(crate) fn empty_finish_reason_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+pub(crate) fn empty_finish_reason_as_none<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -136,4 +138,3 @@ pub(crate) fn extract_content_and_signature(
         None => (None, None),
     }
 }
-

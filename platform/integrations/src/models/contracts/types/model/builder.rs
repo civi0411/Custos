@@ -24,15 +24,19 @@ impl ModelConfig {
         config
     }
 
-    fn canonical_model(&self, provider_name: &str) -> Option<crate::catalog::canonical::CanonicalModel> {
-        crate::catalog::canonical::maybe_get_canonical_model(provider_name, &self.model_name).or_else(|| {
-            let (base, _effort) = extract_reasoning_effort(&self.model_name);
-            if base != self.model_name {
-                crate::catalog::canonical::maybe_get_canonical_model(provider_name, &base)
-            } else {
-                None
-            }
-        })
+    fn canonical_model(
+        &self,
+        provider_name: &str,
+    ) -> Option<crate::catalog::canonical::CanonicalModel> {
+        crate::catalog::canonical::maybe_get_canonical_model(provider_name, &self.model_name)
+            .or_else(|| {
+                let (base, _effort) = extract_reasoning_effort(&self.model_name);
+                if base != self.model_name {
+                    crate::catalog::canonical::maybe_get_canonical_model(provider_name, &base)
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn with_canonical_vision_support(mut self, provider_name: &str) -> Self {
@@ -186,4 +190,3 @@ impl ModelConfig {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 }
-

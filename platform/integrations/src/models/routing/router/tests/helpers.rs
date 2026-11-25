@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 use super::super::credentials::CredentialResolver;
 

@@ -1,11 +1,11 @@
 use std::path::Path;
 
+use crate::errors::ProviderError;
 use crate::local_inference::backend::{
     BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend,
 };
 use crate::local_inference::model::ModelSettings;
 use crate::local_inference::ResolvedModelPaths;
-use custos_provider::errors::ProviderError;
 
 pub(crate) const MLX_BACKEND_ID: &str = "mlx";
 

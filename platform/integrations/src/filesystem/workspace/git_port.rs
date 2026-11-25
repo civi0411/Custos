@@ -1,7 +1,7 @@
 //! Local Git worktree provisioning and removal implementing [`RepositoryGitPort`].
 
-use custos_core::contracts::workspace::RepositoryGitPort;
-use custos_domain::DomainError;
+use custos_contracts::contracts::workspace::RepositoryGitPort;
+use custos_contracts::DomainError;
 use std::path::Path;
 
 #[derive(Debug, Clone, Default)]

@@ -6,10 +6,10 @@
 use async_trait::async_trait;
 use std::path::{Component, Path, PathBuf};
 
-use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-use custos_domain::{
-    DomainError, ExecutionWorkspace, WorkspaceDiffSummary, WorkspaceFileContent,
-    WorkspaceFileDiff, WorkspaceFileTree, WriteWorkspaceFileParams,
+use custos_contracts::contracts::workspace_files::WorkspaceFilesPort;
+use custos_contracts::{
+    DomainError, ExecutionWorkspace, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileTree, WriteWorkspaceFileParams,
 };
 
 pub mod git;

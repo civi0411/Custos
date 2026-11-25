@@ -1,11 +1,11 @@
 use super::declarative::from_declarative_config;
 use super::stream::beta_header_value;
 use super::types::AnthropicProvider;
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::base::{ModelInfo, Provider, ProviderDescriptor};
+use crate::cloud::codecs::anthropic::{create_request_for_model, AnthropicFormatOptions};
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::conversation::message::{Message, MessageContent};
 use crate::errors::ProviderError;
-use crate::cloud::codecs::anthropic::{create_request_for_model, AnthropicFormatOptions};
 use crate::model::ModelConfig;
 use serde_json::json;
 
@@ -46,13 +46,9 @@ fn zai_provider_config_emits_clear_thinking() {
     assert_eq!(payload["thinking"]["clear_thinking"], false);
 }
 
-fn make_provider_with_custom_models(
-    host: &str,
-    custom_models: Vec<String>,
-) -> AnthropicProvider {
+fn make_provider_with_custom_models(host: &str, custom_models: Vec<String>) -> AnthropicProvider {
     AnthropicProvider {
-        api_client: ApiClient::new_with_tls(host.to_string(), AuthMethod::NoAuth, None)
-            .unwrap(),
+        api_client: ApiClient::new_with_tls(host.to_string(), AuthMethod::NoAuth, None).unwrap(),
         supports_streaming: true,
         name: "test-provider".to_string(),
         custom_models: Some(custom_models.into_iter().map(ModelInfo::new).collect()),
@@ -271,11 +267,10 @@ async fn fetch_supported_models_propagates_auth_error_from_200_payload() {
 
 #[test]
 fn beta_header_merges_client_default_with_binding_beta() {
-    let client =
-        ApiClient::new_with_tls("http://localhost".to_string(), AuthMethod::NoAuth, None)
-            .unwrap()
-            .with_header("anthropic-beta", "context-1m-2025-08-07")
-            .unwrap();
+    let client = ApiClient::new_with_tls("http://localhost".to_string(), AuthMethod::NoAuth, None)
+        .unwrap()
+        .with_header("anthropic-beta", "context-1m-2025-08-07")
+        .unwrap();
     let payload = json!({
         "thinking": {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
     });

@@ -74,8 +74,7 @@ fn test_response_to_message_extracts_inline_think_blocks() -> anyhow::Result<()>
 }
 
 #[test]
-fn test_response_to_message_prefers_structured_reasoning_over_inline_think(
-) -> anyhow::Result<()> {
+fn test_response_to_message_prefers_structured_reasoning_over_inline_think() -> anyhow::Result<()> {
     let response = json!({
         "choices": [{
             "role": "assistant",
@@ -228,8 +227,7 @@ fn test_format_messages_carries_thinking_only_chunks_to_tool_call() -> anyhow::R
         Message::assistant().with_content(MessageContentBlock::thinking("once", "")),
         Message::assistant().with_tool_request(
             "tool1",
-            Ok(CallToolRequestParams::new("test_tool")
-                .with_arguments(object!({"param": "value"}))),
+            Ok(CallToolRequestParams::new("test_tool").with_arguments(object!({"param": "value"}))),
         ),
     ];
 
@@ -511,4 +509,3 @@ fn test_sequential_tool_calls_not_merged() -> anyhow::Result<()> {
 
     Ok(())
 }
-

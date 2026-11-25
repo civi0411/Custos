@@ -1,4 +1,6 @@
-use super::helpers::{cerebras_config, cerebras_provider, make_provider, make_provider_with_custom_models};
+use super::helpers::{
+    cerebras_config, cerebras_provider, make_provider, make_provider_with_custom_models,
+};
 use crate::base::{Provider, ThinkingPreservationFormat};
 use crate::cloud::openai::compat::apply_declared_request_params;
 use crate::model::ModelConfig;
@@ -15,8 +17,8 @@ fn sanitize_remaps_max_completion_tokens_for_compat_provider() {
         "max_completion_tokens": 16384
     });
 
-    let result = provider
-        .sanitize_request_for_compat(payload, &ModelConfig::new("mistral-medium-latest"));
+    let result =
+        provider.sanitize_request_for_compat(payload, &ModelConfig::new("mistral-medium-latest"));
     let obj = result.as_object().unwrap();
 
     assert!(!obj.contains_key("max_completion_tokens"));
@@ -33,8 +35,8 @@ fn sanitize_preserves_existing_max_tokens_for_compat_provider() {
         "max_completion_tokens": 16384
     });
 
-    let result = provider
-        .sanitize_request_for_compat(payload, &ModelConfig::new("mistral-medium-latest"));
+    let result =
+        provider.sanitize_request_for_compat(payload, &ModelConfig::new("mistral-medium-latest"));
     let obj = result.as_object().unwrap();
 
     assert!(!obj.contains_key("max_completion_tokens"));
@@ -66,8 +68,7 @@ fn sanitize_noop_for_unknown_provider() {
         "max_completion_tokens": 16384
     });
 
-    let result =
-        provider.sanitize_request_for_compat(payload, &ModelConfig::new("future-model"));
+    let result = provider.sanitize_request_for_compat(payload, &ModelConfig::new("future-model"));
     let obj = result.as_object().unwrap();
 
     assert!(obj.contains_key("max_completion_tokens"));
@@ -129,8 +130,7 @@ fn sanitize_nearai_preserves_openai_reasoning_effort() {
         "max_completion_tokens": 16384
     });
 
-    let result =
-        provider.sanitize_request_for_compat(payload, &ModelConfig::new("openai/gpt-5"));
+    let result = provider.sanitize_request_for_compat(payload, &ModelConfig::new("openai/gpt-5"));
     let obj = result.as_object().unwrap();
 
     assert_eq!(obj.get("reasoning_effort"), Some(&json!("medium")));
@@ -161,8 +161,7 @@ fn sanitize_meta_maps_max_thinking_effort_to_xhigh() {
         "model": "muse-spark-1.1",
         "messages": []
     });
-    let model_config =
-        ModelConfig::new("muse-spark-1.1").with_thinking_effort(ThinkingEffort::Max);
+    let model_config = ModelConfig::new("muse-spark-1.1").with_thinking_effort(ThinkingEffort::Max);
 
     let result = provider.sanitize_request_for_compat(payload, &model_config);
     let obj = result.as_object().unwrap();
@@ -181,8 +180,7 @@ fn sanitize_meta_clamps_off_thinking_effort_to_low() {
         "messages": [],
         "reasoning_effort": "high"
     });
-    let model_config =
-        ModelConfig::new("muse-spark-1.1").with_thinking_effort(ThinkingEffort::Off);
+    let model_config = ModelConfig::new("muse-spark-1.1").with_thinking_effort(ThinkingEffort::Off);
 
     let result = provider.sanitize_request_for_compat(payload, &model_config);
     let obj = result.as_object().unwrap();

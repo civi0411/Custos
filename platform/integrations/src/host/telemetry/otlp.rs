@@ -5,12 +5,12 @@
 //! child span failures record `StepSpanStatus::Error` and `StepError`,
 //! never forcibly marking an active root run as failed.
 
-use custos_core::contracts::supervision::NormalizedTelemetryBatch;
-use custos_domain::supervision::{
+use custos_contracts::contracts::supervision::NormalizedTelemetryBatch;
+use custos_contracts::supervision::{
     compute_error_signature, LogSeverity, RunStepSpan, StepError, StepSpanKind, StepSpanStatus,
     SupervisionLogEntry, SupervisionRunRecord, SupervisionRunStatus,
 };
-use custos_domain::{new_id, DomainError, UsageMeasurement};
+use custos_contracts::{new_id, DomainError, UsageMeasurement};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -269,20 +269,21 @@ pub fn normalize_otlp_traces_json(bytes: &[u8]) -> Result<NormalizedTelemetryBat
                     .map(str::to_string)
                     .or_else(|| workbench_id.clone());
 
-                let run_entry = runs_map.entry(run_id.clone()).or_insert_with(|| {
-                    SupervisionRunRecord {
-                        run_id: run_id.clone(),
-                        workbench_id: run_workbench.clone(),
-                        agent: agent.clone(),
-                        status: SupervisionRunStatus::Running,
-                        started_at_ms,
-                        ended_at_ms: None,
-                        duration_ms: None,
-                        tokens: None,
-                        cost_usd: None,
-                        usage_measurement: UsageMeasurement::Unknown,
-                    }
-                });
+                let run_entry =
+                    runs_map
+                        .entry(run_id.clone())
+                        .or_insert_with(|| SupervisionRunRecord {
+                            run_id: run_id.clone(),
+                            workbench_id: run_workbench.clone(),
+                            agent: agent.clone(),
+                            status: SupervisionRunStatus::Running,
+                            started_at_ms,
+                            ended_at_ms: None,
+                            duration_ms: None,
+                            tokens: None,
+                            cost_usd: None,
+                            usage_measurement: UsageMeasurement::Unknown,
+                        });
                 run_entry.started_at_ms = run_entry.started_at_ms.min(started_at_ms);
                 if let Some(tok) = tokens {
                     let prev = run_entry.tokens.unwrap_or(0);
@@ -374,8 +375,9 @@ pub fn normalize_otlp_logs_json(bytes: &[u8]) -> Result<NormalizedTelemetryBatch
                     .map(decode_any_value_to_string)
                     .unwrap_or_default();
 
-                runs_map.entry(run_id.clone()).or_insert_with(|| {
-                    SupervisionRunRecord {
+                runs_map
+                    .entry(run_id.clone())
+                    .or_insert_with(|| SupervisionRunRecord {
                         run_id: run_id.clone(),
                         workbench_id: workbench_id.clone(),
                         agent: agent.clone(),
@@ -386,8 +388,7 @@ pub fn normalize_otlp_logs_json(bytes: &[u8]) -> Result<NormalizedTelemetryBatch
                         tokens: None,
                         cost_usd: None,
                         usage_measurement: UsageMeasurement::Unknown,
-                    }
-                });
+                    });
 
                 logs_out.push(SupervisionLogEntry {
                     id: new_id("slog"),
@@ -493,7 +494,9 @@ fn decode_any_value_to_string(v: &AnyValue) -> String {
 }
 
 fn attr_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
-    map.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
+    map.get(key)
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
 }
 
 fn attr_u64(map: &Map<String, Value>, key: &str) -> Option<u64> {
@@ -579,4 +582,3 @@ mod tests {
         assert_eq!(batch.logs[0].run_id, "run_xyz");
     }
 }
-

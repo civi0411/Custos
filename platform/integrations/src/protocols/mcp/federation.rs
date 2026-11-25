@@ -4,9 +4,9 @@
 //! Absorbs AgentGateway's MCP multi-server routing and federation architecture.
 
 use crate::mcp::adapters::client::{McpClientTrait, ToolCallContext};
+use crate::tool::ToolDefinition;
 use anyhow::Result;
-use custos_domain::DomainError;
-use custos_provider::tool::ToolDefinition;
+use custos_contracts::DomainError;
 use rmcp::model::CallToolResult;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -25,10 +25,6 @@ pub trait McpToolGate: Send + Sync {
         ctx: &ToolCallContext,
     ) -> Result<(), DomainError>;
 }
-
-/// Alias for backwards compatibility.
-// shortcut: compatibility alias, keep until caller deprecation cycle
-pub use McpToolGate as ToolGate;
 
 pub struct McpFederationHub {
     servers: Arc<RwLock<HashMap<String, Arc<dyn McpClientTrait>>>>,
@@ -50,15 +46,20 @@ impl McpFederationHub {
     }
 
     /// Set an authorization gate for tool dispatch.
-    pub async fn set_gate(&self, gate: Arc<dyn ToolGate>) {
+    pub async fn set_gate(&self, gate: Arc<dyn McpToolGate>) {
         let mut guard = self.gate.write().await;
         *guard = Some(gate);
     }
 
     /// Synchronously set an authorization gate for tool dispatch during runtime bootstrap.
-    pub fn set_gate_sync(&self, gate: Arc<dyn ToolGate>) {
-        if let Ok(mut guard) = self.gate.try_write() {
-            *guard = Some(gate);
+    pub fn set_gate_sync(&self, gate: Arc<dyn McpToolGate>) {
+        match self.gate.try_write() {
+            Ok(mut guard) => *guard = Some(gate),
+            Err(_) => {
+                tracing::error!(
+                    "McpFederationHub::set_gate_sync contended; failed to attach security gate"
+                );
+            }
         }
     }
 
@@ -197,7 +198,9 @@ impl McpFederationHub {
         if let Some(gate) = gate_opt {
             let arg_digest = format!(
                 "sha256:{}",
-                custos_domain::digest(serde_json::to_string(&args).unwrap_or_default().as_bytes())
+                custos_contracts::digest(
+                    serde_json::to_string(&args).unwrap_or_default().as_bytes()
+                )
             );
             gate.authorize(namespaced_name, &arg_digest, ctx).await?;
         }
@@ -230,7 +233,7 @@ mod tests {
     struct DenyGate;
 
     #[async_trait::async_trait]
-    impl ToolGate for DenyGate {
+    impl McpToolGate for DenyGate {
         async fn authorize(
             &self,
             namespaced_tool: &str,

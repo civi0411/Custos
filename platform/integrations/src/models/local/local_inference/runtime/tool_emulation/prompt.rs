@@ -1,5 +1,5 @@
 #[cfg(feature = "mlx")]
-use custos_provider::conversation::message::{Message, MessageContent};
+use crate::conversation::message::{Message, MessageContent};
 #[cfg(feature = "mlx")]
 use rmcp::model::{CallToolRequestParams, Tool};
 #[cfg(feature = "mlx")]
@@ -165,4 +165,3 @@ pub(crate) fn message_for_emulator_action(
         }
     }
 }
-

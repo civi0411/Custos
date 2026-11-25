@@ -8,13 +8,15 @@ use async_trait::async_trait;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::Arc;
+#[cfg(any(test, feature = "test-support"))]
 use tokio::sync::Mutex;
 
-use custos_core::contracts::compute::{
+use custos_contracts::contracts::compute::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
-use custos_domain::{
+use custos_contracts::{
     DomainError, ExecState, ExecutionArtifact, ExecutionAttempt, ExternalJobRef, ProgressTriplet,
     ResourceState,
 };
@@ -26,7 +28,9 @@ pub struct KaggleTargetAdapter {
     credentials_path: Option<PathBuf>,
     username: Option<String>,
     api_key: Option<String>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_mode: bool,
+    #[cfg(any(test, feature = "test-support"))]
     mock_status: Arc<Mutex<String>>,
 }
 
@@ -39,7 +43,9 @@ impl KaggleTargetAdapter {
             credentials_path: creds,
             username: std::env::var("KAGGLE_USERNAME").ok(),
             api_key: std::env::var("KAGGLE_KEY").ok(),
+            #[cfg(any(test, feature = "test-support"))]
             mock_mode: false,
+            #[cfg(any(test, feature = "test-support"))]
             mock_status: Arc::new(Mutex::new("running".to_string())),
         }
     }
@@ -59,14 +65,28 @@ impl KaggleTargetAdapter {
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn with_mock_mode(mut self) -> Self {
         self.mock_mode = true;
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn set_mock_status(&self, status: impl Into<String>) {
         let mut guard = self.mock_status.lock().await;
         *guard = status.into();
+    }
+
+    #[inline(always)]
+    fn is_mock(&self) -> bool {
+        #[cfg(any(test, feature = "test-support"))]
+        {
+            self.mock_mode
+        }
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            false
+        }
     }
 
     fn resolve_username(&self) -> Result<String, DomainError> {
@@ -86,6 +106,7 @@ impl KaggleTargetAdapter {
                 }
             }
         }
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             return Ok("testuser".to_string());
         }
@@ -111,7 +132,7 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         let mut blockers = Vec::new();
         let mut warnings = Vec::new();
 
-        if !self.mock_mode {
+        if !self.is_mock() {
             let has_env_creds = (self.username.is_some() && self.api_key.is_some())
                 || std::env::var("KAGGLE_API_TOKEN").is_ok();
             let token_path = dirs::home_dir().map(|h| h.join(".kaggle").join("access_token"));
@@ -197,6 +218,7 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         // Ensure entrypoint exists
         let entrypoint = attempt_dir.join("main.py");
         if !entrypoint.exists() {
+            #[cfg(any(test, feature = "test-support"))]
             if self.mock_mode {
                 tokio::fs::write(
                     &entrypoint,
@@ -212,9 +234,14 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
                     entrypoint.display()
                 )));
             }
+            #[cfg(not(any(test, feature = "test-support")))]
+            return Err(DomainError::Validation(format!(
+                "Kaggle execution entrypoint '{}' does not exist; stage your script before submitting",
+                entrypoint.display()
+            )));
         }
 
-        if self.mock_mode {
+        if self.is_mock() {
             // Version must always be pinned, never "latest"
             return ExternalJobRef::new(username, slug, "1");
         }
@@ -258,10 +285,31 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         &self,
         external_ref: &ExternalJobRef,
     ) -> Result<AttemptObservation, DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         let (raw_status, exit_code) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
             (guard.clone(), None)
         } else {
+            let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
+            cmd.arg("kernels").arg("status").arg(format!(
+                "{}/{}",
+                external_ref.account_ref, external_ref.job_id
+            ));
+
+            if let (Some(ref u), Some(ref k)) = (&self.username, &self.api_key) {
+                cmd.env("KAGGLE_USERNAME", u);
+                cmd.env("KAGGLE_KEY", k);
+            }
+
+            let output = cmd.output().await.map_err(|e| {
+                DomainError::Validation(format!("Failed to check Kaggle status: {e}"))
+            })?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            (stdout, output.status.code())
+        };
+        #[cfg(not(any(test, feature = "test-support")))]
+        let (raw_status, exit_code) = {
             let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
             cmd.arg("kernels").arg("status").arg(format!(
                 "{}/{}",
@@ -309,6 +357,7 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
     }
 
     async fn stop_job(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let mut guard = self.mock_status.lock().await;
             *guard = "canceled".to_string();
@@ -353,7 +402,8 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
             DomainError::Validation(format!("Failed to create artifact output dir: {e}"))
         })?;
 
-        if !self.mock_mode {
+        #[cfg(any(test, feature = "test-support"))]
+        if !self.is_mock() {
             let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
             cmd.arg("kernels")
                 .arg("output")
@@ -371,9 +421,28 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
 
             let _ = cmd.output().await;
         } else {
-            // Write a dummy output for verification
+            // Write a dummy output for verification in test-support mode
             let test_file = dest.join("output.txt");
             let _ = tokio::fs::write(&test_file, b"kaggle artifact test").await;
+        }
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            let mut cmd = tokio::process::Command::new(&self.kaggle_bin);
+            cmd.arg("kernels")
+                .arg("output")
+                .arg(format!(
+                    "{}/{}",
+                    external_ref.account_ref, external_ref.job_id
+                ))
+                .arg("-p")
+                .arg(&dest);
+
+            if let (Some(ref u), Some(ref k)) = (&self.username, &self.api_key) {
+                cmd.env("KAGGLE_USERNAME", u);
+                cmd.env("KAGGLE_KEY", k);
+            }
+
+            let _ = cmd.output().await;
         }
 
         let mut artifacts = Vec::new();
@@ -402,7 +471,7 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::ComputeBackendKind;
+    use custos_contracts::ComputeBackendKind;
 
     #[tokio::test]
     async fn kaggle_capabilities_and_preflight_in_mock() {

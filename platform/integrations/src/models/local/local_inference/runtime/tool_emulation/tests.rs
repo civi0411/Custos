@@ -215,4 +215,3 @@ fn tool_description_uses_execute_typescript_fence() {
 
     assert!(description.contains("```execute_typescript"));
 }
-

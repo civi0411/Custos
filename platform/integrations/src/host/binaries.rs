@@ -113,4 +113,3 @@ pub fn resolve_git_binary() -> PathBuf {
     }
     PathBuf::from("git")
 }
-

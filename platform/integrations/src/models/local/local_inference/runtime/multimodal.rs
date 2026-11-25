@@ -1,8 +1,8 @@
 use base64::prelude::*;
 use serde_json::Value;
 
-use custos_provider::conversation::message::{Message, MessageContent};
-use custos_provider::errors::ProviderError;
+use crate::conversation::message::{Message, MessageContent};
+use crate::errors::ProviderError;
 
 #[derive(Debug)]
 #[allow(dead_code)]

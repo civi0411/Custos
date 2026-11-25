@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
 
 use custos_contracts::PromotionOutcome;
-use custos_domain::{
+use custos_contracts::{
     new_id, DomainError, ExecState, ExecutionAttempt, Invocation, InvocationOutcome, ResourceState,
 };
 
@@ -24,7 +24,9 @@ impl ExperimentAttemptRepository {
 
     /// Saves or updates an ExecutionAttempt atomically with an outbox event
     pub fn save_attempt(&self, attempt: &ExecutionAttempt) -> Result<(), DomainError> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let tx = conn
             .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -97,7 +99,9 @@ impl ExperimentAttemptRepository {
 
     /// Fetches an attempt by ID
     pub fn get_attempt(&self, id: &str) -> Result<Option<ExecutionAttempt>, DomainError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let json_opt: Option<String> = conn
             .query_row(
                 "SELECT attempt_json FROM experiment_attempts WHERE id = ?1",
@@ -122,7 +126,9 @@ impl ExperimentAttemptRepository {
         &self,
         experiment_id: &str,
     ) -> Result<Vec<ExecutionAttempt>, DomainError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let mut stmt = conn
             .prepare(
                 "SELECT attempt_json FROM experiment_attempts WHERE experiment_id = ?1 ORDER BY created_at ASC",
@@ -145,7 +151,9 @@ impl ExperimentAttemptRepository {
 
     /// Records an Invocation with strict idempotency key uniqueness
     pub fn record_invocation(&self, invocation: &Invocation) -> Result<(), DomainError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let outcome_str = match invocation.outcome {
             InvocationOutcome::Ok => "ok",
             InvocationOutcome::Err => "err",
@@ -188,7 +196,9 @@ impl ExperimentAttemptRepository {
         checkpoint_id: &str,
         canonical_step: u64,
     ) -> Result<PromotionOutcome, DomainError> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let tx = conn
             .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -239,7 +249,9 @@ impl ExperimentAttemptRepository {
     /// Reconciles in-flight attempts on daemon crash/startup:
     /// In-flight states -> Uncertain, ReleaseRequested -> Unknown
     pub fn reconcile_attempts_on_startup(&self) -> Result<usize, DomainError> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().map_err(|_| {
+            DomainError::InvariantViolation("experiment_attempt mutex poisoned".into())
+        })?;
         let tx = conn
             .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -310,7 +322,7 @@ impl ExperimentAttemptRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::ComputeBackendKind;
+    use custos_contracts::ComputeBackendKind;
 
     fn in_memory_repo() -> ExperimentAttemptRepository {
         let conn = Connection::open_in_memory().unwrap();

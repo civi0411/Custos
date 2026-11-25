@@ -1,4 +1,4 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Fencing token identifying the current authoritative writer generation.

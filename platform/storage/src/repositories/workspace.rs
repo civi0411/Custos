@@ -5,8 +5,8 @@
 
 use crate::connection::DbConnection;
 use async_trait::async_trait;
-use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoTrait;
-use custos_domain::{
+use custos_contracts::contracts::workspace::WorkspaceRepository as WorkspaceRepoTrait;
+use custos_contracts::{
     DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage, WorkspaceStatus,
 };
 use rusqlite::{params, OptionalExtension};
@@ -247,7 +247,7 @@ impl WorkspaceRepository {
             .get("base_commit_hash")
             .and_then(|v| v.as_str())
             .map(ToString::to_string);
-        let dirty_manifest: Option<custos_domain::DirtyManifest> = metadata
+        let dirty_manifest: Option<custos_contracts::DirtyManifest> = metadata
             .get("dirty_manifest")
             .and_then(|v| serde_json::from_value(v.clone()).ok());
         let running_agent_id = metadata

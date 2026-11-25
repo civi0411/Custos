@@ -8,12 +8,11 @@ mod tests;
 
 pub use content::{
     deserialize_sanitized_content, DocumentContent, ErrorContent, MessageContent,
-    MessageContentBlock, MessageErrorKind, RedactedThinkingContentBlock,
-    SystemNotificationContent, SystemNotificationType, ThinkingContentBlock,
+    MessageContentBlock, MessageErrorKind, RedactedThinkingContentBlock, SystemNotificationContent,
+    SystemNotificationType, ThinkingContentBlock,
 };
-pub use metadata::{
-    InferenceMetadata, MessageMetadata, MessageUsage, OperationNotes, TokenState,
-};
+pub use metadata::{InferenceMetadata, MessageMetadata, MessageUsage, OperationNotes, TokenState};
+pub(crate) use tool::sanitize_tool_result_in_place;
 pub use tool::{
     ActionRequired, ActionRequiredData, ProviderMetadata, ToolCallResult, ToolChainSummary,
     ToolConfirmationRequest, ToolNameParts, ToolRequest, ToolResponse, ToolResult,
@@ -21,11 +20,12 @@ pub use tool::{
     LEGACY_TOOL_META_PROVIDER_INDEX_KEY, LEGACY_TOOL_META_TITLE_KEY, TOOL_META_CHAIN_SUMMARY_KEY,
     TOOL_META_EXTERNAL_DISPATCH_KEY, TOOL_META_PROVIDER_INDEX_KEY, TOOL_META_TITLE_KEY,
 };
-pub(crate) use tool::sanitize_tool_result_in_place;
 
 use crate::utils::sanitize_unicode_tags;
 use chrono::Utc;
-use rmcp::model::{CallToolRequestParams, CallToolResult, JsonObject, PromptMessage, Role, TextContent};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, JsonObject, PromptMessage, Role, TextContent,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;

@@ -1,4 +1,4 @@
-use custos_domain::{
+use custos_contracts::{
     ClaimStatus, DispatchClaim, DomainError, LaunchAttempt, LaunchStatus, Run, RunStatus, Task,
     WorkerRun,
 };

@@ -97,4 +97,3 @@ impl<'de> Deserialize<'de> for ModelConfig {
         Ok(config)
     }
 }
-

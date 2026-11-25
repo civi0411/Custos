@@ -1,7 +1,7 @@
 //! Credential resolution contracts for RouterModelProvider
 
 use async_trait::async_trait;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 #[async_trait]
 pub trait CredentialResolver: Send + Sync {

@@ -1,7 +1,7 @@
 use super::OutboxRepository;
 use async_trait::async_trait;
 use custos_contracts::EffectLedgerPort;
-use custos_domain::{DomainError, EffectAttempt, EffectStatus, ExecutionReceipt};
+use custos_contracts::{DomainError, EffectAttempt, EffectStatus, ExecutionReceipt};
 use rusqlite::{params, OptionalExtension};
 
 impl OutboxRepository {
@@ -193,4 +193,3 @@ impl EffectLedgerPort for OutboxRepository {
         self.reconcile_on_startup()
     }
 }
-

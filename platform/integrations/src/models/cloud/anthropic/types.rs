@@ -1,6 +1,6 @@
-use crate::cloud::transport::api_client::ApiClient;
 use crate::base::ModelInfo;
 use crate::cloud::codecs::anthropic::{AnthropicFormatOptions, ANTHROPIC_PROVIDER_NAME};
+use crate::cloud::transport::api_client::ApiClient;
 use anyhow::Result;
 
 pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-sonnet-4-5";

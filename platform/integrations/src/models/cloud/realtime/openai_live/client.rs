@@ -1,18 +1,17 @@
-use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::time::timeout;
 
-use crate::cloud::{
-    realtime::live::{LiveSession, LiveTransport},
-    transport::http_status::handle_response,
-};
 use super::protocol::{event_id, required_nonempty_string, OpenAiLiveProtocol};
 use super::session::{ConnectedOpenAiLiveSession, StartingOpenAiLiveSession};
 use super::types::{
-    OpenAiLiveConnectionKind, OpenAiLiveMessageRole, OpenAiLiveSessionConfig,
-    OpenAiLiveSessionId, DEFAULT_OPENAI_LIVE_HTTP_URL, DEFAULT_OPENAI_LIVE_WEBSOCKET_URL,
-    SESSION_START_TIMEOUT,
+    OpenAiLiveConnectionKind, OpenAiLiveMessageRole, OpenAiLiveSessionConfig, OpenAiLiveSessionId,
+    DEFAULT_OPENAI_LIVE_HTTP_URL, DEFAULT_OPENAI_LIVE_WEBSOCKET_URL, SESSION_START_TIMEOUT,
+};
+use crate::cloud::{
+    realtime::live::{LiveSession, LiveTransport},
+    transport::http_status::handle_response,
 };
 
 #[derive(Clone)]
@@ -170,8 +169,10 @@ impl OpenAiLiveExistingSessionConnector {
         let client = self.client.clone();
         let session_id = self.session_id.clone();
         let transport = Arc::new(
-            crate::cloud::realtime::live_transport_websocket::WebSocketLiveTransport::connect(self.request()?)
-                .await?,
+            crate::cloud::realtime::live_transport_websocket::WebSocketLiveTransport::connect(
+                self.request()?,
+            )
+            .await?,
         );
         Ok(client
             .connect_transport(transport, OpenAiLiveConnectionKind::MediaControl)
@@ -207,8 +208,10 @@ impl OpenAiLiveWebSocketConnector {
     pub async fn connect(self) -> Result<ConnectedOpenAiLiveSession> {
         let client = self.client.clone();
         let transport = Arc::new(
-            crate::cloud::realtime::live_transport_websocket::WebSocketLiveTransport::connect(self.request()?)
-                .await?,
+            crate::cloud::realtime::live_transport_websocket::WebSocketLiveTransport::connect(
+                self.request()?,
+            )
+            .await?,
         );
         client
             .connect_transport(transport, OpenAiLiveConnectionKind::PrimaryWebSocket)

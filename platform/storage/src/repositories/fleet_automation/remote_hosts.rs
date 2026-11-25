@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use custos_domain::{DomainError, RemoteHostNode, RemoteHostStatus, SshAuthMethod};
+use custos_contracts::{DomainError, RemoteHostNode, RemoteHostStatus, SshAuthMethod};
 use rusqlite::{params, OptionalExtension};
 
 use super::FleetAutomationRepository;
@@ -195,4 +195,3 @@ impl FleetAutomationRepository {
         })
     }
 }
-

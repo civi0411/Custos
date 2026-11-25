@@ -1,6 +1,6 @@
 //! Plain-text stream output handler.
 
-use custos_core::contracts::harness::RunObserver;
+use custos_contracts::contracts::harness::RunObserver;
 use std::sync::Arc;
 
 pub fn emit_plain_delta(observer: &Arc<dyn RunObserver>, text: &str) {

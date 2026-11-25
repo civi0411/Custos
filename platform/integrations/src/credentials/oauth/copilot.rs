@@ -1,6 +1,6 @@
 //! GitHub Copilot device authorization grant and session token acquisition.
 
-use custos_domain::{DomainError, OAuthTokenRecord};
+use custos_contracts::{DomainError, OAuthTokenRecord};
 
 /// Start GitHub's real device grant. The first-party Copilot app supports this flow.
 pub async fn start_copilot_device() -> Result<serde_json::Value, DomainError> {

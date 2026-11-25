@@ -155,8 +155,7 @@ fn test_cache_pricing_calculation() -> Result<()> {
 
 #[test]
 fn test_merge_delta_usage_raw_input_inherits_start_cache() {
-    let start =
-        Usage::new(Some(15007), Some(3), None).with_cache_tokens(Some(5000), Some(10000));
+    let start = Usage::new(Some(15007), Some(3), None).with_cache_tokens(Some(5000), Some(10000));
     let delta_data = json!({"input_tokens": 8, "output_tokens": 510});
     let delta = get_usage(&delta_data).unwrap();
 
@@ -166,4 +165,3 @@ fn test_merge_delta_usage_raw_input_inherits_start_cache() {
     assert_eq!(merged.cache_read_input_tokens, Some(5000));
     assert_eq!(merged.cache_write_input_tokens, Some(10000));
 }
-

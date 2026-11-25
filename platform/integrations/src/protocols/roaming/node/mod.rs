@@ -6,11 +6,7 @@ pub(crate) mod handler;
 use std::sync::Arc;
 
 use futures::io::{AsyncRead, AsyncWrite};
-use iroh::{
-    endpoint::Connection,
-    protocol::Router,
-    Endpoint, EndpointId,
-};
+use iroh::{endpoint::Connection, protocol::Router, Endpoint, EndpointId};
 use tokio::sync::Mutex;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
@@ -63,7 +59,7 @@ pub trait AcpStreamServer: Send + Sync + 'static {
 /// one), and an in-memory directory:
 ///
 /// ```no_run
-/// use custos_adapters::roaming::{RoamingConfig, RoamingIdentity, RoamingNode};
+/// use crate::roaming::{RoamingConfig, RoamingIdentity, RoamingNode};
 /// # async fn f() -> anyhow::Result<()> {
 /// let node = RoamingNode::bind(RoamingConfig::new(RoamingIdentity::generate())).await?;
 /// # Ok(()) }

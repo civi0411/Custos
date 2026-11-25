@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, ProbedModel};
+use custos_contracts::{DomainError, ProbedModel};
 use serde_json::Value;
 
 /// Normalize an Ollama root without duplicating compatibility API suffixes.

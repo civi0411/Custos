@@ -3,9 +3,9 @@ use anyhow::Result;
 use super::types::{
     AnthropicProviderBuilder, ANTHROPIC_API_VERSION, DEFAULT_ANTHROPIC_TIMEOUT_SECONDS,
 };
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
-use crate::cloud::declarative::{DeclarativeProviderConfig, KeyResolver};
 use crate::cloud::codecs::anthropic::AnthropicFormatOptions;
+use crate::cloud::declarative::{DeclarativeProviderConfig, KeyResolver};
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 
 pub(crate) fn format_options_for_provider(
     preserves_thinking: bool,

@@ -203,11 +203,11 @@ fn codex_visibility_efforts_and_empty_results_are_authoritative() {
     assert!(parse_chatgpt_codex_models(r#"{"models":[]}"#)
         .unwrap()
         .is_empty());
-    assert!(parse_chatgpt_codex_models(
-        r#"{"models":[{"slug":"internal","visibility":"hide"}]}"#
-    )
-    .unwrap()
-    .is_empty());
+    assert!(
+        parse_chatgpt_codex_models(r#"{"models":[{"slug":"internal","visibility":"hide"}]}"#)
+            .unwrap()
+            .is_empty()
+    );
     assert!(parse_chatgpt_codex_models("{}").is_err());
 }
 

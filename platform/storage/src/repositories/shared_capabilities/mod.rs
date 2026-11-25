@@ -41,8 +41,10 @@ impl SharedCapabilitiesRepository {
     /// Applies the Ring 2 schema idempotently for standalone raw connections.
     pub fn ensure_schema(&self) -> Result<(), DomainError> {
         let conn = self.lock_conn()?;
-        conn.execute_batch(include_str!("../../../migrations/0045_shared_capabilities.sql"))
-            .map_err(|e| DomainError::Validation(e.to_string()))
+        conn.execute_batch(include_str!(
+            "../../../migrations/0045_shared_capabilities.sql"
+        ))
+        .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
     pub(crate) fn lock_conn(&self) -> Result<MutexGuard<'_, Connection>, DomainError> {
@@ -51,4 +53,3 @@ impl SharedCapabilitiesRepository {
             .map_err(|e| DomainError::Validation(format!("Database writer mutex poisoned: {e}")))
     }
 }
-

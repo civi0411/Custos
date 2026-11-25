@@ -9,7 +9,7 @@ use serde_json::json;
 use std::net::IpAddr;
 use std::time::Duration;
 
-use custos_core::contracts::skill::{
+use custos_contracts::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 
@@ -149,6 +149,19 @@ impl FetchUrlSkill {
                     "SSRF protection: access to private/reserved IP '{}' is blocked",
                     ip
                 )));
+            }
+        } else if let Some(port) = url.port_or_known_default() {
+            use std::net::ToSocketAddrs;
+            if let Ok(addrs) = (unbracketed, port).to_socket_addrs() {
+                for addr in addrs {
+                    if !is_safe_ip(addr.ip()) {
+                        return Err(SkillError::SandboxViolation(format!(
+                            "SSRF protection: DNS resolution for '{}' resolved to private IP '{}'",
+                            host_str,
+                            addr.ip()
+                        )));
+                    }
+                }
             }
         }
 

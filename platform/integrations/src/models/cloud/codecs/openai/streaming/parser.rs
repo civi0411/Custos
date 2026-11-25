@@ -1,6 +1,6 @@
+use super::types::StreamingChunk;
 use crate::errors::ProviderError;
 use serde_json::Value;
-use super::types::StreamingChunk;
 
 pub(crate) fn strip_data_prefix(line: &str) -> Option<&str> {
     // SSE spec allows both "data: value" and "data:value" (space after colon is optional)
@@ -142,4 +142,3 @@ pub(crate) fn parse_streaming_chunk(line: &str) -> Result<Option<StreamingChunk>
         ))
     })
 }
-

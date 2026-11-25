@@ -1,9 +1,9 @@
+use super::options::*;
 use rmcp::model::{JsonObject, Tool};
 use rmcp::object as json_object;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::Arc;
-use super::options::*;
 
 fn anthropic_flavored_input_schema(input_schema: Arc<JsonObject>) -> Arc<JsonObject> {
     if input_schema.is_empty() {

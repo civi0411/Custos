@@ -2,9 +2,9 @@ use super::adapter::LocalInferenceProvider;
 use super::runtime::messages::{convert_text_media_markers, extract_text_content};
 use super::runtime::preload::preload_model;
 use super::runtime::runtime::evict_model;
-use custos_provider::base::Provider;
-use custos_provider::conversation::message::Message;
-use custos_provider::model::ModelConfig;
+use crate::base::Provider;
+use crate::conversation::message::Message;
+use crate::model::ModelConfig;
 use serde_json::json;
 
 #[tokio::test]

@@ -9,7 +9,7 @@ use super::types::{
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use custos_domain::{DomainError, OAuthTokenRecord};
+use custos_contracts::{DomainError, OAuthTokenRecord};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -139,6 +139,37 @@ impl OAuthPkceManager {
         }
 
         trimmed.to_string()
+    }
+
+    pub fn extract_state_from_input(input: &str) -> Option<String> {
+        let trimmed = input.trim();
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            if let Ok(parsed) = Url::parse(trimmed) {
+                for (k, v) in parsed.query_pairs() {
+                    if k == "state" {
+                        return Some(v.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn verify_callback_state(
+        raw_code_or_url: &str,
+        expected_state: &str,
+    ) -> Result<(), DomainError> {
+        let Some(actual) = Self::extract_state_from_input(raw_code_or_url) else {
+            return Err(DomainError::Unauthorized(
+                "OAuth callback URL is missing required CSRF 'state' parameter".into(),
+            ));
+        };
+        if actual != expected_state {
+            return Err(DomainError::Unauthorized(
+                "OAuth callback 'state' mismatch (possible CSRF attempt)".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Exchanges authorization code and code_verifier for OAuth tokens at the token endpoint.

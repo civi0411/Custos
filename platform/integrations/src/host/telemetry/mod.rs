@@ -5,4 +5,3 @@ pub mod otlp;
 
 pub use host_metrics::*;
 pub use otlp::{normalize_otlp_logs_json, normalize_otlp_traces_json};
-

@@ -1,12 +1,12 @@
+use crate::conversation::message::{Message, MessageContent};
+use crate::conversation::token_usage::{DraftStats, ProviderUsage};
+use crate::errors::ProviderError;
 use crate::local_inference::model::ModelSettings;
 use crate::local_inference::native_tool_parsing::message_from_native_tool_text;
 use crate::local_inference::thinking_output::ThinkingOutputFilter;
 use crate::local_inference::tool_emulation::{
     message_for_emulator_action, StreamingEmulatorParser,
 };
-use custos_provider::conversation::message::{Message, MessageContent};
-use custos_provider::conversation::token_usage::{DraftStats, ProviderUsage};
-use custos_provider::errors::ProviderError;
 use safemlx::transforms::eval;
 use safemlx::{random, Array, Stream};
 use safemlx_lm::models::LoadedModel;
@@ -137,9 +137,7 @@ pub(crate) fn emit_generated_response(
     enable_thinking: bool,
     message_id: &str,
     tool_mode: ToolMode,
-    tx: &tokio::sync::mpsc::Sender<
-        Result<(Option<Message>, Option<ProviderUsage>), ProviderError>,
-    >,
+    tx: &tokio::sync::mpsc::Sender<Result<(Option<Message>, Option<ProviderUsage>), ProviderError>>,
 ) -> Result<(), ProviderError> {
     if generated_text.is_empty() {
         return Ok(());
@@ -276,8 +274,7 @@ impl<'a> MlxStreamEmitter<'a> {
                     .map(|parser| parser.process_chunk(content))
                     .unwrap_or_default();
                 for action in actions {
-                    let (message, is_tool) =
-                        message_for_emulator_action(&action, self.message_id);
+                    let (message, is_tool) = message_for_emulator_action(&action, self.message_id);
                     if is_tool {
                         self.flush_filtered_output()?;
                     }
@@ -296,9 +293,7 @@ impl<'a> MlxStreamEmitter<'a> {
     fn send(&self, message: Message) -> Result<(), ProviderError> {
         self.tx
             .blocking_send(Ok((Some(message), None)))
-            .map_err(|_| {
-                ProviderError::ExecutionError("Failed to stream MLX response".to_string())
-            })
+            .map_err(|_| ProviderError::ExecutionError("Failed to stream MLX response".to_string()))
     }
 }
 
@@ -319,9 +314,7 @@ pub(crate) fn emit_assistant_message(
     message_id: &str,
     thinking: &str,
     content: &str,
-    tx: &tokio::sync::mpsc::Sender<
-        Result<(Option<Message>, Option<ProviderUsage>), ProviderError>,
-    >,
+    tx: &tokio::sync::mpsc::Sender<Result<(Option<Message>, Option<ProviderUsage>), ProviderError>>,
 ) -> Result<(), ProviderError> {
     if thinking.is_empty() && content.is_empty() {
         return Ok(());

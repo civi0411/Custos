@@ -1,5 +1,5 @@
 use crate::routing::streaming::{ModelTurnStreamDecoder, Wire};
-use custos_provider::turn::TurnDelta;
+use crate::turn::TurnDelta;
 use uuid::Uuid;
 
 #[test]

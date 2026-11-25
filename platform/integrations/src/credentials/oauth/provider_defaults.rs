@@ -6,7 +6,7 @@ use super::types::{
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 /// Provider-specific OAuth defaults; absent configuration never uses another issuer.
 pub fn oauth_settings(service: &str) -> Result<(String, String, String, String), DomainError> {

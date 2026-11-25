@@ -4,9 +4,9 @@ use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::model::LlamaModel;
 
 use super::engine::LoadedModel;
+use crate::errors::ProviderError;
 use crate::local::local_inference::backend::LocalInferenceBackend;
 use crate::local::local_inference::llamacpp::LlamaCppBackend;
-use custos_provider::errors::ProviderError;
 
 /// Estimate the maximum context length that can fit in available accelerator/CPU
 /// memory based on the model's KV cache requirements.

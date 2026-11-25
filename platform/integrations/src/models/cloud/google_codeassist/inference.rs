@@ -1,5 +1,5 @@
-use custos_domain::DomainError;
-use custos_provider::{ModelRequest, ModelResponse};
+use crate::{ModelRequest, ModelResponse};
+use custos_contracts::DomainError;
 
 use super::models::supports_tiered_reasoning;
 use super::project::discover_project;

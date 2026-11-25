@@ -8,13 +8,15 @@
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::Arc;
+#[cfg(any(test, feature = "test-support"))]
 use tokio::sync::Mutex;
 
-use custos_core::contracts::compute::{
+use custos_contracts::contracts::compute::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
-use custos_domain::{
+use custos_contracts::{
     ComputeBackendKind, DomainError, ExecState, ExecutionArtifact, ExecutionAttempt,
     ExternalJobRef, ProgressTriplet, ResourceState,
 };
@@ -31,10 +33,15 @@ pub struct RentedGpuTargetAdapter {
     work_dir: PathBuf,
     pod_id: Option<String>,
     cloud_api_key: Option<String>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_mode: bool,
+    #[cfg(any(test, feature = "test-support"))]
     mock_status: Arc<Mutex<String>>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_released: Arc<Mutex<bool>>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_progress: Arc<Mutex<ProgressTriplet>>,
+    #[cfg(any(test, feature = "test-support"))]
     mock_preflight_blockers: Arc<Mutex<Vec<String>>>,
 }
 
@@ -55,10 +62,15 @@ impl RentedGpuTargetAdapter {
             work_dir: work_dir.into(),
             pod_id: None,
             cloud_api_key: None,
+            #[cfg(any(test, feature = "test-support"))]
             mock_mode: false,
+            #[cfg(any(test, feature = "test-support"))]
             mock_status: Arc::new(Mutex::new("running".to_string())),
+            #[cfg(any(test, feature = "test-support"))]
             mock_released: Arc::new(Mutex::new(false)),
+            #[cfg(any(test, feature = "test-support"))]
             mock_progress: Arc::new(Mutex::new(ProgressTriplet::default())),
+            #[cfg(any(test, feature = "test-support"))]
             mock_preflight_blockers: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -74,6 +86,7 @@ impl RentedGpuTargetAdapter {
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn with_mock_mode(mut self) -> Self {
         self.mock_mode = true;
         self
@@ -83,21 +96,25 @@ impl RentedGpuTargetAdapter {
         which::which("ssh").is_ok()
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn set_mock_status(&self, status: impl Into<String>) {
         let mut guard = self.mock_status.lock().await;
         *guard = status.into();
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn set_mock_progress(&self, progress: ProgressTriplet) {
         let mut guard = self.mock_progress.lock().await;
         *guard = progress;
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn set_mock_preflight_blockers(&self, blockers: Vec<String>) {
         let mut guard = self.mock_preflight_blockers.lock().await;
         *guard = blockers;
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn is_released(&self) -> bool {
         *self.mock_released.lock().await
     }
@@ -152,6 +169,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     }
 
     async fn preflight(&self, _recipe_id: &str) -> Result<PreflightReport, DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let blockers = self.mock_preflight_blockers.lock().await.clone();
             if !blockers.is_empty() {
@@ -178,6 +196,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     ) -> Result<ExternalJobRef, DomainError> {
         let remote_run_dir = format!("/tmp/custos/runs/{}", attempt.id);
 
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             return ExternalJobRef::new(&self.host, &attempt.id, "pid_41920");
         }
@@ -200,11 +219,9 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
         // 1. Validate recipe/command upfront before performing remote SSH calls
         let exec_cmd = if attempt.recipe_id != "default" && !attempt.recipe_id.trim().is_empty() {
             format!("custos-agent execute-recipe {}", attempt.recipe_id)
-        } else if self.mock_mode {
-            "python3 -u -c \"import time; print('Training on GPU...'); time.sleep(1); print('Done')\"".to_string()
         } else {
             return Err(DomainError::Validation(
-                "Cannot submit real GPU job without a valid recipe_id; dummy training script is only permitted in mock mode".into(),
+                "Cannot submit real GPU job without a valid recipe_id".into(),
             ));
         };
 
@@ -260,6 +277,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
         &self,
         external_ref: &ExternalJobRef,
     ) -> Result<AttemptObservation, DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         let (raw_status, exit_code, progress) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
             let prog = self.mock_progress.lock().await;
@@ -286,12 +304,38 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
             let code = first_line.parse::<i32>().ok();
             (first_line, code, ProgressTriplet::default())
         };
+        #[cfg(not(any(test, feature = "test-support")))]
+        let (raw_status, exit_code, progress) = {
+            let pid = &external_ref.version_id;
+            let run_dir = format!("/tmp/custos/runs/{}", external_ref.job_id);
 
+            let check_cmd = format!(
+                "if kill -0 {pid} 2>/dev/null; then echo RUNNING; \
+                 elif [ -f {run_dir}/exit_code ]; then cat {run_dir}/exit_code; \
+                 else echo DEAD; fi; \
+                 if [ -f {run_dir}/train.log ]; then tail -n 5 {run_dir}/train.log; fi"
+            );
+
+            let mut cmd = self.build_ssh_command(&check_cmd);
+            let output = cmd.output().await.map_err(|e| {
+                DomainError::Validation(format!("Failed to probe remote process: {e}"))
+            })?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let first_line = stdout.lines().next().unwrap_or("DEAD").trim().to_string();
+
+            let code = first_line.parse::<i32>().ok();
+            (first_line, code, ProgressTriplet::default())
+        };
+
+        #[cfg(any(test, feature = "test-support"))]
         let released = if self.mock_mode {
             *self.mock_released.lock().await
         } else {
             false
         };
+        #[cfg(not(any(test, feature = "test-support")))]
+        let released = false;
 
         let resource_state = if released {
             ResourceState::ReleaseConfirmed
@@ -320,6 +364,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     }
 
     async fn request_checkpoint(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             return Ok(());
         }
@@ -356,6 +401,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     }
 
     async fn stop_job(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let mut guard = self.mock_status.lock().await;
             *guard = "stopped".to_string();
@@ -389,6 +435,7 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
         // Ensure remote process is stopped prior to deallocating compute
         let _ = self.stop_job(external_ref).await;
 
+        #[cfg(any(test, feature = "test-support"))]
         if self.mock_mode {
             let mut guard = self.mock_released.lock().await;
             *guard = true;
@@ -431,12 +478,15 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
             DomainError::Validation(format!("Failed to create local destination: {e}"))
         })?;
 
-        if !self.mock_mode {
-            ops::fetch_remote_train_log(self, &external_ref.job_id, &dest).await;
-        } else {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.mock_mode {
             let dummy = dest.join("train.log");
             let _ = tokio::fs::write(&dummy, b"Epoch 10: Loss 0.129\nTraining finished.\n").await;
+        } else {
+            ops::fetch_remote_train_log(self, &external_ref.job_id, &dest).await;
         }
+        #[cfg(not(any(test, feature = "test-support")))]
+        ops::fetch_remote_train_log(self, &external_ref.job_id, &dest).await;
 
         let mut artifacts = Vec::new();
         let mut entries = tokio::fs::read_dir(&dest)
@@ -461,7 +511,5 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     }
 }
 
-
 #[cfg(test)]
 mod tests;
-

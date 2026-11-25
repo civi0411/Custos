@@ -2,16 +2,14 @@ use super::super::types::ModelConfig;
 
 #[test]
 fn reads_supports_vision_from_config() {
-    let config: ModelConfig = serde_json::from_str(
-        r#"{"model_name":"gpt-4o","toolshim":false,"supports_vision":true}"#,
-    )
-    .unwrap();
+    let config: ModelConfig =
+        serde_json::from_str(r#"{"model_name":"gpt-4o","toolshim":false,"supports_vision":true}"#)
+            .unwrap();
     assert_eq!(config.supports_vision, Some(true));
 
-    let config: ModelConfig = serde_json::from_str(
-        r#"{"model_name":"gpt-4o","toolshim":false,"supports_vision":false}"#,
-    )
-    .unwrap();
+    let config: ModelConfig =
+        serde_json::from_str(r#"{"model_name":"gpt-4o","toolshim":false,"supports_vision":false}"#)
+            .unwrap();
     assert_eq!(config.supports_vision, Some(false));
 }
 
@@ -77,8 +75,8 @@ fn resolves_claude_sonnet_5_on_aws_bedrock() {
         ("GOOSE_MAX_TOKENS", None::<&str>),
         ("GOOSE_CONTEXT_LIMIT", None::<&str>),
     ]);
-    let config = ModelConfig::new("global.anthropic.claude-sonnet-5")
-        .with_canonical_limits("aws_bedrock");
+    let config =
+        ModelConfig::new("global.anthropic.claude-sonnet-5").with_canonical_limits("aws_bedrock");
     assert_eq!(config.max_tokens, Some(128_000));
     assert_eq!(config.reasoning, Some(true));
 }
@@ -157,4 +155,3 @@ fn does_not_override_existing_supports_vision() {
         .with_canonical_limits("openai");
     assert_eq!(config.supports_vision, Some(false));
 }
-

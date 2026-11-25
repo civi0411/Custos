@@ -103,4 +103,3 @@ fn test_response_to_message_with_both_reasoning_fields() -> anyhow::Result<()> {
 // with the real chunks. A Portkey gateway sends a `hook_results` guardrail trace as the
 // FIRST frame whenever strict-openai-compliance is off. Failing on such a frame killed
 // the whole turn.
-

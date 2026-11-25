@@ -409,13 +409,7 @@ impl CustosMcpClient {
             } => {
                 let mut lock = process.lock().await;
                 let proc = self
-                    .ensure_stdio_process(
-                        &mut lock,
-                        command,
-                        args,
-                        env,
-                        current_dir.as_ref(),
-                    )
+                    .ensure_stdio_process(&mut lock, command, args, env, current_dir.as_ref())
                     .await?;
                 proc.send_request(method, params).await
             }

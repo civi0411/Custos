@@ -3,11 +3,6 @@
 //! Block 3 of the Custos 4-Block Target Architecture:
 //! Pure Concrete I/O, AI Model Providers, System Drivers, Protocols, and External Connectors.
 
-extern crate self as custos_provider;
-extern crate custos_contracts as custos_domain;
-extern crate custos_contracts as custos_core;
-pub use crate as custos_adapters;
-
 pub mod compute;
 pub mod connectors;
 pub mod credentials;
@@ -24,11 +19,11 @@ pub mod terminal;
 // I. Compatibility Re-exports for AI Subsystem
 // ============================================================================
 
-pub use models::contracts::*;
-pub use models::contracts::types::documents;
 pub use models::catalog;
 pub use models::cloud;
 pub use models::contracts;
+pub use models::contracts::types::documents;
+pub use models::contracts::*;
 pub use models::local;
 pub use models::routing;
 

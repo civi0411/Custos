@@ -7,8 +7,8 @@
 mod tests;
 
 use async_trait::async_trait;
-use custos_core::contracts::workspace::WorkspaceProvider;
-use custos_domain::{DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceKind};
+use custos_contracts::contracts::workspace::WorkspaceProvider;
+use custos_contracts::{DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceKind};
 use std::path::Path;
 use tokio::fs;
 use tokio::process::Command;

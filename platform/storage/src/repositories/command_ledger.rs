@@ -1,6 +1,6 @@
 use crate::connection::DbConnection;
+use custos_contracts::DomainError;
 use custos_contracts::{CommandAdmission, CommandLedgerEntry};
-use custos_domain::DomainError;
 use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Clone)]

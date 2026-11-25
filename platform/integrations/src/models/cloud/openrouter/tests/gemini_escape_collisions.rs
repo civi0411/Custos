@@ -198,9 +198,7 @@ fn gemini_schema_ref_escape_ignores_braces_inside_string_literals() {
     );
     assert_eq!(
         payload["messages"][0]["content"],
-        Value::String(
-            gemini_schema_ref_note("dollar_ref") + r#"{"a":"}}}}","dollar_ref":"B"}"#
-        )
+        Value::String(gemini_schema_ref_note("dollar_ref") + r#"{"a":"}}}}","dollar_ref":"B"}"#)
     );
 }
 

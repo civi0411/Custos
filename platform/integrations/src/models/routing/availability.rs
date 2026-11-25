@@ -1,10 +1,10 @@
 //! Model Availability & Transient Admission State
 //!
 //! Tracks account-scoped transient access, quota, rate-limit, and offline admission.
-//! Integrates directly with canonical `ProviderObservationSnapshot` from `custos_domain`.
+//! Integrates directly with canonical `ProviderObservationSnapshot` from `custos_contracts`.
 
-use custos_domain::provider::observation::{ProviderHealthStatus, ProviderObservationSnapshot};
-use custos_domain::DomainError;
+use custos_contracts::provider::observation::{ProviderHealthStatus, ProviderObservationSnapshot};
+use custos_contracts::DomainError;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -25,9 +25,10 @@ pub struct ModelAvailability {
 impl ModelAvailability {
     pub fn snapshot(&self, scope: &str) -> Result<HashMap<String, ModelUnavailable>, DomainError> {
         let now = chrono::Utc::now().timestamp_millis();
-        let entries = self.entries.read().map_err(|_| {
-            DomainError::Validation("Model availability lock unavailable".into())
-        })?;
+        let entries = self
+            .entries
+            .read()
+            .map_err(|_| DomainError::Validation("Model availability lock unavailable".into()))?;
         Ok(entries
             .iter()
             .filter(|((key, _), value)| {
@@ -49,9 +50,10 @@ impl ModelAvailability {
     }
 
     pub fn refresh(&self, scope: &str) -> Result<(), DomainError> {
-        let mut entries = self.entries.write().map_err(|_| {
-            DomainError::Validation("Model availability lock unavailable".into())
-        })?;
+        let mut entries = self
+            .entries
+            .write()
+            .map_err(|_| DomainError::Validation("Model availability lock unavailable".into()))?;
         entries.retain(|(key, _), value| {
             key != scope || matches!(value.kind.as_str(), "quota" | "rate")
         });
@@ -61,9 +63,7 @@ impl ModelAvailability {
     pub fn quota_recovered(&self, scope: &str) -> Result<(), DomainError> {
         self.entries
             .write()
-            .map_err(|_| {
-                DomainError::Validation("Model availability lock unavailable".into())
-            })?
+            .map_err(|_| DomainError::Validation("Model availability lock unavailable".into()))?
             .retain(|(key, _), value| key != scope || value.kind != "quota");
         Ok(())
     }
@@ -172,9 +172,7 @@ impl ModelAvailability {
         };
         self.entries
             .write()
-            .map_err(|_| {
-                DomainError::Validation("Model availability lock unavailable".into())
-            })?
+            .map_err(|_| DomainError::Validation("Model availability lock unavailable".into()))?
             .insert(
                 (scope.to_string(), target.to_string()),
                 ModelUnavailable {
@@ -335,4 +333,3 @@ mod tests {
         assert!(!blocked.is_operable());
     }
 }
-

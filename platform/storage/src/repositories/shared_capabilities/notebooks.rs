@@ -1,7 +1,7 @@
 use super::SharedCapabilitiesRepository;
 use async_trait::async_trait;
 use chrono::Utc;
-use custos_core::contracts::notebook::{
+use custos_contracts::contracts::notebook::{
     CellExecutionStatus, KernelStatus, NotebookCell, NotebookCellType, NotebookKernelState,
     NotebookStoragePort,
 };
@@ -36,7 +36,10 @@ impl SharedCapabilitiesRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = if use_filter {
-            stmt.query_map(params![session_id, notebook_id], Self::map_notebook_cell_row)
+            stmt.query_map(
+                params![session_id, notebook_id],
+                Self::map_notebook_cell_row,
+            )
         } else {
             stmt.query_map(params![session_id], Self::map_notebook_cell_row)
         }
@@ -58,7 +61,7 @@ impl SharedCapabilitiesRepository {
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("cell_event"),
+                custos_contracts::new_id("cell_event"),
                 "notebook.cell.saved",
                 serde_json::json!({"cell_id": cell.id, "session_id": cell.session_id, "epoch": cell.epoch}).to_string(),
                 Utc::now().timestamp()
@@ -200,7 +203,7 @@ impl SharedCapabilitiesRepository {
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("nb"),
+                custos_contracts::new_id("nb"),
                 "notebook.cells.replaced",
                 payload,
                 Utc::now().timestamp()
@@ -442,4 +445,3 @@ impl NotebookStoragePort for SharedCapabilitiesRepository {
         self.save_notebook_kernel_state(state)
     }
 }
-

@@ -3,10 +3,7 @@ use super::types::{
     ProviderEngine,
 };
 use crate::base::Provider;
-use crate::cloud::{
-    anthropic, ollama, openai,
-    transport::api_client::TlsConfig,
-};
+use crate::cloud::{anthropic, ollama, openai, transport::api_client::TlsConfig};
 use anyhow::Result;
 use std::path::Path;
 

@@ -1,5 +1,5 @@
-use crate::cloud::transport::api_client::AuthMethod;
 use crate::cloud::azure_foundry::provider::AzureFoundryProvider;
+use crate::cloud::transport::api_client::AuthMethod;
 use crate::model::ModelConfig;
 use serde_json::json;
 use wiremock::MockServer;
@@ -55,7 +55,5 @@ pub(crate) fn anthropic_stream() -> String {
     let block_stop = r#"data: {"type":"content_block_stop","index":0}"#;
     let message_delta = r#"data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#;
     let stop = r#"data: {"type":"message_stop"}"#;
-    format!(
-        "{start}\n\n{block_start}\n\n{delta}\n\n{block_stop}\n\n{message_delta}\n\n{stop}\n\n"
-    )
+    format!("{start}\n\n{block_start}\n\n{delta}\n\n{block_stop}\n\n{message_delta}\n\n{stop}\n\n")
 }

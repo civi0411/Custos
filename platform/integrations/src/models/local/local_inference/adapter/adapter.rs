@@ -3,15 +3,15 @@
 //! Bridges structured model execution (ModelTurnRequest, ModelTurnEvent)
 //! directly to LocalInferenceProvider and llama.cpp/MLX runtime.
 
+use crate::base::Provider;
+use crate::conversation::message::{Message, MessageContentBlock};
+use crate::events::ProviderEvent;
+use crate::model::ModelConfig;
+use crate::port::ModelProvider;
+use crate::request::{ModelResponse, ProviderRequest};
+use crate::turn::{ModelTurnEvent, ModelTurnRequest, TurnDelta};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::base::Provider;
-use custos_provider::conversation::message::{Message, MessageContentBlock};
-use custos_provider::events::ProviderEvent;
-use custos_provider::model::ModelConfig;
-use custos_provider::port::ModelProvider;
-use custos_provider::request::{ModelResponse, ProviderRequest};
-use custos_provider::turn::{ModelTurnEvent, ModelTurnRequest, TurnDelta};
+use custos_contracts::DomainError;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -174,7 +174,7 @@ impl ModelProvider for NativeLocalModelAdapter {
             let mut completed = ProviderEvent::completed(
                 req_id,
                 None,
-                Some(custos_provider::events::TokenUsage {
+                Some(crate::events::TokenUsage {
                     input_tokens: Some(input_tokens),
                     output_tokens: Some(total_output),
                 }),

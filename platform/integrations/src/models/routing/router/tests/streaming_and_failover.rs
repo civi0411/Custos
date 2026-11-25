@@ -1,9 +1,9 @@
 use super::super::*;
 use super::helpers::TestCredentialResolver;
-use std::sync::Arc;
+use crate::{ModelProvider, ProviderRequest};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::{ModelProvider, ProviderRequest};
+use custos_contracts::DomainError;
+use std::sync::Arc;
 
 #[test]
 fn codex_errors_keep_subscription_identity_and_reject_partial_streams() {
@@ -220,10 +220,10 @@ async fn conversation_effort_reaches_codex_and_api_responses_without_aliasing() 
             let mut receiver = provider.stream(&request).await.unwrap();
             let mut completed = false;
             while let Some(event) = receiver.recv().await {
-                if event.event_type == custos_provider::ProviderEventType::Completed {
+                if event.event_type == crate::ProviderEventType::Completed {
                     completed = true;
                 }
-                assert_ne!(event.event_type, custos_provider::ProviderEventType::Failed);
+                assert_ne!(event.event_type, crate::ProviderEventType::Failed);
             }
             assert!(completed);
         }
@@ -302,7 +302,7 @@ async fn rejected_http_and_stream_frames_update_only_the_selected_account() {
     let mut receiver = provider.stream(&request).await.unwrap();
     assert_eq!(
         receiver.recv().await.unwrap().event_type,
-        custos_provider::ProviderEventType::Failed
+        crate::ProviderEventType::Failed
     );
     assert!(state.check("A", &request.model).is_err());
     assert!(state.check("B", &request.model).is_ok());

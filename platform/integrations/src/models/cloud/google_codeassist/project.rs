@@ -1,4 +1,4 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 use super::transport::cloud_call;
 
