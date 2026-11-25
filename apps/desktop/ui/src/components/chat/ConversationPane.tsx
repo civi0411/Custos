@@ -1,9 +1,12 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import {
+  AlertCircle,
   ArrowUp,
   Compass,
+  Layers,
   Paperclip,
   Plus,
+  Settings2,
   X,
 } from 'lucide-react';
 import type { Session, ChatMessage } from '@/types';
@@ -16,6 +19,7 @@ import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { ConversationDockedComposer } from './ConversationDockedComposer';
 import { ConversationMarkdown } from './ConversationMarkdown';
 import { TaskAnchorBanner } from '@/components/shell/TaskAnchorBanner';
+import { BUILTIN_CONTRIBUTIONS, canonicalWorkbenchId } from '@/components/workbenches/registry';
 import { daemonClient } from '@/api/daemon_client';
 import { useAppContext } from '@/context/AppContext';
 import { useLiveRunSnapshot } from '@/context/app/scopedLiveRun';
@@ -90,13 +94,40 @@ export function ConversationPane({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { selectedModel, handleSelectModel, handleStopRun, openSkills, openPlugins } = useAppContext();
+  const {
+    selectedModel,
+    handleSelectModel,
+    handleStopRun,
+    openSkills,
+    openPlugins,
+    openSettings,
+    installedWorkbenches,
+    setActiveWorkbench,
+    setIsWorkbenchLibraryOpen,
+  } = useAppContext();
+  const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
+
   useEffect(() => {
     setAttachedFiles([]);
     setIsPlusMenuOpen(false);
   }, [session.id]);
 
   const hasMessages = session?.messages && session.messages.length > 0;
+  useEffect(() => {
+    if (hasMessages) return;
+    let active = true;
+    daemonClient
+      .checkLlmStatus()
+      .then((res) => {
+        if (active) setLlmConfigured(Boolean(res?.configured));
+      })
+      .catch(() => {
+        if (active) setLlmConfigured(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [hasMessages]);
   const liveMessage = useMemo(() => {
     if (!session?.messages || session.messages.length === 0) return undefined;
     const reversed = [...session.messages].reverse();
@@ -239,18 +270,39 @@ export function ConversationPane({
             </div>
             <h2 className="text-xl font-semibold text-white tracking-tight mb-2">
               {mode === 'research'
-                ? 'Research Copilot'
+                ? 'Research Workbench'
+                : mode === 'quant'
+                ? 'Quant Workbench'
                 : mode === 'copilot'
                 ? 'Personal Copilot'
-                : 'Engineering Copilot'}
+                : 'Coding Workbench'}
             </h2>
-            <p className="text-xs text-white/50 text-center max-w-md mb-8 leading-relaxed">
+            <p className="text-xs text-white/50 text-center max-w-md mb-6 leading-relaxed">
               {mode === 'research'
                 ? 'Explore literature, extract scientific claims, and run empirical tests in notebooks.'
+                : mode === 'quant'
+                ? 'Synthesize alpha factors, run lookahead-clean backtests, and audit execution risk.'
                 : mode === 'copilot'
-                ? 'Coordinate personal tasks, draft communications, and organize cowork activities.'
+                ? 'Core assistant for dialogue, task coordination, and installing specialized workbenches on demand.'
                 : 'Engineering discussion, assign agent tasks, and modify code in isolated worktrees.'}
             </p>
+
+            {llmConfigured === false && (
+              <div className="w-full mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3.5 py-2.5 text-xs text-amber-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertCircle className="size-4 shrink-0 text-amber-400" />
+                  <span className="truncate">No AI provider connected yet. Configure an API key, OAuth account, or Ollama first.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openSettings('providers')}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition cursor-pointer"
+                >
+                  <Settings2 className="size-3" />
+                  Configure AI
+                </button>
+              </div>
+            )}
 
             {/* Centered Large Composer Box */}
             <div className="w-full bg-[#18181b]/95 border border-white/15 rounded-2xl p-3 shadow-2xl transition-all focus-within:border-workbench-accent/50 focus-within:ring-1 focus-within:ring-workbench-accent/20">
@@ -362,6 +414,61 @@ export function ConversationPane({
                 Task
               </button>
             </div>
+
+            {mode === 'copilot' && (
+              <div className="mt-6 w-full grid grid-cols-3 gap-2.5">
+                {BUILTIN_CONTRIBUTIONS.filter((c) => !c.builtin).map((wb) => {
+                  const Icon = wb.icon;
+                  const installed = (installedWorkbenches || []).some(
+                    (id) => canonicalWorkbenchId(id) === wb.canonicalId
+                  );
+                  return (
+                    <button
+                      key={wb.canonicalId}
+                      type="button"
+                      onClick={() => {
+                        if (installed) {
+                          setActiveWorkbench(wb.id as ActiveWorkbench);
+                        } else {
+                          setIsWorkbenchLibraryOpen(true);
+                        }
+                      }}
+                      className="flex flex-col items-start gap-1 rounded-xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/15 p-3 text-left transition cursor-pointer"
+                    >
+                      <div className="w-full flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-white/90">
+                          <Icon className="size-3.5 text-workbench-accent" />
+                          <span>{wb.label}</span>
+                        </div>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            installed
+                              ? 'bg-emerald-500/15 text-emerald-300'
+                              : 'bg-white/6 text-white/50'
+                          }`}
+                        >
+                          {installed ? 'Open' : 'Install'}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-white/40 line-clamp-2 leading-snug">
+                        {wb.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {mode === 'copilot' && (
+              <button
+                type="button"
+                onClick={() => setIsWorkbenchLibraryOpen(true)}
+                className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-white/45 hover:text-white/80 transition cursor-pointer"
+              >
+                <Layers className="size-3" />
+                Manage On-Demand Workbenches
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-6 max-w-3xl mx-auto w-full">

@@ -151,7 +151,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            unknown => ApiResponse::error(req.id, format!("Unknown workspace changes method: {unknown}")),
+            unknown => ApiResponse::error(
+                req.id,
+                format!("Unknown workspace changes method: {unknown}"),
+            ),
         }
     }
 }

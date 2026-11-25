@@ -23,10 +23,10 @@ mod workspaces;
 
 pub(crate) use crate::api::{ApiRequest, ApiResponse, LocalApiDispatcher};
 pub(crate) use crate::custos_local_api::*;
-pub(crate) use custos_core::contracts::TerminalPort;
-pub(crate) use custos_core::*;
-pub(crate) use custos_domain::*;
 pub use blocks::*;
+pub(crate) use custos_contracts::*;
+pub(crate) use custos_engine::contracts::TerminalPort;
+pub(crate) use custos_engine::*;
 
 impl LocalApiDispatcher {
     pub(crate) async fn dispatch_application(&self, req: ApiRequest) -> ApiResponse {

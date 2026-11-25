@@ -3,9 +3,9 @@
 //! Handles enqueuing, listing, approving, and dispatching outbox action items.
 
 use crate::api::*;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort};
-use custos_domain::authority::action::Assurance;
-use custos_domain::{new_id, DomainError, ExecutionReceipt, ReceiptStatus};
+use custos_contracts::authority::action::Assurance;
+use custos_contracts::{new_id, DomainError, ExecutionReceipt, ReceiptStatus};
+use custos_engine::contracts::storage::{OutboxEntry, OutboxPort};
 
 pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
     let outbox = match dispatcher.outbox_repo() {
@@ -13,21 +13,21 @@ pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
         None => return ApiResponse::error(req.id, "Outbox storage is not configured"),
     };
     let pending = match outbox
-        .list_by_status(custos_core::contracts::storage::OutboxStatus::Pending)
+        .list_by_status(custos_engine::contracts::storage::OutboxStatus::Pending)
         .await
     {
         Ok(items) => items,
         Err(e) => return ApiResponse::error(req.id, e.to_string()),
     };
     let dispatching = match outbox
-        .list_by_status(custos_core::contracts::storage::OutboxStatus::Dispatching)
+        .list_by_status(custos_engine::contracts::storage::OutboxStatus::Dispatching)
         .await
     {
         Ok(items) => items,
         Err(e) => return ApiResponse::error(req.id, e.to_string()),
     };
     let receipted = match outbox
-        .list_by_status(custos_core::contracts::storage::OutboxStatus::Receipted)
+        .list_by_status(custos_engine::contracts::storage::OutboxStatus::Receipted)
         .await
     {
         Ok(items) => items,
@@ -38,9 +38,9 @@ pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
     all.extend(dispatching);
     all.extend(receipted);
     for status in [
-        custos_core::contracts::storage::OutboxStatus::Approved,
-        custos_core::contracts::storage::OutboxStatus::Failed,
-        custos_core::contracts::storage::OutboxStatus::Uncertain,
+        custos_engine::contracts::storage::OutboxStatus::Approved,
+        custos_engine::contracts::storage::OutboxStatus::Failed,
+        custos_engine::contracts::storage::OutboxStatus::Uncertain,
     ] {
         match outbox.list_by_status(status).await {
             Ok(items) => all.extend(items),
@@ -78,16 +78,20 @@ pub async fn handle_list(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> Ap
                 payload_summary: payload_summary_str,
                 payload_digest: e.argument_digest,
                 status: match e.status {
-                    custos_core::contracts::storage::OutboxStatus::Approved => "approved".into(),
-                    custos_core::contracts::storage::OutboxStatus::Pending => {
+                    custos_engine::contracts::storage::OutboxStatus::Approved => "approved".into(),
+                    custos_engine::contracts::storage::OutboxStatus::Pending => {
                         "pending_approval".into()
                     }
-                    custos_core::contracts::storage::OutboxStatus::Dispatching => {
+                    custos_engine::contracts::storage::OutboxStatus::Dispatching => {
                         "dispatching".into()
                     }
-                    custos_core::contracts::storage::OutboxStatus::Receipted => "receipted".into(),
-                    custos_core::contracts::storage::OutboxStatus::Failed => "failed".into(),
-                    custos_core::contracts::storage::OutboxStatus::Uncertain => "uncertain".into(),
+                    custos_engine::contracts::storage::OutboxStatus::Receipted => {
+                        "receipted".into()
+                    }
+                    custos_engine::contracts::storage::OutboxStatus::Failed => "failed".into(),
+                    custos_engine::contracts::storage::OutboxStatus::Uncertain => {
+                        "uncertain".into()
+                    }
                 },
                 permit_id: Some(e.permit_id),
                 receipt_id: e.receipt.as_ref().map(|r| r.receipt_id.clone()),
@@ -127,7 +131,10 @@ pub async fn handle_create(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> 
     let payload_val = req.params.get("payload");
     let payload_json = payload_val.map(|v| v.to_string());
     let payload_str = payload_json.as_deref().unwrap_or("{}");
-    let argument_digest = format!("sha256:{}", custos_domain::digest(payload_str.as_bytes()));
+    let argument_digest = format!(
+        "sha256:{}",
+        custos_contracts::digest(payload_str.as_bytes())
+    );
     let permit_id = req
         .params
         .get("permit_id")
@@ -148,7 +155,7 @@ pub async fn handle_create(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> 
         &permit_id,
         &argument_digest,
         idempotency_key,
-        custos_core::contracts::storage::OutboxStatus::Pending,
+        custos_engine::contracts::storage::OutboxStatus::Pending,
         chrono::Utc::now(),
     );
     entry.recipient = recipient.clone();
@@ -176,7 +183,10 @@ pub async fn handle_create(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> 
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    ApiResponse::success(req.id, serde_json::to_value(&action_item).unwrap_or_default())
+    ApiResponse::success(
+        req.id,
+        serde_json::to_value(&action_item).unwrap_or_default(),
+    )
 }
 
 pub async fn handle_approve(dispatcher: &LocalApiDispatcher, req: ApiRequest) -> ApiResponse {
@@ -198,7 +208,10 @@ pub async fn handle_approve(dispatcher: &LocalApiDispatcher, req: ApiRequest) ->
     match outbox.get(entry_id).await {
         Ok(Some(entry)) => {
             let payload_str = entry.payload_json.as_deref().unwrap_or("{}");
-            let actual_digest = format!("sha256:{}", custos_domain::digest(payload_str.as_bytes()));
+            let actual_digest = format!(
+                "sha256:{}",
+                custos_contracts::digest(payload_str.as_bytes())
+            );
             if entry.argument_digest != actual_digest {
                 return ApiResponse::error(
                     req.id,
@@ -255,11 +268,13 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
 
     let entry = match outbox.get(entry_id).await {
         Ok(Some(e)) => e,
-        Ok(None) => return ApiResponse::error(req.id, format!("Outbox entry '{entry_id}' not found")),
+        Ok(None) => {
+            return ApiResponse::error(req.id, format!("Outbox entry '{entry_id}' not found"))
+        }
         Err(e) => return ApiResponse::error(req.id, format!("Failed to read outbox entry: {e}")),
     };
 
-    if entry.status != custos_core::contracts::storage::OutboxStatus::Approved {
+    if entry.status != custos_engine::contracts::storage::OutboxStatus::Approved {
         return ApiResponse::error(
             req.id,
             format!("Outbox entry '{entry_id}' requires durable approval before dispatch; current status is '{:?}'", entry.status),
@@ -267,7 +282,10 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
     }
 
     let payload_str = entry.payload_json.as_deref().unwrap_or("{}");
-    let actual_digest = format!("sha256:{}", custos_domain::digest(payload_str.as_bytes()));
+    let actual_digest = format!(
+        "sha256:{}",
+        custos_contracts::digest(payload_str.as_bytes())
+    );
     if entry.argument_digest != actual_digest {
         return ApiResponse::error(
             req.id,
@@ -292,10 +310,11 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
         let tool_path = recipient.trim_start_matches("mcp://");
         let namespaced_tool = tool_path.replace('/', "__");
         let args: Option<serde_json::Value> = serde_json::from_str(payload_str).ok();
-        let ctx = custos_adapters::mcp::ToolCallContext::new(&entry.id, &entry.id);
+        let ctx = custos_integrations::mcp::ToolCallContext::new(&entry.id, &entry.id);
 
         match dispatcher
-            .workbenches.mcp_hub
+            .workbenches
+            .mcp_hub
             .dispatch_call(&namespaced_tool, args, &ctx)
             .await
         {
@@ -324,7 +343,15 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
             Err(e) => Err(format!("MCP dispatch failed: {e}")),
         }
     } else if recipient.starts_with("http://") || recipient.starts_with("https://") {
+        if let Err(e) = custos_contracts::execution::validate_browser_url(recipient) {
+            let _ = outbox.mark_uncertain(entry_id).await;
+            return ApiResponse::error(
+                req.id,
+                format!("Outbox HTTP recipient rejected by SSRF guard: {e}"),
+            );
+        }
         let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(15))
             .build()
             .unwrap_or_default();
@@ -338,7 +365,10 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
                     .unwrap_or_else(|_| serde_json::json!({"status": "ok"}));
                 Ok(json_val)
             }
-            Ok(resp) => Err(format!("HTTP dispatch failed with status: {}", resp.status())),
+            Ok(resp) => Err(format!(
+                "HTTP dispatch failed with status: {}",
+                resp.status()
+            )),
             Err(e) => {
                 let _ = outbox.mark_uncertain(entry_id).await;
                 return ApiResponse::error(
@@ -354,14 +384,21 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
         } else {
             format!("http://{target_url}")
         };
+        if let Err(e) = custos_contracts::execution::validate_browser_url(&endpoint) {
+            let _ = outbox.mark_uncertain(entry_id).await;
+            return ApiResponse::error(
+                req.id,
+                format!("Outbox A2A endpoint rejected by SSRF guard: {e}"),
+            );
+        }
 
-        let a2a_client = custos_adapters::a2a::A2aClient::new();
-        let task_payload: custos_adapters::a2a::A2aTaskPayload =
+        let a2a_client = custos_integrations::a2a::A2aClient::new();
+        let task_payload: custos_integrations::a2a::A2aTaskPayload =
             serde_json::from_str(payload_str).unwrap_or_else(|_| {
-                custos_adapters::a2a::A2aTaskPayload {
+                custos_integrations::a2a::A2aTaskPayload {
                     task_id: entry.action_id.clone(),
                     context_id: None,
-                    state: custos_adapters::a2a::A2aTaskState::Submitted,
+                    state: custos_integrations::a2a::A2aTaskState::Submitted,
                     artifacts: vec![serde_json::json!({ "raw": payload_str })],
                     parent_task_id: None,
                     parent_run_id: None,
@@ -376,7 +413,7 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
             .await
         {
             Ok(res) => {
-                if res.state == custos_adapters::a2a::A2aTaskState::Failed {
+                if res.state == custos_integrations::a2a::A2aTaskState::Failed {
                     Err(res
                         .error_message
                         .unwrap_or_else(|| "A2A sub-task reported failure".to_string()))
@@ -414,7 +451,7 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
                 permit_id: entry.permit_id.clone(),
                 action_id: entry.action_id.clone(),
                 status: ReceiptStatus::Success,
-                output_digest: format!("sha256:{}", custos_domain::digest(out_str.as_bytes())),
+                output_digest: format!("sha256:{}", custos_contracts::digest(out_str.as_bytes())),
                 output_data: Some(res_val),
                 error_message: None,
                 duration_ms: Some(duration_ms),
@@ -423,7 +460,10 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
             };
 
             if let Err(e) = outbox.mark_receipted(entry_id, receipt.clone()).await {
-                return ApiResponse::error(req.id, format!("Failed to record receipt in outbox: {e}"));
+                return ApiResponse::error(
+                    req.id,
+                    format!("Failed to record receipt in outbox: {e}"),
+                );
             }
 
             ApiResponse::success(
@@ -437,7 +477,10 @@ pub async fn handle_dispatch(dispatcher: &LocalApiDispatcher, req: ApiRequest) -
         }
         Err(err_msg) => {
             let _ = outbox.mark_failed(entry_id, &err_msg).await;
-            ApiResponse::error(req.id, format!("Outbox dispatch execution failed: {err_msg}"))
+            ApiResponse::error(
+                req.id,
+                format!("Outbox dispatch execution failed: {err_msg}"),
+            )
         }
     }
 }

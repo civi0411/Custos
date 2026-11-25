@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, CheckCircle2, AlertTriangle, XCircle, RotateCw } from 'lucide-react';
 import { WorkbenchPane, WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 import { daemonClient } from '@/api/daemon_client';
+import { useQuantSelection } from './quantSelectionStore';
 import type { OrcaTabId } from '../workbenchResources';
 
 interface RiskAuditPaneProps {
@@ -65,95 +66,113 @@ interface PboResultView {
 }
 
 export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
+  const selection = useQuantSelection();
   const [loading, setLoading] = useState<boolean>(false);
   const [gateResult, setGateResult] = useState<GateOutcomeView | null>(null);
   const [reviewReport, setReviewReport] = useState<ReviewReportView | null>(null);
   const [pboResult, setPboResult] = useState<PboResultView | null>(null);
+  const [pboNotice, setPboNotice] = useState<string>('');
 
-  const runGateEvaluation = async () => {
+  const runFullAudit = useCallback(async () => {
     setLoading(true);
     try {
-      onShowToast?.('Evaluating pre-trade decision gate & exit immunity...');
-      const res = await daemonClient.evaluateQuantGate({
-        symbol: 'NVDA',
-        direction: 'buy',
-        estimated_price: 135.50,
-        quantity: 500,
-        daily_executed_notional: 350_000,
-        current_drawdown: 0.015,
-        consecutive_losses: 1,
-        max_order_notional: 150_000,
-        max_daily_notional: 1_000_000,
-        max_drawdown_limit: 0.05,
-        max_consecutive_losses: 5,
-      });
-      setGateResult(res);
-      onShowToast?.(`Pre-Trade Gate evaluated: ${res.outcome.status}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onShowToast?.(`Gate evaluation failed: ${msg}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const sym = selection.symbol || 'SPY';
+      const tf = selection.timeframe || '1d';
+      const stratId = selection.strategyId || '';
 
-  const runTradeReview = async () => {
-    setLoading(true);
-    try {
-      onShowToast?.('Computing post-trade FIFO cohort review...');
-      const res = await daemonClient.computeQuantReview({
-        strategy_id: 'sig_momentum_res',
-        symbol: 'NVDA',
-        fills: [
-          {
-            fill_id: 'fill_01',
-            order_id: 'ord_01',
-            symbol: 'NVDA',
+      // 1. Pre-trade decision gate using real latest ingested bar price + real SQLite daily notional
+      try {
+        const barsRes = await daemonClient.getQuantMarketBars({ symbol: sym, timeframe: tf, limit: 1 });
+        const latestPrice = barsRes?.bars?.[barsRes.bars.length - 1]?.close;
+        if (latestPrice && latestPrice > 0) {
+          const gate = await daemonClient.evaluateQuantGate({
+            symbol: sym,
             direction: 'buy',
-            price: 130.0,
-            quantity: 100,
-            commission: 1.5,
-            timestamp: 1730000000,
-          },
-          {
-            fill_id: 'fill_02',
-            order_id: 'ord_02',
-            symbol: 'NVDA',
-            direction: 'sell',
-            price: 135.0,
-            quantity: 100,
-            commission: 1.5,
-            timestamp: 1730001800,
-            exit_reason: 'take_profit',
-          },
-        ],
-      });
-      setReviewReport(res);
-      onShowToast?.(`Review computed: Net PnL $${res.net_pnl.toFixed(2)}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onShowToast?.(`Review failed: ${msg}`);
+            estimated_price: latestPrice,
+            quantity: 10,
+            daily_executed_notional: 0, // Daemon resolves real daily executed notional from quant_fills
+            current_drawdown: 0,
+            consecutive_losses: 0,
+          });
+          setGateResult(gate);
+        } else {
+          setGateResult(null);
+        }
+      } catch {
+        setGateResult(null);
+      }
+
+      // 2. Post-trade FIFO review strictly from persisted quant_fills in SQLite (Zero-Mock)
+      if (stratId) {
+        try {
+          const review = await daemonClient.computeQuantReview({
+            strategy_id: stratId,
+            symbol: 'ALL',
+            fills: [],
+          });
+          setReviewReport(review);
+        } catch {
+          setReviewReport(null);
+        }
+      } else {
+        setReviewReport(null);
+      }
+
+      // 3. Real CSCV PBO computed from persisted backtest equity curves across registered strategies
+      try {
+        const list = await daemonClient.listQuantStrategies();
+        const strategies = list?.strategies ?? [];
+        const returnRows: number[][] = [];
+        for (const s of strategies.slice(0, 8)) {
+          try {
+            const sheet = await daemonClient.getQuantTearsheet(s.id);
+            const curve = sheet?.equity_curve ?? [];
+            if (curve.length >= 6) {
+              const rets: number[] = [];
+              for (let i = 1; i < curve.length; i++) {
+                const prev = curve[i - 1].equity;
+                rets.push(prev > 0 ? (curve[i].equity - prev) / prev : 0);
+              }
+              returnRows.push(rets);
+            }
+          } catch {
+            // skip strategies without tearsheet
+          }
+        }
+        if (returnRows.length >= 2) {
+          const minCols = Math.min(...returnRows.map((r) => r.length));
+          const alignedCols = Math.min(minCols - (minCols % 2), 16);
+          if (alignedCols >= 4) {
+            // Transpose to T_periods x N_strategies score matrix (even rows >= 4)
+            const matrix: number[][] = [];
+            for (let t = 0; t < alignedCols; t++) {
+              matrix.push(returnRows.map((row) => row[t]));
+            }
+            const pbo = await daemonClient.computeQuantPbo({
+              score_matrix: matrix,
+              max_combinations: 500,
+            });
+            setPboResult(pbo);
+            setPboNotice('');
+          } else {
+            setPboResult(null);
+            setPboNotice('Need >= 4 aligned return periods across >= 2 backtested strategies to compute CSCV PBO.');
+          }
+        } else {
+          setPboResult(null);
+          setPboNotice('Run at least 2 strategy backtests in Alpha Studio to compute empirical CSCV PBO (no synthetic matrices).');
+        }
+      } catch {
+        setPboResult(null);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [selection.strategyId, selection.symbol, selection.timeframe]);
 
-  const runPboEvaluation = async () => {
-    try {
-      const res = await daemonClient.computeQuantPbo({
-        score_matrix: [
-          [1.5, 2.0, 1.8, 1.2, 0.9, 1.4],
-          [2.5, 2.2, 2.9, -1.0, -0.5, -0.8],
-          [0.5, 0.6, 0.4, 0.5, 0.7, 0.6],
-          [1.2, 1.1, 1.3, 1.4, 1.2, 1.3],
-        ],
-        max_combinations: 500,
-      });
-      setPboResult(res);
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => {
+    void runFullAudit();
+  }, [runFullAudit, selection.revision]);
 
   return (
     <WorkbenchPane
@@ -161,16 +180,12 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
         <div className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold text-[var(--color-fg)]">
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-workbench-accent" />
-            <span>Pre-Trade Decision Gate & Post-Trade Review</span>
+            <span>Pre-Trade Gate, CSCV PBO & FIFO Review</span>
           </div>
           <button
             type="button"
             disabled={loading}
-            onClick={() => {
-              void runGateEvaluation();
-              void runTradeReview();
-              void runPboEvaluation();
-            }}
+            onClick={() => void runFullAudit()}
             className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-xs font-medium text-[var(--color-fg-muted)] transition-colors"
           >
             <RotateCw size={12} className={loading ? 'animate-spin' : ''} />
@@ -182,246 +197,175 @@ export function RiskAuditPane({ onShowToast, onOpenTab }: RiskAuditPaneProps) {
       <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4 space-y-4 bg-[var(--color-canvas)] text-[var(--color-fg)]">
         {!gateResult && !reviewReport && !pboResult ? (
           <WorkbenchEmptyState
-            title="No Risk Evaluation Run"
-            description="Evaluate pre-trade decision gates, FIFO trade cohorts, or CSCV overfitting probabilities for your trading strategies."
+            title={loading ? 'Auditing Quant Risk State…' : 'No Risk Data Recorded Yet'}
+            description="Ingest market bars and run backtests or paper fills to audit real Pre-Trade Gates, FIFO Net PnL cohorts, and CSCV Overfitting probability."
             action={
               <button
                 type="button"
-                disabled={loading}
-                onClick={() => {
-                  void runGateEvaluation();
-                  void runTradeReview();
-                  void runPboEvaluation();
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-workbench-accent/20 hover:bg-workbench-accent/30 text-workbench-accent border border-workbench-accent/30 transition flex items-center gap-1.5"
+                onClick={() => onOpenTab?.('alpha')}
+                className="canvas-open-button"
               >
                 <ShieldCheck size={14} />
-                <span>{loading ? 'Evaluating...' : 'Run Decision Gate & Risk Audit'}</span>
+                <span>Open Alpha Studio</span>
               </button>
             }
+            busy={loading}
           />
         ) : (
           <>
-            {/* Gate Evaluation Section */}
-            {gateResult ? (
-              <div className={`flex items-start gap-3 p-4 rounded-lg border ${
-                gateResult.is_allowed
-                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                  : 'border-rose-500/20 bg-rose-500/10 text-rose-400'
-          }`}>
-            {gateResult.is_allowed ? (
-              <CheckCircle2 size={20} className="shrink-0 mt-0.5" />
-            ) : (
-              <XCircle size={20} className="shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-semibold">
-                  Pre-Trade Decision Gate: {gateResult.outcome.status}
-                </h4>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-current opacity-70">
-                  {gateResult.symbol} · ${gateResult.order_notional.toLocaleString()}
-                </span>
-              </div>
-              <p className="mt-1 text-xs opacity-90">{gateResult.outcome.details.reason}</p>
-            </div>
-            {gateResult.is_allowed && (
-              <button
-                type="button"
-                onClick={() => onOpenTab?.('execution')}
-                className="px-3 py-1.5 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 shrink-0"
+            {gateResult && (
+              <div
+                className={`flex items-start gap-3 p-4 rounded-lg border ${
+                  gateResult.is_allowed
+                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                    : 'border-rose-500/20 bg-rose-500/10 text-rose-400'
+                }`}
               >
-                Proceed to Execution
-              </button>
-            )}
-          </div>
-        ) : (
-          <WorkbenchEmptyState
-            title="Pre-Trade Gate Not Evaluated"
-            description="Run the pre-trade decision gate to evaluate notional caps, loss streaks, drawdown limits, and exit immunity."
-            action={
-              <button
-                type="button"
-                onClick={() => void runGateEvaluation()}
-                className="px-3 py-1.5 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600"
-              >
-                Evaluate Gate
-              </button>
-            }
-          />
-        )}
-
-        {/* Post-Trade Review & Cohort Diagnostics */}
-        {reviewReport && (
-          <div className="space-y-4">
-            {/* KPI Summary Cards */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="p-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">Total Trades</div>
-                <div className="text-base font-mono font-bold mt-1 text-[var(--color-fg)]">{reviewReport.total_trades}</div>
-              </div>
-              <div className="p-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">Net PnL</div>
-                <div className={`text-base font-mono font-bold mt-1 ${reviewReport.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {reviewReport.net_pnl >= 0 ? `+$${reviewReport.net_pnl.toFixed(2)}` : `-$${Math.abs(reviewReport.net_pnl).toFixed(2)}`}
-                </div>
-              </div>
-              <div className="p-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">Profit Factor</div>
-                <div className="text-base font-mono font-bold mt-1 text-[var(--color-fg)]">{reviewReport.profit_factor.toFixed(2)}</div>
-              </div>
-              <div className="p-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">Commission Drag</div>
-                <div className="text-base font-mono font-bold mt-1 text-[var(--color-fg-muted)]">${reviewReport.total_commission.toFixed(2)}</div>
-              </div>
-            </div>
-
-            {/* Holding Cohorts Table */}
-            <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
-                  FIFO Holding Duration Cohorts
-                </span>
-                <span className="text-[11px] font-mono text-[var(--color-fg-muted)]">Multi-Timeframe Analysis</span>
-              </div>
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-[var(--color-border-subtle)] text-[var(--color-fg-muted)]">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Cohort Window</th>
-                    <th className="px-4 py-2 font-medium">Trade Count</th>
-                    <th className="px-4 py-2 font-medium">Win Rate</th>
-                    <th className="px-4 py-2 font-medium">Gross PnL</th>
-                    <th className="px-4 py-2 font-medium">Net PnL</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-border-subtle)]">
-                  {reviewReport.holding_cohorts.map((cohort, idx) => (
-                    <tr key={idx} className="hover:bg-[var(--color-surface-2)]">
-                      <td className="px-4 py-2 font-semibold font-mono">{cohort.label}</td>
-                      <td className="px-4 py-2 font-mono">{cohort.trade_count}</td>
-                      <td className="px-4 py-2 font-mono">{(cohort.win_rate * 100).toFixed(1)}%</td>
-                      <td className={`px-4 py-2 font-mono ${cohort.gross_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        ${cohort.gross_pnl.toFixed(2)}
-                      </td>
-                      <td className={`px-4 py-2 font-mono ${cohort.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        ${cohort.net_pnl.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Exit Reason Cohorts Attribution */}
-            {reviewReport.exit_cohorts && reviewReport.exit_cohorts.length > 0 && (
-              <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
-                    Exit Reason Cohorts Attribution
-                  </span>
-                  <span className="text-[11px] font-mono text-[var(--color-fg-muted)]">Zero-Anchored Net P&L</span>
-                </div>
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-[var(--color-border-subtle)] text-[var(--color-fg-muted)]">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Exit Reason</th>
-                      <th className="px-4 py-2 font-medium">Fills Count</th>
-                      <th className="px-4 py-2 font-medium">Net PnL</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border-subtle)]">
-                    {reviewReport.exit_cohorts.map((cohort, idx) => (
-                      <tr key={idx} className="hover:bg-[var(--color-surface-2)]">
-                        <td className="px-4 py-2 font-semibold font-mono uppercase">{cohort.reason}</td>
-                        <td className="px-4 py-2 font-mono">{cohort.count}</td>
-                        <td className={`px-4 py-2 font-mono ${cohort.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          ${cohort.net_pnl.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Probability of Backtest Overfitting (PBO / CSCV) */}
-            {pboResult && pboResult.available && (
-              <div className="p-4 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
-                <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle)]">
+                {gateResult.is_allowed ? (
+                  <CheckCircle2 size={20} className="shrink-0 mt-0.5" />
+                ) : (
+                  <XCircle size={20} className="shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
-                      Combinatorially Symmetric Cross-Validation (CSCV)
-                    </span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                      pboResult.is_overfitted
-                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
-                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                    }`}>
-                      {pboResult.is_overfitted ? 'FAIL: OVERFITTED' : 'PASS: ROBUST'}
+                    <h4 className="text-sm font-semibold">Pre-Trade Decision Gate: {gateResult.outcome.status}</h4>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-current opacity-70">
+                      {gateResult.symbol} · ${gateResult.order_notional.toLocaleString()}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-[var(--color-fg-muted)]">
-                    {pboResult.samples} Combinations Evaluated
-                  </span>
+                  <p className="mt-1 text-xs opacity-90">{gateResult.outcome.details.reason}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mt-3">
-                  <div>
-                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">PBO (Overfitting Prob)</div>
-                    <div className={`text-xl font-mono font-bold mt-1 ${pboResult.probability > 0.5 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {(pboResult.probability * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">Median Rank Logit</div>
-                    <div className="text-xl font-mono font-bold mt-1 text-[var(--color-fg)]">
-                      {pboResult.median_logit > 0 ? `+${pboResult.median_logit.toFixed(3)}` : pboResult.median_logit.toFixed(3)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-[var(--color-fg-muted)] uppercase">Evaluation Status</div>
-                    <div className="text-xl font-mono font-bold mt-1 capitalize text-[var(--color-fg)]">
-                      {pboResult.status}
-                    </div>
-                  </div>
-                </div>
+                {gateResult.is_allowed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onShowToast?.('Opening Execution Desk...');
+                      onOpenTab?.('execution');
+                    }}
+                    className="px-3 py-1.5 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 shrink-0"
+                  >
+                    Proceed to Execution
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Diagnostic Checks */}
-            {reviewReport.diagnostics.length > 0 && (
-              <div className="space-y-2">
+            <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-4">
+              <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
-                  Automated Diagnostic Assessment
+                  CSCV Probability of Backtest Overfitting (PBO)
                 </h4>
-                {reviewReport.diagnostics.map((diag, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-start gap-3 p-3 rounded-lg border ${
-                      diag.severity === 'high'
-                        ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-                        : diag.severity === 'medium'
-                        ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-                        : 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                {pboResult && (
+                  <span
+                    className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                      pboResult.is_overfitted
+                        ? 'bg-rose-500/15 text-rose-400'
+                        : 'bg-emerald-500/15 text-emerald-400'
                     }`}
                   >
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold">{diag.summary}</span>
-                        <span className="text-[10px] uppercase font-mono px-1 py-0.5 rounded bg-black/20">
-                          {diag.code}
-                        </span>
+                    PBO {(pboResult.probability * 100).toFixed(1)}% ({pboResult.samples} splits)
+                  </span>
+                )}
+              </div>
+              {pboResult ? (
+                <p className="text-xs text-[var(--color-fg-muted)]">
+                  Status: <strong className="text-[var(--color-fg)]">{pboResult.status}</strong> · Median Logit:{' '}
+                  <span className="font-mono">{pboResult.median_logit.toFixed(3)}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-[var(--color-fg-muted)]">{pboNotice}</p>
+              )}
+            </div>
+
+            {reviewReport && (
+              <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+                    Post-Trade FIFO Net PnL Review ({reviewReport.strategy_id})
+                  </h4>
+                  <span className="text-xs font-mono text-[var(--color-fg-muted)]">
+                    {reviewReport.total_trades} Paired Trades
+                  </span>
+                </div>
+
+                {reviewReport.total_trades === 0 ? (
+                  <p className="text-xs text-[var(--color-fg-muted)]">
+                    No closed paired fills persisted in SQLite for this strategy yet.
+                  </p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-4 gap-3 text-xs">
+                      <div className="p-2.5 rounded bg-[var(--color-surface-2)]">
+                        <div className="text-[10px] text-[var(--color-fg-muted)] uppercase">Gross PnL</div>
+                        <div className="mt-1 font-mono font-bold">${reviewReport.gross_pnl.toFixed(2)}</div>
                       </div>
-                      <p className="mt-1 text-xs opacity-90">{diag.recommendation}</p>
+                      <div className="p-2.5 rounded bg-[var(--color-surface-2)]">
+                        <div className="text-[10px] text-[var(--color-fg-muted)] uppercase">Total Fees</div>
+                        <div className="mt-1 font-mono font-bold text-amber-400">
+                          -${reviewReport.total_commission.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded bg-[var(--color-surface-2)]">
+                        <div className="text-[10px] text-[var(--color-fg-muted)] uppercase">Net Realized PnL</div>
+                        <div
+                          className={`mt-1 font-mono font-bold ${
+                            reviewReport.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          ${reviewReport.net_pnl.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded bg-[var(--color-surface-2)]">
+                        <div className="text-[10px] text-[var(--color-fg-muted)] uppercase">Profit Factor</div>
+                        <div className="mt-1 font-mono font-bold">{reviewReport.profit_factor.toFixed(2)}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+
+                    {reviewReport.exit_cohorts.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] uppercase font-semibold text-[var(--color-fg-muted)]">
+                          Exit Reason Cohorts
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+                          {reviewReport.exit_cohorts.map((ex) => (
+                            <div
+                              key={ex.reason}
+                              className="p-2 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] flex items-center justify-between"
+                            >
+                              <span className="truncate">{ex.reason} ({ex.count})</span>
+                              <span className={ex.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                                ${ex.net_pnl.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {reviewReport.diagnostics.length > 0 && (
+                      <div className="space-y-1.5">
+                        {reviewReport.diagnostics.map((d) => (
+                          <div
+                            key={d.code}
+                            className="flex items-start gap-2 p-2.5 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] text-xs"
+                          >
+                            <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                              <div className="font-semibold">
+                                [{d.severity.toUpperCase()}] {d.summary}
+                              </div>
+                              <div className="text-[11px] text-[var(--color-fg-muted)]">{d.recommendation}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
-      </>
-    )}
       </div>
     </WorkbenchPane>
   );

@@ -1,7 +1,7 @@
 //! Kernel Capabilities Catalog Inspection for Custos ADE
 
-use custos_adapters::host::binaries::{resolve_agent_browser_binary, resolve_ssh_binary};
-use custos_domain::{CapabilityDescriptor, CapabilityGroup};
+use custos_contracts::{CapabilityDescriptor, CapabilityGroup};
+use custos_integrations::host::binaries::{resolve_agent_browser_binary, resolve_ssh_binary};
 
 use super::LocalApiDispatcher;
 

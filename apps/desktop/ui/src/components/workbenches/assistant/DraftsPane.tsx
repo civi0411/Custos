@@ -48,7 +48,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       const effective = list && list.length > 0 ? list : [];
       setDrafts(effective);
       setSelectedDraftId((prev) => (prev && effective.some((d) => d.id === prev) ? prev : effective[0]?.id || null));
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (epoch === loadEpoch.current) {
         setLoadError(err instanceof Error ? err.message : String(err));
         setDrafts([]);
@@ -99,8 +99,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
 
       draftEdits.delete(activeDraft.id);
       onShowToast?.(`Draft "${updated.title}" reviewed and locked. No outbound action was queued.`);
-    } catch (err: any) {
-      onShowToast?.(`Approval failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Approval failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -122,8 +122,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       draftEdits.delete(activeDraft.id);
       onShowToast?.(shouldRevokeApproval ? 'Draft saved. Prior approval revoked due to edits.' : 'Draft saved.');
-    } catch (err: any) {
-      onShowToast?.(`Save failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -146,8 +146,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       setDrafts((prev) => [created, ...prev]);
       setSelectedDraftId(created.id);
       onShowToast?.('Created new draft.');
-    } catch (err: any) {
-      onShowToast?.(`Create failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Create failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally { setSaving(false); }
   };
 
@@ -162,8 +162,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       setDrafts((prev) => prev.filter((d) => d.id !== activeDraft.id));
       setSelectedDraftId(null);
       onShowToast?.('Draft deleted.');
-    } catch (err: any) {
-      onShowToast?.(`Delete failed: ${err?.message || err}`);
+    } catch (err: unknown) {
+      onShowToast?.(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally { setSaving(false); }
   };
 

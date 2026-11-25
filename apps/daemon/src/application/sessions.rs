@@ -1,7 +1,7 @@
 //! sessions application use cases over the shared daemon context.
 
 use super::*;
-use custos_runtime::bridge::{AttachMode, BridgePort};
+use custos_engine::bridge::{AttachMode, BridgePort};
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_sessions(&self, req: ApiRequest) -> ApiResponse {
@@ -38,7 +38,12 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "Missing session_id param"),
                 };
 
-                match self.kernel.session_manager.delete_session(&session_id).await {
+                match self
+                    .kernel
+                    .session_manager
+                    .delete_session(&session_id)
+                    .await
+                {
                     Ok(deleted) => ApiResponse::success(
                         req.id,
                         serde_json::json!({
@@ -65,7 +70,12 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "Missing contract param"),
                 };
 
-                match self.kernel.bridge_service.promote(session_id, contract).await {
+                match self
+                    .kernel
+                    .bridge_service
+                    .promote(session_id, contract)
+                    .await
+                {
                     Ok(task) => match serde_json::to_value(&task) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -90,7 +100,8 @@ impl LocalApiDispatcher {
                 };
 
                 match self
-                    .kernel.bridge_service
+                    .kernel
+                    .bridge_service
                     .steer(task_id, session_id, message)
                     .await
                 {
@@ -127,14 +138,19 @@ impl LocalApiDispatcher {
                     Some(id) => SessionId(id.to_string()),
                     None => return ApiResponse::error(req.id, "Missing session_id param"),
                 };
-                let lens: custos_domain::WorkbenchLens = match req.params.get("lens") {
+                let lens: custos_contracts::WorkbenchLens = match req.params.get("lens") {
                     Some(value) => match serde_json::from_value(value.clone()) {
                         Ok(lens) => lens,
                         Err(e) => return ApiResponse::error(req.id, format!("Invalid lens: {e}")),
                     },
                     None => return ApiResponse::error(req.id, "Missing lens param"),
                 };
-                match self.kernel.session_manager.open_in_lens(&session_id, lens).await {
+                match self
+                    .kernel
+                    .session_manager
+                    .open_in_lens(&session_id, lens)
+                    .await
+                {
                     Ok(()) => {
                         ApiResponse::success(req.id, serde_json::json!({ "status": "opened" }))
                     }
@@ -157,11 +173,13 @@ impl LocalApiDispatcher {
                 };
 
                 let res = if role == "assistant" {
-                    self.kernel.session_manager
+                    self.kernel
+                        .session_manager
                         .append_assistant_message(&session_id, content)
                         .await
                 } else {
-                    self.kernel.session_manager
+                    self.kernel
+                        .session_manager
                         .append_user_message(&session_id, content)
                         .await
                 };
@@ -191,7 +209,8 @@ impl LocalApiDispatcher {
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 }
                 match self
-                    .kernel.bridge_service
+                    .kernel
+                    .bridge_service
                     .attach(session_id, task_id, AttachMode::Steer)
                     .await
                 {

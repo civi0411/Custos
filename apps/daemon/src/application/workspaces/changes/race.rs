@@ -6,17 +6,12 @@ impl LocalApiDispatcher {
     pub(crate) async fn handle_workspaces_candidates_race(&self, req: ApiRequest) -> ApiResponse {
         let workflow = match self.kernel.workflow.as_ref() {
             Some(w) => w,
-            None => {
-                return ApiResponse::error(req.id, "WorkflowPort not configured on daemon")
-            }
+            None => return ApiResponse::error(req.id, "WorkflowPort not configured on daemon"),
         };
         let coordinator = match self.env.workspace.as_ref() {
             Some(c) => c,
             None => {
-                return ApiResponse::error(
-                    req.id,
-                    "WorkspaceCoordinator not configured on daemon",
-                )
+                return ApiResponse::error(req.id, "WorkspaceCoordinator not configured on daemon")
             }
         };
 
@@ -27,9 +22,7 @@ impl LocalApiDispatcher {
 
         match self.kernel.task_service.get_task(&task_id).await {
             Ok(Some(_)) => {}
-            Ok(None) => {
-                return ApiResponse::error(req.id, format!("Task '{task_id}' not found"))
-            }
+            Ok(None) => return ApiResponse::error(req.id, format!("Task '{task_id}' not found")),
             Err(e) => return ApiResponse::error(req.id, e.to_string()),
         }
 
@@ -52,16 +45,13 @@ impl LocalApiDispatcher {
             .and_then(|v| v.as_u64())
             .unwrap_or(600);
 
-        let candidates: Vec<custos_domain::ModelCandidateConfig> = if let Some(raw_cands) =
+        let candidates: Vec<custos_contracts::ModelCandidateConfig> = if let Some(raw_cands) =
             req.params.get("candidates").and_then(|v| v.as_array())
         {
             match serde_json::from_value(serde_json::Value::Array(raw_cands.clone())) {
                 Ok(c) => c,
                 Err(e) => {
-                    return ApiResponse::error(
-                        req.id,
-                        format!("Invalid candidates config: {e}"),
-                    )
+                    return ApiResponse::error(req.id, format!("Invalid candidates config: {e}"))
                 }
             }
         } else {
@@ -99,14 +89,14 @@ impl LocalApiDispatcher {
                         .and_then(|v| v.as_u64())
                         .map(|i| format!("cand_{i}"))
                         .unwrap_or_else(|| ws.id.to_string());
-                    custos_domain::ModelCandidateConfig::new(cand_id, model_id, harness_id)
+                    custos_contracts::ModelCandidateConfig::new(cand_id, model_id, harness_id)
                         .with_workspace_id(ws.id.to_string())
                 })
                 .collect()
         };
 
         let mut spec =
-            custos_domain::CandidateRaceSpec::new(&task_id, &base_workspace_id, candidates)
+            custos_contracts::CandidateRaceSpec::new(&task_id, &base_workspace_id, candidates)
                 .with_timeout_seconds(timeout_seconds);
 
         if let Some(cmd) = test_command {
@@ -114,10 +104,9 @@ impl LocalApiDispatcher {
         }
 
         match workflow.execute_candidate_race(spec).await {
-            Ok(result) => ApiResponse::success(
-                req.id,
-                serde_json::to_value(&result).unwrap_or_default(),
-            ),
+            Ok(result) => {
+                ApiResponse::success(req.id, serde_json::to_value(&result).unwrap_or_default())
+            }
             Err(e) => ApiResponse::error(req.id, format!("Candidate race failed: {e}")),
         }
     }

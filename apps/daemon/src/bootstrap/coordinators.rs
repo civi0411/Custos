@@ -3,37 +3,35 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use custos_adapters::mcp::McpFederationHub;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_adapters::terminal::NativePtyDriver;
-use custos_adapters::workspace::LocalWorkspaceProvider;
-use custos_core::contracts::kernel::TrustedKernel;
-use custos_core::TaskService;
-use custos_domain::DomainError;
-use custos_packs::DomainPackRegistry;
-use custos_persistence::SqliteTaskStore;
-use custos_provider::routing::availability::ModelAvailability;
-use custos_domain::ModelPort;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::compute::WorkloadAdmissionCoordinator;
-use custos_runtime::session::SessionManager;
-use custos_runtime::workflow::TaskRuntime;
-use custos_adapters::workspace::LocalWorkspaceFilesAdapter;
-use custos_runtime::workspace::{
-    WorkspaceCoordinator, WorkspaceLeaseManager,
-};
-use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
+use custos_contracts::DomainError;
+use custos_contracts::ModelPort;
+use custos_engine::bridge::BridgeService;
+use custos_engine::compute::WorkloadAdmissionCoordinator;
+use custos_engine::contracts::kernel::TrustedKernel;
+use custos_engine::session::SessionManager;
+use custos_engine::workflow::TaskRuntime;
+use custos_engine::workspace::{WorkspaceCoordinator, WorkspaceLeaseManager};
+use custos_engine::DomainPackRegistry;
+use custos_engine::TaskService;
+use custos_engine::{PythonKernelCoordinator, TerminalCoordinator};
+use custos_integrations::mcp::McpFederationHub;
+use custos_integrations::routing::availability::ModelAvailability;
+use custos_integrations::sandbox::SovereignDeveloperAdapter;
+use custos_integrations::terminal::NativePtyDriver;
+use custos_integrations::workspace::LocalWorkspaceFilesAdapter;
+use custos_integrations::workspace::LocalWorkspaceProvider;
+use custos_storage::SqliteTaskStore;
 
 use crate::api::{LocalApiDependencies, LocalApiDispatcher};
 use crate::credentials::ProviderCredentials;
 use crate::oauth_callback_server::OAuthCallbackServer;
-use custos_adapters::harness::HarnessRegistry;
+use custos_integrations::harness::HarnessRegistry;
 
 pub struct CoordinatorServices {
     pub workflow: Arc<TaskRuntime>,
     pub lease_manager: Arc<WorkspaceLeaseManager>,
     pub workspace_coordinator: Arc<WorkspaceCoordinator>,
-    pub environment_coordinator: Arc<custos_runtime::environment::EnvironmentCoordinator>,
+    pub environment_coordinator: Arc<custos_engine::environment::EnvironmentCoordinator>,
     pub terminal_coordinator: Arc<TerminalCoordinator>,
     pub python_coordinator: Option<Arc<PythonKernelCoordinator>>,
     pub admission_coordinator: Arc<WorkloadAdmissionCoordinator>,
@@ -55,18 +53,17 @@ pub fn init_coordinators_and_api(
     mcp_hub: Arc<McpFederationHub>,
     workspace_root: &Path,
     availability: ModelAvailability,
-    live_runs: custos_runtime::workflow::live::LiveRuns,
-    supervision: Arc<custos_runtime::workflow::SupervisionCoordinator>,
+    live_runs: custos_engine::workflow::live::LiveRuns,
+    supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
 ) -> Result<CoordinatorServices, DomainError> {
     let lease_manager = Arc::new(WorkspaceLeaseManager::new(workspace_root.to_path_buf()));
     let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
-    let workspace_coordinator = Arc::new(WorkspaceCoordinator::new(
-        store.clone(),
-        workspace_provider,
-    ));
+    let workspace_coordinator =
+        Arc::new(WorkspaceCoordinator::new(store.clone(), workspace_provider));
 
     let admission_coordinator = Arc::new(WorkloadAdmissionCoordinator::default());
-    let _ = custos_provider::local::InferenceRuntime::with_admission(admission_coordinator.clone());
+    let _ =
+        custos_integrations::local::InferenceRuntime::with_admission(admission_coordinator.clone());
 
     let default_harness_id = harnesses.default_harness_id().map(str::to_string);
     let harness_runtimes = harnesses.runtimes();
@@ -78,7 +75,9 @@ pub fn init_coordinators_and_api(
             .with_model(model)
             .with_harnesses(harness_runtimes, default_harness_id.as_deref())
             .with_sandbox(sandbox)
-            .with_command_runner(Arc::new(custos_adapters::operations::LocalCommandRunner))
+            .with_command_runner(Arc::new(
+                custos_integrations::operations::LocalCommandRunner,
+            ))
             .with_outbox(store.clone())
             .with_effect_ledger(store.clone())
             .with_run_store(store.clone())
@@ -95,22 +94,16 @@ pub fn init_coordinators_and_api(
         .restore_from_active_claims(active_claims);
 
     let terminal_coordinator = Arc::new(TerminalCoordinator::new(Arc::new(NativePtyDriver)));
-    let needs_notebook = pack_registry
-        .list_packs()
-        .iter()
-        .any(|p| p.required_capabilities.iter().any(|c| c == "notebook"));
-    let python_coordinator = if needs_notebook {
-        Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
-            custos_adapters::notebook::LocalPythonDriver,
-        ))))
-    } else {
-        None
-    };
+    // Register lazily-spawned PythonKernelCoordinator so on-demand packages requiring `notebook`
+    // (e.g. `research`) can be enabled dynamically without restarting the daemon; no Python worker
+    // process is spawned until a cell executes.
+    let python_coordinator = Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
+        custos_integrations::notebook::LocalPythonDriver,
+    ))));
     let files_coordinator = Arc::new(LocalWorkspaceFilesAdapter::new());
 
-    let oauth_callback_server = Arc::new(OAuthCallbackServer::with_credentials(
-        credentials.clone(),
-    ));
+    let oauth_callback_server =
+        Arc::new(OAuthCallbackServer::with_credentials(credentials.clone()));
 
     let api_deps = LocalApiDependencies {
         terminal: terminal_coordinator.clone(),
@@ -122,28 +115,29 @@ pub fn init_coordinators_and_api(
         target_resolver: None,
     };
 
-    let environment_coordinator = Arc::new(custos_runtime::environment::EnvironmentCoordinator::new(
-        workspace_coordinator.clone(),
-        Some(terminal_coordinator.clone() as Arc<dyn custos_core::contracts::TerminalPort>),
-    ));
+    let environment_coordinator =
+        Arc::new(custos_engine::environment::EnvironmentCoordinator::new(
+            workspace_coordinator.clone(),
+            Some(terminal_coordinator.clone() as Arc<dyn custos_engine::contracts::TerminalPort>),
+        ));
 
     let local_api = LocalApiDispatcher::with_dependencies(
-            task_service,
-            session_manager,
-            bridge_service,
-            api_deps,
-        )
-        .with_workflow(workflow.clone())
-        .with_supervision(supervision)
-        .with_usage_runs(store.clone())
-        .with_sqlite_store(store.clone())
-        .with_workspace(workspace_coordinator.clone())
-        .with_environment_coordinator(environment_coordinator.clone())
-        .with_model_availability(availability)
-        .with_providers(Arc::new(store.providers().clone()))
-        .with_credentials(credentials)
-        .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
-        .with_oauth_callback_server(oauth_callback_server);
+        task_service,
+        session_manager,
+        bridge_service,
+        api_deps,
+    )
+    .with_workflow(workflow.clone())
+    .with_supervision(supervision)
+    .with_usage_runs(store.clone())
+    .with_sqlite_store(store.clone())
+    .with_workspace(workspace_coordinator.clone())
+    .with_environment_coordinator(environment_coordinator.clone())
+    .with_model_availability(availability)
+    .with_providers(Arc::new(store.providers().clone()))
+    .with_credentials(credentials)
+    .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
+    .with_oauth_callback_server(oauth_callback_server);
 
     let local_api = Arc::new(
         local_api

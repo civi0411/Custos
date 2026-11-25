@@ -2,9 +2,9 @@ use super::html::render_success_html;
 use super::utils::{
     extract_query_param, mask_oauth_token, oauth_provider_endpoint, oauth_provider_label,
 };
-use custos_domain::{DomainError, ProviderConfig};
-use custos_persistence::SqliteTaskStore;
-use custos_adapters::connectors::oauth::OAuthPkceManager;
+use custos_contracts::{DomainError, ProviderConfig};
+use custos_integrations::connectors::oauth::OAuthPkceManager;
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -50,12 +50,12 @@ impl OAuthCallbackServer {
         let credentials = crate::credential_tests::fake_credentials(repo);
         #[cfg(not(test))]
         let credentials = {
-            let vault: Arc<dyn custos_core::contracts::credentials::CredentialVault> =
+            let vault: Arc<dyn custos_engine::contracts::credentials::CredentialVault> =
                 if std::env::var("CUSTOS_VAULT_BACKEND").as_deref() == Ok("keyring") {
-                    Arc::new(custos_adapters::host::vault::KeyringCredentialVault)
+                    Arc::new(custos_integrations::host::vault::KeyringCredentialVault)
                 } else {
-                    Arc::new(custos_adapters::host::vault::FileCredentialVault::new(
-                        custos_adapters::host::vault::FileCredentialVault::default_dir(),
+                    Arc::new(custos_integrations::host::vault::FileCredentialVault::new(
+                        custos_integrations::host::vault::FileCredentialVault::default_dir(),
                     ))
                 };
             Arc::new(crate::credentials::ProviderCredentials::new(repo, vault))
@@ -84,7 +84,7 @@ impl OAuthCallbackServer {
         tokio::spawn(async move {
             let result = tokio::select! {
                 _ = shutdown.recv() => return,
-                result = custos_adapters::connectors::oauth::complete_copilot_device(&device) => result,
+                result = custos_integrations::connectors::oauth::complete_copilot_device(&device) => result,
             };
             match result {
                 Ok((mut token, identity)) => {
@@ -366,7 +366,7 @@ impl OAuthCallbackServer {
                             );
 
                             let settings =
-                                match custos_adapters::connectors::oauth::oauth_settings(
+                                match custos_integrations::connectors::oauth::oauth_settings(
                                     &context.service_type,
                                 ) {
                                     Ok(v) => v,
@@ -471,4 +471,3 @@ impl OAuthCallbackServer {
         Ok(port)
     }
 }
-

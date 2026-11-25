@@ -1,7 +1,7 @@
 use crate::api::*;
-use custos_adapters::host::binaries::resolve_gh_binary;
-use custos_core::contracts::terminal::TerminalPort;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
+use custos_engine::contracts::terminal::TerminalPort;
+use custos_integrations::host::binaries::resolve_gh_binary;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_repository_git(&self, req: ApiRequest) -> ApiResponse {
@@ -16,7 +16,7 @@ impl LocalApiDispatcher {
             Ok(ws) => ws,
             Err(response) => return response,
         };
-        if !matches!(ws.kind, custos_domain::WorkspaceKind::Git { .. }) {
+        if !matches!(ws.kind, custos_contracts::WorkspaceKind::Git { .. }) {
             return ApiResponse::error(
                 req.id,
                 "Local registered Git checkout required; remote-host Git routing is not available here",
@@ -26,7 +26,7 @@ impl LocalApiDispatcher {
         let path = std::path::Path::new(&ws.path);
         let gh = resolve_gh_binary();
         let result: Result<serde_json::Value, DomainError> = async {
-            use custos_adapters::repository_git as git;
+            use custos_integrations::repository_git as git;
             tracing::debug!(
                 request_id = %req.id,
                 workspace_id,
@@ -85,7 +85,7 @@ impl LocalApiDispatcher {
                         .list_sessions(Some(workspace_id))
                         .await?
                         .iter()
-                        .any(|s| matches!(s.status, custos_domain::TerminalSessionStatus::Active))
+                        .any(|s| matches!(s.status, custos_contracts::TerminalSessionStatus::Active))
                     {
                         return Err(DomainError::Conflict(
                             "Close active checkout terminals before switching, or use a new worktree"

@@ -1,8 +1,8 @@
-use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-use custos_domain::{
+use custos_contracts::{
     ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus, WriteWorkspaceFileParams,
 };
-use custos_adapters::workspace::LocalWorkspaceFilesAdapter;
+use custos_engine::contracts::workspace_files::WorkspaceFilesPort;
+use custos_integrations::workspace::LocalWorkspaceFilesAdapter;
 
 #[tokio::test]
 async fn inspection_group_test_without_dispatcher() {
@@ -20,11 +20,8 @@ async fn inspection_group_test_without_dispatcher() {
     let coordinator = LocalWorkspaceFilesAdapter::new();
 
     // Write a test file
-    let write_params = WriteWorkspaceFileParams::new(
-        ws.id.clone(),
-        "hello.txt",
-        "Hello, inspection!".to_string(),
-    );
+    let write_params =
+        WriteWorkspaceFileParams::new(ws.id.clone(), "hello.txt", "Hello, inspection!".to_string());
     let write_res = coordinator.write_file(&ws, write_params).await.unwrap();
     assert_eq!(write_res.content.len(), 18);
 

@@ -1,7 +1,7 @@
 //! Storage Reconciliation on Startup (SADE R8 §6.8)
 
-use custos_domain::DomainError;
-use custos_persistence::SqliteTaskStore;
+use custos_contracts::DomainError;
+use custos_storage::SqliteTaskStore;
 
 /// Performs crash recovery and reconciles orphaned runs and inflight commands on daemon startup.
 pub fn reconcile_storage_on_startup(store: &SqliteTaskStore) -> Result<(), DomainError> {

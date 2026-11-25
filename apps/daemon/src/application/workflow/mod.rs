@@ -23,7 +23,8 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, "Missing session_id");
                 };
                 if self
-                    .kernel.session_manager
+                    .kernel
+                    .session_manager
                     .get_session(&SessionId(session.to_string()))
                     .await
                     .is_none()
@@ -99,7 +100,8 @@ impl LocalApiDispatcher {
 
                 if let Some(ref sid) = params.session_id {
                     let sess_opt = self
-                        .kernel.session_manager
+                        .kernel
+                        .session_manager
                         .get_session(&SessionId(sid.to_string()))
                         .await;
                     if sess_opt.is_none() {
@@ -163,7 +165,7 @@ impl LocalApiDispatcher {
                     params.workspace_root.clone()
                 };
 
-                let mut cmd = custos_domain::StartRunCommand::new(params.task_id, actor);
+                let mut cmd = custos_contracts::StartRunCommand::new(params.task_id, actor);
                 if let Some(rev) = params.workflow_revision {
                     cmd = cmd.with_workflow_revision(rev);
                 }
@@ -196,7 +198,8 @@ impl LocalApiDispatcher {
                     Some(p)
                 } else if let Some(ref sid) = params.session_id {
                     if let Some(journal) = self
-                        .kernel.session_manager
+                        .kernel
+                        .session_manager
                         .get_journal(&SessionId(sid.to_string()))
                         .await
                     {
@@ -230,7 +233,8 @@ impl LocalApiDispatcher {
                             handle.output.as_ref(),
                         ) {
                             let _ = self
-                                .kernel.session_manager
+                                .kernel
+                                .session_manager
                                 .append_assistant_message(&SessionId(sid.to_string()), out)
                                 .await;
                         }

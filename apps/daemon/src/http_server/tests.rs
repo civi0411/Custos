@@ -2,9 +2,9 @@ use super::security::{is_allowed_origin, is_authorized_ipc_client};
 use super::server::start_http_server;
 use super::sse::write_live;
 use crate::api::LocalApiDispatcher;
-use custos_core::{contracts::workflow::WorkflowPort, TaskService};
-use custos_domain::{SessionMode, StartRunCommand};
-use custos_runtime::{workflow::TaskRuntime, SessionManager};
+use custos_contracts::{SessionMode, StartRunCommand};
+use custos_engine::{contracts::workflow::WorkflowPort, TaskService};
+use custos_engine::{workflow::TaskRuntime, SessionManager};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,21 +22,23 @@ async fn slow_subscriber_writer_times_out() {
 
 #[tokio::test]
 async fn sse_replays_after_start_and_checks_session_scope() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let tasks = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::with_store(store.clone()));
     let task = tasks.create_task("SSE fixture".into()).await.unwrap();
     let session = sessions.create_session(SessionMode::Assisted).await;
     let other = sessions.create_session(SessionMode::Assisted).await;
-    let bridge = Arc::new(custos_runtime::bridge::BridgeService::new(
+    let bridge = Arc::new(custos_engine::bridge::BridgeService::new(
         sessions.clone(),
         tasks.clone(),
     ));
-    let runtime = Arc::new(TaskRuntime::new().with_run_store(store.clone()).with_model(
-        Arc::new(
-            custos_provider::cloud::fake::FakeProvider::with_default_text("test", "answer"),
-        ),
-    ));
+    let runtime = Arc::new(
+        TaskRuntime::new()
+            .with_run_store(store.clone())
+            .with_model(Arc::new(
+                custos_integrations::cloud::fake::FakeProvider::with_default_text("test", "answer"),
+            )),
+    );
     let run = runtime
         .start_run_background(
             StartRunCommand::new(&task.id, "chat")

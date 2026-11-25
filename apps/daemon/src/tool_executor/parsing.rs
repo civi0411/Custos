@@ -1,24 +1,37 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 pub(crate) fn is_known_workbench_tool(name: &str) -> bool {
     matches!(
         name,
-        "run_backtest" | "search_literature" | "schedule_task"
+        "run_backtest"
+            | "quant_bars_read"
+            | "quant_indicators_compute"
+            | "quant_lookahead_audit"
+            | "quant_dsr_calculate"
+            | "quant_pbo_evaluate"
+            | "quant_evidence_assess"
+            | "quant_factors_discover"
+            | "quant_positions_read"
+            | "quant_review_analyze"
+            | "quant_order_propose"
+            | "quant_emergency_kill_switch"
+            | "search_literature"
+            | "schedule_task"
     )
 }
 
 pub(crate) fn parse_tool_invocation(
     name: &str,
     params: &serde_json::Value,
-) -> Result<(String, custos_domain::RiskLevel, String), DomainError> {
+) -> Result<(String, custos_contracts::RiskLevel, String), DomainError> {
     parse_tool_with_registry(name, params, None)
 }
 
 pub(crate) fn parse_tool_with_registry(
     name: &str,
     params: &serde_json::Value,
-    registry: Option<&custos_packs::DomainPackRegistry>,
-) -> Result<(String, custos_domain::RiskLevel, String), DomainError> {
+    registry: Option<&custos_engine::DomainPackRegistry>,
+) -> Result<(String, custos_contracts::RiskLevel, String), DomainError> {
     // 1. Parameter safety check: directory traversal
     for key in &["path", "file", "target_file", "target", "dir"] {
         if let Some(val) = params.get(key).and_then(|v| v.as_str()) {
@@ -32,10 +45,10 @@ pub(crate) fn parse_tool_with_registry(
 
     // 2. Resolve action name, risk level, and target
     if name.contains("__") {
-        let risk = if custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
-            custos_domain::RiskLevel::High
+        let risk = if custos_integrations::mcp::security::is_dangerous_tool_pattern(name) {
+            custos_contracts::RiskLevel::High
         } else {
-            custos_domain::RiskLevel::Medium
+            custos_contracts::RiskLevel::Medium
         };
         let tgt = params
             .get("target")
@@ -52,7 +65,11 @@ pub(crate) fn parse_tool_with_registry(
                     .or_else(|| params.get("file"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("workspace");
-                Ok(("read_file".to_string(), custos_domain::RiskLevel::Low, tgt.to_string()))
+                Ok((
+                    "read_file".to_string(),
+                    custos_contracts::RiskLevel::Low,
+                    tgt.to_string(),
+                ))
             }
             "write_file" | "write" => {
                 let tgt = params
@@ -61,7 +78,11 @@ pub(crate) fn parse_tool_with_registry(
                     .or_else(|| params.get("target_file"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("workspace");
-                Ok(("write_file".to_string(), custos_domain::RiskLevel::Medium, tgt.to_string()))
+                Ok((
+                    "write_file".to_string(),
+                    custos_contracts::RiskLevel::Medium,
+                    tgt.to_string(),
+                ))
             }
             "list_dir" | "list" | "list_files" => {
                 let tgt = params
@@ -69,7 +90,11 @@ pub(crate) fn parse_tool_with_registry(
                     .or_else(|| params.get("dir"))
                     .and_then(|v| v.as_str())
                     .unwrap_or(".");
-                Ok(("list_dir".to_string(), custos_domain::RiskLevel::Low, tgt.to_string()))
+                Ok((
+                    "list_dir".to_string(),
+                    custos_contracts::RiskLevel::Low,
+                    tgt.to_string(),
+                ))
             }
             "bash" | "shell" | "exec" => {
                 let cmd = params
@@ -77,11 +102,13 @@ pub(crate) fn parse_tool_with_registry(
                     .or_else(|| params.get("cmd"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let risk = if cmd.contains("mkfs") || cmd.contains("dd if=") || cmd.contains("format_disk")
+                let risk = if cmd.contains("mkfs")
+                    || cmd.contains("dd if=")
+                    || cmd.contains("format_disk")
                 {
-                    custos_domain::RiskLevel::Critical
+                    custos_contracts::RiskLevel::Critical
                 } else {
-                    custos_domain::RiskLevel::High
+                    custos_contracts::RiskLevel::High
                 };
                 Ok(("bash".to_string(), risk, cmd.to_string()))
             }
@@ -91,19 +118,29 @@ pub(crate) fn parse_tool_with_registry(
                     .or_else(|| params.get("file"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("workspace");
-                Ok(("patch_preview".to_string(), custos_domain::RiskLevel::Low, tgt.to_string()))
+                Ok((
+                    "patch_preview".to_string(),
+                    custos_contracts::RiskLevel::Low,
+                    tgt.to_string(),
+                ))
             }
             domain_tool => {
                 // Check if domain_tool is declared by an enabled pack in registry
                 if let Some(reg) = registry {
                     if reg.is_tool_registered(domain_tool) {
-                        let risk = if domain_tool.starts_with("run_")
+                        let risk = if matches!(
+                            domain_tool,
+                            "quant_order_propose" | "quant_emergency_kill_switch"
+                        ) {
+                            custos_contracts::RiskLevel::High
+                        } else if domain_tool.starts_with("run_")
                             || domain_tool.starts_with("edit_")
                             || domain_tool.starts_with("schedule_")
+                            || domain_tool == "quant_factors_discover"
                         {
-                            custos_domain::RiskLevel::Medium
+                            custos_contracts::RiskLevel::Medium
                         } else {
-                            custos_domain::RiskLevel::Low
+                            custos_contracts::RiskLevel::Low
                         };
                         let tgt = params
                             .get("strategy_id")
@@ -131,4 +168,3 @@ pub(crate) fn parse_tool_with_registry(
         }
     }
 }
-

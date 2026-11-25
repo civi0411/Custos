@@ -6,6 +6,7 @@ import { ConversationPane } from '@/components/chat/ConversationPane';
 import type { Session } from '@/types';
 import type { ActiveWorkbench } from '@/types/workbench';
 import { useAppContext } from '@/context/AppContext';
+import { daemonClient } from '@/api/daemon_client';
 import {
   getWorkbenchForTabType,
   canonicalWorkbenchId,
@@ -123,8 +124,10 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   onCancelTask,
   onRefreshTasks,
 }) => {
-  const { installedWorkbenches, setIsWorkbenchLibraryOpen } = useAppContext();
+  const { installedWorkbenches, workbenchStates, refreshInstalledWorkbenches, setIsWorkbenchLibraryOpen } = useAppContext();
   const { resources, retry } = useResourceCatalog(catalog);
+  const [activatingWb, setActivatingWb] = React.useState<string | null>(null);
+  const [wbError, setWbError] = React.useState<string | null>(null);
   const [renderAttempt, setRenderAttempt] = React.useState(0);
   const [initialAgentWorkspaceId, setInitialAgentWorkspaceId] = React.useState<string | undefined>();
   const [initialFilesWorkspaceId, setInitialFilesWorkspaceId] = React.useState<string | undefined>();
@@ -230,9 +233,29 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
         (id) => canonicalWorkbenchId(id) === responsibleWorkbench
       );
       if (!isInstalled) {
+        const pkgState =
+          workbenchStates?.[responsibleWorkbench] === 'disabled' ? 'disabled' : 'not_installed';
         return (
           <WorkbenchNotInstalledPlaceholder
             workbenchId={responsibleWorkbench}
+            packageState={pkgState}
+            activating={activatingWb === responsibleWorkbench}
+            error={wbError}
+            onActivate={async () => {
+              setActivatingWb(responsibleWorkbench);
+              setWbError(null);
+              try {
+                if (pkgState !== 'disabled') {
+                  await daemonClient.installPackage(responsibleWorkbench);
+                }
+                await daemonClient.enablePackage(responsibleWorkbench);
+                await refreshInstalledWorkbenches();
+              } catch (err) {
+                setWbError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setActivatingWb(null);
+              }
+            }}
             onOpenLibrary={() => setIsWorkbenchLibraryOpen(true)}
           />
         );

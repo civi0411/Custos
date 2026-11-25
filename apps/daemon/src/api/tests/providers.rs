@@ -1,12 +1,12 @@
 use super::super::*;
-use custos_runtime::bridge::BridgeService;
-use custos_core::TaskService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::Arc;
 #[tokio::test]
 async fn provider_usage_reads_durable_runs_without_duplicates_or_secrets() {
-    use custos_core::contracts::storage::RunPort;
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    use custos_engine::contracts::storage::RunPort;
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store.clone()));
     let sessions = Arc::new(SessionManager::with_store(store.clone()));
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
@@ -24,7 +24,7 @@ async fn provider_usage_reads_durable_runs_without_duplicates_or_secrets() {
         .as_str()
         .unwrap()
         .to_string();
-    let mut run = custos_domain::Run::new(id, 1);
+    let mut run = custos_contracts::Run::new(id, 1);
     run.metadata = serde_json::json!({"actual_mode":"model","provider_account_id":"account-A","requested_model":"ollama/test","usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10},"secret":"never-export"});
     store.save_run(&mut run).await.unwrap();
     for _ in 0..2 {
@@ -70,7 +70,7 @@ async fn discovered_catalog_ignores_legacy_cache_and_preserves_verified_snapshot
         let body = r#"{"data":[{"id":"only-live-model","name":"Live Model"}]}"#;
         write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
     });
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::with_store(store.clone()));
     let bridge = Arc::new(BridgeService::new(
@@ -82,7 +82,7 @@ async fn discovered_catalog_ignores_legacy_cache_and_preserves_verified_snapshot
     let save = dispatcher.handle_request(ApiRequest { id: "save".into(), method: METHOD_PROVIDERS_SAVE.into(),
             params: serde_json::json!({"id":"account", "service_type":"openai", "name":"Account", "endpoint_url":base, "api_key":"eyJ-api-key", "status":"active"}) }).await;
     assert!(save.is_success());
-    let baseline = custos_provider::catalog::default_canonical_models();
+    let baseline = custos_integrations::catalog::default_canonical_models();
     store
         .providers()
         .save_catalog_models("account", &baseline)
@@ -140,7 +140,7 @@ async fn discovered_catalog_ignores_legacy_cache_and_preserves_verified_snapshot
 }
 #[tokio::test]
 async fn test_provider_and_model_catalog_api_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::with_store(store.clone()));
     let bridge_service = Arc::new(BridgeService::new(
@@ -175,7 +175,7 @@ async fn test_provider_and_model_catalog_api_lifecycle() {
     };
     let get_res = dispatcher.handle_request(get_req).await;
     assert!(get_res.is_success());
-    let cfg: custos_domain::ProviderConfig =
+    let cfg: custos_contracts::ProviderConfig =
         serde_json::from_value(get_res.result.unwrap()).unwrap();
     assert_eq!(cfg.id, "p_anthropic_custom");
     assert_eq!(cfg.default_model, Some("claude-3-7-sonnet".into()));
@@ -190,7 +190,7 @@ async fn test_provider_and_model_catalog_api_lifecycle() {
     };
     let list_res = dispatcher.handle_request(list_req).await;
     assert!(list_res.is_success());
-    let providers: Vec<custos_domain::ProviderConfig> =
+    let providers: Vec<custos_contracts::ProviderConfig> =
         serde_json::from_value(list_res.result.unwrap()).unwrap();
     assert!(providers.iter().any(|p| p.id == "p_anthropic_custom"));
 
@@ -202,7 +202,7 @@ async fn test_provider_and_model_catalog_api_lifecycle() {
     };
     let catalog_res = dispatcher.handle_request(catalog_req).await;
     assert!(catalog_res.is_success());
-    let catalog: custos_domain::ModelCatalogResult =
+    let catalog: custos_contracts::ModelCatalogResult =
         serde_json::from_value(catalog_res.result.unwrap()).unwrap();
     assert!(!catalog.models.is_empty());
     assert!(catalog.models.iter().any(|m| m.id == "claude-3-7-sonnet"));
@@ -246,8 +246,7 @@ async fn test_provider_and_model_catalog_api_lifecycle() {
 async fn test_oauth_api_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("custos_oauth_test.db");
-    let store =
-        Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::with_store(store.clone()));
     let bridge_service = Arc::new(BridgeService::new(
@@ -300,7 +299,7 @@ async fn test_oauth_api_lifecycle() {
 
     // 3. Save mock OAuth token into database directly to simulate successful exchange
     let now = chrono::Utc::now().timestamp_millis();
-    let token_record = custos_domain::OAuthTokenRecord {
+    let token_record = custos_contracts::OAuthTokenRecord {
         provider_id: "openai".into(),
         service_type: "openai".into(),
         access_token: "sk-proj-test-oauth-access-token".into(),

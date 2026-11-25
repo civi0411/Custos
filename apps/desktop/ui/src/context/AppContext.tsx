@@ -10,7 +10,7 @@ import { useModalsSlice } from './app/modals';
 import { useProvidersSlice } from './app/providers';
 import { useSessionsSlice } from './app/sessions';
 
-import type { AppContextType } from './app/types';
+import type { AppContextType, WorkbenchPackageState } from './app/types';
 import { defaultProbeBaseUrl } from './app/providers_utils';
 
 export type { ActiveWorkbench, AppContextType };
@@ -64,38 +64,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [installedWorkbenches, setInstalledWorkbenches] = useState<string[]>([
     'assistant',
     'copilot',
-    'coding',
-    'engineering',
   ]);
+  const [workbenchStates, setWorkbenchStates] = useState<Record<string, WorkbenchPackageState>>({
+    assistant: 'builtin',
+    coding: 'not_installed',
+    research: 'not_installed',
+    quant: 'not_installed',
+  });
   const [isWorkbenchLibraryOpen, setIsWorkbenchLibraryOpen] = useState<boolean>(false);
 
   const refreshInstalledWorkbenches = useCallback(async () => {
     try {
       const inv = await daemonClient.listPackageInventory();
       if (inv && Array.isArray(inv.items)) {
-        const enabled = inv.items
-          .filter((i) => {
-            if (i.state === 'disabled' || i.enabled_in_profile === '0' || i.is_enabled === false) {
-              return false;
-            }
-            return i.state === 'builtin' || i.state === 'installed';
-          })
-          .map((i) => i.component_id);
-        const allAliases = new Set<string>();
-        for (const id of enabled) {
-          allAliases.add(id);
-          if (id === 'assistant') allAliases.add('copilot');
-          if (id === 'copilot') allAliases.add('assistant');
-          if (id === 'coding') allAliases.add('engineering');
-          if (id === 'engineering') allAliases.add('coding');
+        const nextStates: Record<string, WorkbenchPackageState> = {
+          assistant: 'builtin',
+          coding: 'not_installed',
+          research: 'not_installed',
+          quant: 'not_installed',
+        };
+        const allAliases = new Set<string>(['assistant', 'copilot']);
+
+        for (const item of inv.items) {
+          const id =
+            item.component_id === 'engineering'
+              ? 'coding'
+              : item.component_id === 'copilot'
+              ? 'assistant'
+              : item.component_id;
+          const isEnabled =
+            (item.state === 'builtin' || item.state === 'installed') &&
+            item.enabled_in_profile !== '0' &&
+            item.is_enabled !== false;
+
+          if (item.state === 'builtin') {
+            nextStates[id] = 'builtin';
+          } else if (isEnabled) {
+            nextStates[id] = 'active';
+          } else if (item.state === 'installed' || item.state === 'disabled') {
+            nextStates[id] = 'disabled';
+          }
+
+          if (isEnabled) {
+            allAliases.add(id);
+            if (id === 'coding') allAliases.add('engineering');
+          }
         }
+
+        setWorkbenchStates(nextStates);
         setInstalledWorkbenches(Array.from(allAliases));
       }
     } catch {
       setInstalledWorkbenches((prev) =>
-        prev.length === 0
-          ? ['assistant', 'copilot', 'coding', 'engineering']
-          : prev
+        prev.length === 0 ? ['assistant', 'copilot'] : prev
       );
     }
   }, []);
@@ -103,6 +124,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     refreshInstalledWorkbenches();
   }, [refreshInstalledWorkbenches]);
+
+  useEffect(() => {
+    if (
+      activeWorkbench !== 'copilot' &&
+      !installedWorkbenches.includes(activeWorkbench)
+    ) {
+      setActiveWorkbench('copilot');
+    }
+  }, [activeWorkbench, installedWorkbenches, setActiveWorkbench]);
 
   const [isRightExplorerOpen, setIsRightExplorerOpen] = useState<boolean>(true);
   const toggleRightExplorer = useCallback(() => {
@@ -133,6 +163,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cancelTask,
   } = useTasksSlice(showToast);
 
+  const providersSliceRef = useRef<ReturnType<typeof useProvidersSlice> | null>(null);
+
   // Workspaces slice
   const {
     workspaces,
@@ -157,7 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }, []),
     onModelSelect: useCallback((model: string) => {
-      providersSlice.setSelectedModel(model);
+      providersSliceRef.current?.setSelectedModel(model);
     }, []),
     onOpenProjectFallback: useCallback(() => {
       modalsSlice.setIsOpenProjectOpen(true);
@@ -188,6 +220,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast,
     setIsAddProviderOpen: modalsSlice.setIsAddProviderOpen,
   });
+  providersSliceRef.current = providersSlice;
 
   // Sessions action slice
   const sessionsSlice = useSessionsSlice({
@@ -480,6 +513,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeWorkbench,
         setActiveWorkbench,
         installedWorkbenches,
+        workbenchStates,
         refreshInstalledWorkbenches,
         isWorkbenchLibraryOpen,
         setIsWorkbenchLibraryOpen,

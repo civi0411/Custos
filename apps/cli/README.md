@@ -49,8 +49,8 @@ Commands:
 ## 3. Quy Tắc Phát Triển Dành Cho Kỹ Sư Tiếp Quản (Developer Guidelines)
 
 1. **Tuân thủ Clean Client Boundary**:
-   - Chỉ phụ thuộc vào `custos-domain` và `custos-sdk`.
-   - Không được thêm dependency vào `custos-persistence`, `custos-runtime`, hay `rusqlite`.
+   - Chỉ phụ thuộc vào `custos-contracts` và `custos-sdk`.
+   - Không được thêm dependency vào `custos-storage`, `custos-engine`, `custos-integrations`, hay `rusqlite`.
 2. **Tuân thủ Chuẩn Ponytail Senior Dev**:
    - Giữ mã nguồn tinh gọn, trực quan, không tạo abstraction wrapper thừa.
    - Không tệp tin nào được vượt quá **600 dòng mã (LOC)**. Nếu mở rộng thêm subcommands, hãy tách thành các module con trong `src/commands/`.

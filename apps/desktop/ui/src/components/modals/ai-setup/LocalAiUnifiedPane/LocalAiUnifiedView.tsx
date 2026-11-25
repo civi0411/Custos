@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { daemonClient } from '@/api/daemon_client';
+import { getErrorMessage } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import type {
   LocalModelFolder,
@@ -17,6 +18,19 @@ import { HardwareSpecsBar } from './HardwareSpecsBar';
 import { LiveGenerationProbe } from './LiveGenerationProbe';
 import { LocalModelsListSection } from './LocalModelsListSection';
 import { ModelFoldersManager } from './ModelFoldersManager';
+
+interface LMStudioRawModel {
+  id?: string;
+  name?: string;
+  architecture?: string;
+  arch?: string;
+  quantization?: string;
+  quant?: string;
+  context_length?: number;
+  max_context_length?: number;
+  loaded?: boolean;
+  type?: string;
+}
 
 export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
   onShowToast,
@@ -105,7 +119,7 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       if (modelsRes.status === 'fulfilled') setGgufModels(modelsRes.value.models || []);
       if (hwRes.status === 'fulfilled') setHardware(hwRes.value);
       if (instRes.status === 'fulfilled') setInstances(instRes.value.instances || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Failed loading daemon local info:', err);
     }
   }, []);
@@ -136,10 +150,10 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
         }
 
         const data = await res.json();
-        const rawList = Array.isArray(data) ? data : data?.data || [];
-        const parsedList: LMStudioModelItem[] = rawList.map((m: any) => ({
-          id: m.id || m.name,
-          name: m.name || m.id,
+        const rawList: LMStudioRawModel[] = Array.isArray(data) ? data : data?.data || [];
+        const parsedList: LMStudioModelItem[] = rawList.map((m) => ({
+          id: m.id || m.name || '',
+          name: m.name || m.id || '',
           architecture: m.architecture || m.arch || 'transformer',
           quantization: m.quantization || m.quant || undefined,
           contextLength: m.context_length || m.max_context_length || undefined,
@@ -149,13 +163,13 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
 
         setLmsModels(parsedList);
         setServerStatus('online');
-      } catch (err: any) {
+      } catch (err: unknown) {
         setServerStatus('offline');
         setProbeLatencyMs(null);
         setErrorMessage(
-          err.name === 'AbortError'
+          err instanceof DOMException && err.name === 'AbortError'
             ? 'Connection to LM Studio timed out. Verify server is running on port 1234.'
-            : err.message || 'Unable to connect to LM Studio.'
+            : getErrorMessage(err, 'Unable to connect to LM Studio.')
         );
       } finally {
         setIsProbing(false);
@@ -188,8 +202,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
 
       await refreshModels();
       onShowToast?.('LM Studio connected to Custos.');
-    } catch (err: any) {
-      setErrorMessage(`Failed to connect: ${err.message || err}`);
+    } catch (err: unknown) {
+      setErrorMessage(`Failed to connect: ${getErrorMessage(err)}`);
     } finally {
       setIsSavingProvider(false);
     }
@@ -201,8 +215,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await handleDeleteAccount(existingAccount.id);
       await refreshModels();
       onShowToast?.('LM Studio disconnected.');
-    } catch (err: any) {
-      setErrorMessage(`Failed to disconnect: ${err.message || err}`);
+    } catch (err: unknown) {
+      setErrorMessage(`Failed to disconnect: ${getErrorMessage(err)}`);
     }
   };
 
@@ -231,8 +245,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
     try {
       const res = await daemonClient.getLocalModelLoadProfile(filePath);
       setEditingProfile(res.profile);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to fetch model profile');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Failed to fetch model profile'));
     }
   };
 
@@ -242,8 +256,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
     try {
       const est = await daemonClient.preflightLocalModel(editingProfile.model_path, editingProfile.context_size);
       setProfileEstimate(est);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Preflight estimate failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Preflight estimate failed'));
     } finally {
       setEstimatingProfile(false);
     }
@@ -258,8 +272,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await daemonClient.saveLocalModelLoadProfile(desired);
       onShowToast?.('Model configuration saved.');
       setActiveConfigPath(null);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Save failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Save failed'));
     } finally {
       setSavingProfile(false);
     }
@@ -277,8 +291,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await loadLocalDaemonData();
       setActiveConfigPath(null);
       onShowToast?.(`Loaded ${editingProfile.model_path.split('/').pop()} into VRAM.`);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Load failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Load failed'));
     } finally {
       setSavingProfile(false);
       setOperatingModelPath(null);
@@ -297,8 +311,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await daemonClient.ensureLocalModel(model.file_path, true);
       await loadLocalDaemonData();
       onShowToast?.(`Model "${model.model_name || model.file_name}" loaded into VRAM.`);
-    } catch (err: any) {
-      setModelLoadErrors((prev) => ({ ...prev, [model.file_path]: err.message || 'Load failed' }));
+    } catch (err: unknown) {
+      setModelLoadErrors((prev) => ({ ...prev, [model.file_path]: getErrorMessage(err, 'Load failed') }));
     } finally {
       setOperatingModelPath(null);
     }
@@ -310,8 +324,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await daemonClient.unloadLocalModel(filePath);
       await loadLocalDaemonData();
       onShowToast?.(`Model "${modelName || filePath.split('/').pop()}" unloaded from VRAM.`);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to unload model');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Failed to unload model'));
     } finally {
       setOperatingModelPath(null);
     }
@@ -323,8 +337,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       const res = await daemonClient.verifyLocalModelGeneration(filePath);
       await loadLocalDaemonData();
       onShowToast?.(`Tensor verified in ${res.latency_ms}ms.`);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Generation verification failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Generation verification failed'));
     } finally {
       setVerifyingPath(null);
     }
@@ -339,8 +353,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       setGgufModels(inventory.models || []);
       if (res.hardware) setHardware(res.hardware);
       onShowToast?.(`Scan complete: found ${inventory.models?.length || 0} GGUF model(s).`);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Folder scan failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Folder scan failed'));
     } finally {
       setScanningFolders(false);
     }
@@ -356,8 +370,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       setShowAddFolder(false);
       await loadLocalDaemonData();
       onShowToast?.('Model directory registered.');
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to add folder');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Failed to add folder'));
     }
   };
 
@@ -365,8 +379,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
     try {
       const selected = await daemonClient.pickFolder('model');
       if (selected) setNewFolderPath(selected);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Folder picker failed');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Folder picker failed'));
     }
   };
 
@@ -375,8 +389,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
       await daemonClient.removeLocalFolder(id);
       await loadLocalDaemonData();
       onShowToast?.('Model directory removed.');
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to remove folder');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'Failed to remove folder'));
     }
   };
 
@@ -424,8 +438,8 @@ export const LocalAiUnifiedView: React.FC<LocalAiUnifiedPaneProps> = ({
 
       const tps = latency > 0 ? Math.round((totalTok / (latency / 1000)) * 10) / 10 : 0;
       setTestTokens({ total: totalTok, tps });
-    } catch (err: any) {
-      setTestError(err.message || 'Generation test failed');
+    } catch (err: unknown) {
+      setTestError(getErrorMessage(err, 'Generation test failed'));
     } finally {
       setIsGenerating(false);
     }

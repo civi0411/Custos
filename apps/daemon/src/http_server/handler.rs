@@ -73,17 +73,17 @@ pub async fn handle_http_client(
     let mut content_length = 0;
     let mut last_event_id = None;
     for line in lines {
-        let lower = line.to_lowercase();
-        if let Some(val) = lower.strip_prefix("origin:") {
-            req_origin = Some(val.trim().to_string());
-        } else if let Some(val) = lower.strip_prefix("authorization:") {
-            auth_header = Some(val.trim().to_string());
-        } else if let Some(val) = lower.strip_prefix("x-custos-token:") {
-            token_header = Some(val.trim().to_string());
-        } else if let Some(val) = lower.strip_prefix("last-event-id:") {
-            last_event_id = val.trim().parse::<u64>().ok();
-        } else if let Some(val) = lower.strip_prefix("content-length:") {
-            content_length = val.trim().parse::<usize>().unwrap_or(0);
+        if let Some((name, val)) = line.split_once(':') {
+            let header_name = name.trim().to_ascii_lowercase();
+            let header_val = val.trim().to_string();
+            match header_name.as_str() {
+                "origin" => req_origin = Some(header_val),
+                "authorization" => auth_header = Some(header_val),
+                "x-custos-token" => token_header = Some(header_val),
+                "last-event-id" => last_event_id = header_val.parse::<u64>().ok(),
+                "content-length" => content_length = header_val.parse::<usize>().unwrap_or(0),
+                _ => {}
+            }
         }
     }
 
@@ -154,14 +154,8 @@ Content-Length: {}\r\n\
     }
 
     if method == "GET" && path.starts_with("/api/events?") {
-        return handle_sse_events(
-            &mut stream,
-            &api,
-            path,
-            last_event_id,
-            &cors_origin_header,
-        )
-        .await;
+        return handle_sse_events(&mut stream, &api, path, last_event_id, &cors_origin_header)
+            .await;
     }
 
     // Handle GET /api/health

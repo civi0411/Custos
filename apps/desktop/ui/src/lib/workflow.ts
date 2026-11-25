@@ -6,14 +6,24 @@ export interface WorkflowProjectionContext {
   attentionCountByTask?: Record<string, number>;
 }
 
+type LegacySessionFields = Session & {
+  needsAttention?: boolean;
+  isRunning?: boolean;
+  parentSessionId?: string;
+  costTokens?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 /**
  * Projects a canonical WorkflowCard from real backend session/task state.
  * Avoids transcript-based heuristics and reflects daemon-owned execution states.
  */
 export function sessionToWorkflowCard(
-  s: Session,
+  rawSession: Session,
   context?: WorkflowProjectionContext
 ): WorkflowCard {
+  const s = rawSession as LegacySessionFields;
   const boundTask = s.taskId && context?.tasksById ? context.tasksById[s.taskId] : undefined;
 
   // Determine Workbench lens
@@ -38,13 +48,13 @@ export function sessionToWorkflowCard(
 
   const needsAttention =
     (boundTask && context?.attentionCountByTask && (context.attentionCountByTask[boundTask.id] || 0) > 0) ||
-    Boolean((s as any).needsAttention) ||
+    Boolean(s.needsAttention) ||
     rawStatus === 'blocked';
 
   let normalizedStatus: WorkflowCard['status'] = 'idle';
   if (needsAttention) {
     normalizedStatus = 'blocked';
-  } else if (rawStatus === 'running' || rawStatus === 'active' || (s as any).isRunning) {
+  } else if (rawStatus === 'running' || rawStatus === 'active' || s.isRunning) {
     normalizedStatus = 'running';
   } else if (rawStatus === 'done' || rawStatus === 'succeeded' || rawStatus === 'completed') {
     normalizedStatus = 'done';
@@ -65,11 +75,11 @@ export function sessionToWorkflowCard(
     hasChat,
     hasTask,
     taskId: s.taskId,
-    parentId: (s as any).parentSessionId,
-    costTokens: (s as any).costTokens || 0,
+    parentId: s.parentSessionId,
+    costTokens: s.costTokens || 0,
     needsAttention,
-    createdAt: (s as any).createdAt || s.time,
-    updatedAt: (s as any).updatedAt || s.time,
+    createdAt: s.createdAt || s.time,
+    updatedAt: s.updatedAt || s.time,
     session: s,
   };
 }

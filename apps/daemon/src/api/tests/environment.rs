@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use custos_adapters::workspace::LocalWorkspaceProvider;
-use custos_core::TaskService;
-use custos_domain::environment::{EnvironmentProfile, EnvironmentSpec};
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::environment::EnvironmentCoordinator;
-use custos_runtime::session::SessionManager;
-use custos_runtime::workspace::WorkspaceCoordinator;
+use custos_contracts::environment::{EnvironmentProfile, EnvironmentSpec};
+use custos_engine::bridge::BridgeService;
+use custos_engine::environment::EnvironmentCoordinator;
+use custos_engine::session::SessionManager;
+use custos_engine::workspace::WorkspaceCoordinator;
+use custos_engine::TaskService;
+use custos_integrations::workspace::LocalWorkspaceProvider;
+use custos_storage::SqliteTaskStore;
 
 use crate::api::*;
 
@@ -49,7 +49,7 @@ async fn test_environment_api_dispatch_lifecycle() {
             project_id: Some("proj_test".into()),
         },
     );
-    spec.target_assurance = custos_domain::Assurance::ObserveOnly;
+    spec.target_assurance = custos_contracts::Assurance::ObserveOnly;
     let prov_req = ApiRequest {
         id: "req_prov".into(),
         method: "v1.environment.provision".into(),

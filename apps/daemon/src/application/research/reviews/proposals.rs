@@ -50,7 +50,8 @@ impl LocalApiDispatcher {
                     }
                 };
                 let all_reviews = self
-                    .workbenches.shared_capabilities
+                    .workbenches
+                    .shared_capabilities
                     .as_ref()
                     .and_then(|s| s.list_reviews(None, None).ok())
                     .unwrap_or_default();

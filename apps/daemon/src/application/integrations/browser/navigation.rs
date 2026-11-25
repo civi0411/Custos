@@ -2,7 +2,7 @@
 
 use crate::api::*;
 use crate::application::capabilities::browser_execution_adapter_connected;
-use custos_adapters::host::binaries::resolve_agent_browser_binary;
+use custos_integrations::host::binaries::resolve_agent_browser_binary;
 
 impl LocalApiDispatcher {
     pub(super) async fn handle_browser_navigation(&self, req: ApiRequest) -> ApiResponse {
@@ -22,12 +22,7 @@ impl LocalApiDispatcher {
             METHOD_BROWSER_TABS_NAVIGATE => {
                 let fleet = match self.workbenches.browser.as_ref() {
                     Some(f) => f,
-                    None => {
-                        return ApiResponse::error(
-                            req.id,
-                            "BrowserRepository not configured",
-                        )
-                    }
+                    None => return ApiResponse::error(req.id, "BrowserRepository not configured"),
                 };
                 let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
                     Some(t) => t,
@@ -60,7 +55,7 @@ impl LocalApiDispatcher {
                     if !raw_url.is_empty() && raw_url != "about:blank" {
                         let _ = tokio::time::timeout(
                             std::time::Duration::from_millis(1500),
-                            custos_adapters::integrations::run_agent_browser(
+                            custos_integrations::integrations::run_agent_browser(
                                 &agent_bin,
                                 tab_id,
                                 &["open", raw_url],
@@ -92,7 +87,7 @@ impl LocalApiDispatcher {
                     }
                 };
 
-                match custos_adapters::integrations::run_agent_browser_json(
+                match custos_integrations::integrations::run_agent_browser_json(
                     &agent_bin,
                     tab_id,
                     &["screenshot"],
@@ -106,7 +101,7 @@ impl LocalApiDispatcher {
                             .and_then(|p| p.as_str())
                         {
                             let image_base64 =
-                                custos_adapters::integrations::read_screenshot_base64(p);
+                                custos_integrations::integrations::read_screenshot_base64(p);
                             return ApiResponse::success(
                                 req.id,
                                 serde_json::json!({

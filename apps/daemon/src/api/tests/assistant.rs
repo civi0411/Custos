@@ -1,12 +1,12 @@
 use super::super::*;
-use custos_runtime::bridge::BridgeService;
-use custos_core::TaskService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::Arc;
 #[tokio::test]
 async fn outbox_preserves_failure_uncertainty_and_task_scope() {
-    use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    use custos_engine::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let outbox = Arc::new(store.outbox().clone());
     let service = Arc::new(TaskService::new(store));
     let task = service
@@ -88,7 +88,7 @@ async fn outbox_preserves_failure_uncertainty_and_task_scope() {
 
 #[tokio::test]
 async fn outbox_create_approve_and_dispatch_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let outbox = Arc::new(store.outbox().clone());
     let service = Arc::new(TaskService::new(store));
     let task = service
@@ -103,7 +103,7 @@ async fn outbox_create_approve_and_dispatch_lifecycle() {
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
     let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_outbox(outbox);
-    let client = Arc::new(custos_adapters::mcp::CustosMcpClient::new("notifier"));
+    let client = Arc::new(custos_integrations::mcp::CustosMcpClient::new("notifier"));
     dispatcher
         .mcp_hub()
         .register_server("notifications", client)
@@ -183,11 +183,11 @@ async fn outbox_create_approve_and_dispatch_lifecycle() {
 
 #[tokio::test]
 async fn assistant_draft_creation_review_and_scope_are_enforced() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let service = Arc::new(TaskService::new(store));
     let sessions = Arc::new(SessionManager::new());
     let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
-    let db = custos_persistence::connection::DbConnection::open_in_memory().unwrap();
+    let db = custos_storage::connection::DbConnection::open_in_memory().unwrap();
     let assistant = Arc::new(AssistantRepository::from_raw(db.writer_arc()));
     let dispatcher =
         LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
@@ -254,10 +254,10 @@ async fn assistant_draft_creation_review_and_scope_are_enforced() {
 
 #[tokio::test]
 async fn test_copilot_connector_capability_exact_approval_and_outbox_rejections() {
-    use custos_core::contracts::storage::{OutboxPort, OutboxStatus};
-    use custos_domain::OAuthTokenRecord;
+    use custos_contracts::OAuthTokenRecord;
+    use custos_engine::contracts::storage::{OutboxPort, OutboxStatus};
 
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let providers_repo = store.providers();
 
     // 1. K1: Connector capability from OAuth scopes

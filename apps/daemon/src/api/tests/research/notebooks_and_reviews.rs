@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use custos_workbench_research::{
     ClaimGroundingLevel, HandoffToCodingResult, ResearchClaim, ResearchSynthesisProposal,
     SynthesisProposalStatus,
@@ -12,14 +12,15 @@ use crate::api::*;
 
 #[tokio::test]
 async fn test_synthesis_handoff_api_lifecycle() {
-    let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+    let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task_service = Arc::new(TaskService::new(store.clone()));
     let session_manager = Arc::new(SessionManager::new());
     let bridge_service = Arc::new(BridgeService::new(
         session_manager.clone(),
         task_service.clone(),
     ));
-    let mem_conn = custos_workbench_research::repository::DbConnection::open_in_memory().expect("open memory db");
+    let mem_conn = custos_workbench_research::repository::DbConnection::open_in_memory()
+        .expect("open memory db");
     let research_repo = Arc::new(custos_workbench_research::ResearchRepository::new(mem_conn));
 
     // Seed a verified claim (L2) and an ungrounded claim (L0)
@@ -48,10 +49,10 @@ async fn test_synthesis_handoff_api_lifecycle() {
     research_repo.save_claim(&ungrounded_claim).unwrap();
 
     // Seed a recipe
-    let recipe = custos_domain::Recipe::new(
+    let recipe = custos_contracts::Recipe::new(
         "Benchmark Attention",
         "cargo bench --bench attention",
-        custos_domain::RecipeEnvironmentSpec {
+        custos_contracts::RecipeEnvironmentSpec {
             python_version: None,
             requirements: vec![],
             container_image: None,

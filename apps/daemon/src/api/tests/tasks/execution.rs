@@ -1,8 +1,8 @@
 use crate::api::tests::harness::*;
 use crate::api::*;
-use custos_core::TaskService;
-use custos_runtime::bridge::BridgeService;
-use custos_runtime::session::SessionManager;
+use custos_engine::bridge::BridgeService;
+use custos_engine::session::SessionManager;
+use custos_engine::TaskService;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -16,7 +16,7 @@ async fn test_workflow_start_and_cancel_run_api() {
         session_manager.clone(),
         task_service.clone(),
     ));
-    let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new());
+    let workflow = Arc::new(custos_engine::workflow::TaskRuntime::new());
 
     let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
         .with_workflow(workflow);
@@ -33,10 +33,10 @@ async fn test_workflow_start_and_cancel_run_api() {
     };
     let start_resp = dispatcher.handle_request(start_req).await;
     assert!(start_resp.error.is_none(), "Error: {:?}", start_resp.error);
-    let handle: custos_domain::RunHandle =
+    let handle: custos_contracts::RunHandle =
         serde_json::from_value(start_resp.result.unwrap()).unwrap();
     assert_eq!(handle.task_id, "task_api_workflow_1");
-    assert_eq!(handle.status, custos_domain::RunStatus::Active);
+    assert_eq!(handle.status, custos_contracts::RunStatus::Active);
 
     // 2. Double-dispatch via API on same task must fail with Conflict
     let start_dup_req = ApiRequest {
@@ -66,7 +66,7 @@ async fn test_workflow_start_and_cancel_run_api() {
         "Error: {:?}",
         cancel_resp.error
     );
-    let receipt: custos_domain::CancelReceipt =
+    let receipt: custos_contracts::CancelReceipt =
         serde_json::from_value(cancel_resp.result.unwrap()).unwrap();
     assert_eq!(receipt.run_id, handle.run_id);
     assert_eq!(receipt.reason, "Test cancel via API");
@@ -144,7 +144,7 @@ async fn test_capabilities_api_dispatch() {
         .await;
     assert!(list_resp.is_success());
 
-    let caps: Vec<custos_domain::CapabilityDescriptor> =
+    let caps: Vec<custos_contracts::CapabilityDescriptor> =
         serde_json::from_value(list_resp.result.unwrap()).unwrap();
     assert!(!caps.is_empty());
 
@@ -240,7 +240,7 @@ async fn test_capabilities_api_dispatch() {
         })
         .await;
     assert!(get_resp.is_success());
-    let cap: custos_domain::CapabilityDescriptor =
+    let cap: custos_contracts::CapabilityDescriptor =
         serde_json::from_value(get_resp.result.unwrap()).unwrap();
     assert_eq!(cap.id, "compute.pty");
 
@@ -253,7 +253,7 @@ async fn test_capabilities_api_dispatch() {
         })
         .await;
     assert!(get_res_resp.is_success());
-    let res_cap: custos_domain::CapabilityDescriptor =
+    let res_cap: custos_contracts::CapabilityDescriptor =
         serde_json::from_value(get_res_resp.result.unwrap()).unwrap();
     assert_eq!(res_cap.id, "compute.pty");
 

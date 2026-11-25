@@ -1,7 +1,7 @@
 //! Ring 2 interactive notebook cells and kernel session use cases.
 
 use crate::api::*;
-use custos_core::contracts::notebook::{
+use custos_engine::contracts::notebook::{
     CellExecutionStatus, ExecuteCellParams, KernelStatus, NotebookCell, NotebookCellType,
     NotebookStoragePort,
 };
@@ -72,10 +72,7 @@ impl LocalApiDispatcher {
                         .get_status_scoped(
                             session_id,
                             notebook_id,
-                            Some(shared.as_ref()
-                                as &(dyn NotebookStoragePort
-                                      + Send
-                                      + Sync)),
+                            Some(shared.as_ref() as &(dyn NotebookStoragePort + Send + Sync)),
                         )
                         .await
                     {
@@ -178,7 +175,12 @@ impl LocalApiDispatcher {
                 };
                 let shared = match self.workbenches.shared_capabilities.as_ref() {
                     Some(repository) => repository,
-                    None => return ApiResponse::error(req.id, "SharedCapabilitiesRepository not configured on daemon"),
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "SharedCapabilitiesRepository not configured on daemon",
+                        )
+                    }
                 };
                 let saved = match shared
                     .list_notebook_cells_scoped(&params.session_id, params.notebook_id.as_deref())
@@ -236,9 +238,11 @@ impl LocalApiDispatcher {
                 }
                 params.cwd = Some(workspace.path);
 
-                let repo_ref = self.workbenches.shared_capabilities.as_deref().map(|s| {
-                    s as &(dyn NotebookStoragePort + Send + Sync)
-                });
+                let repo_ref = self
+                    .workbenches
+                    .shared_capabilities
+                    .as_deref()
+                    .map(|s| s as &(dyn NotebookStoragePort + Send + Sync));
                 match kernel.execute_cell(params, repo_ref).await {
                     Ok(res) => match serde_json::to_value(&res) {
                         Ok(val) => ApiResponse::success(req.id, val),
@@ -289,9 +293,11 @@ impl LocalApiDispatcher {
                     }
                 };
                 let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
-                let repo_ref = self.workbenches.shared_capabilities.as_deref().map(|s| {
-                    s as &(dyn NotebookStoragePort + Send + Sync)
-                });
+                let repo_ref = self
+                    .workbenches
+                    .shared_capabilities
+                    .as_deref()
+                    .map(|s| s as &(dyn NotebookStoragePort + Send + Sync));
                 match kernel.reset_scoped(session_id, notebook_id, repo_ref).await {
                     Ok(state) => match serde_json::to_value(&state) {
                         Ok(val) => ApiResponse::success(req.id, val),
@@ -317,9 +323,11 @@ impl LocalApiDispatcher {
                     }
                 };
                 let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
-                let repo_ref = self.workbenches.shared_capabilities.as_deref().map(|s| {
-                    s as &(dyn NotebookStoragePort + Send + Sync)
-                });
+                let repo_ref = self
+                    .workbenches
+                    .shared_capabilities
+                    .as_deref()
+                    .map(|s| s as &(dyn NotebookStoragePort + Send + Sync));
                 match kernel
                     .get_status_scoped(session_id, notebook_id, repo_ref)
                     .await
@@ -342,8 +350,8 @@ impl LocalApiDispatcher {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use custos_core::contracts::notebook::{NotebookCell, NotebookCellType};
-    use custos_persistence::SqliteTaskStore;
+    use custos_engine::contracts::notebook::{NotebookCell, NotebookCellType};
+    use custos_storage::SqliteTaskStore;
 
     #[tokio::test]
     async fn notebook_group_test_without_dispatcher() {

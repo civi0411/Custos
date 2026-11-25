@@ -177,13 +177,20 @@ export class DaemonClient {
   }
 
   async checkHealth(): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
     try {
-      const res = await fetch(`${await this.resolveHttpEndpoint()}/api/health`, { method: 'GET' });
+      const res = await fetch(`${await this.resolveHttpEndpoint()}/api/health`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
       this.daemonOnline = res.ok;
       return this.daemonOnline;
     } catch {
       this.daemonOnline = false;
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -215,7 +222,7 @@ export class DaemonClient {
   private async requestHttp<T>(method: string, params: Record<string, any> = {}): Promise<T> {
     const baseUrl = await this.resolveHttpEndpoint();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 60000);
     const reqId = params.command_id || `web_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     try {
       const res = await fetch(`${baseUrl}/api/request`, {
@@ -406,6 +413,10 @@ export class DaemonClient {
   computeQuantReview = (params: Parameters<QuantClient['computeQuantReview']>[0]) => this.quant.computeQuantReview(params);
   getQuantOrderBook = (params: Parameters<QuantClient['getQuantOrderBook']>[0]) => this.quant.getQuantOrderBook(params);
   computeQuantPbo = (params: Parameters<QuantClient['computeQuantPbo']>[0]) => this.quant.computeQuantPbo(params);
+  closeQuantPosition = (params: Parameters<QuantClient['closeQuantPosition']>[0]) => this.quant.closeQuantPosition(params);
+  listQuantStrategies = () => this.quant.listQuantStrategies();
+  listQuantPositions = (params?: Parameters<QuantClient['listQuantPositions']>[0]) => this.quant.listQuantPositions(params);
+  listQuantFills = (params?: Parameters<QuantClient['listQuantFills']>[0]) => this.quant.listQuantFills(params);
 
   // Coding workbench
   spawnCandidates = (params: Parameters<CodingClient['spawnCandidates']>[0]) => this.coding.spawnCandidates(params);

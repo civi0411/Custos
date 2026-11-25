@@ -1,8 +1,8 @@
 //! Workspace lifecycle use cases: create, get, list, archive, recover, inspect dirty, pick folder, steer.
 
 use crate::api::*;
-use custos_domain::WorkspaceId;
-use custos_runtime::workspace::CreateWorkspaceRequest;
+use custos_contracts::WorkspaceId;
+use custos_engine::workspace::CreateWorkspaceRequest;
 
 impl LocalApiDispatcher {
     pub(crate) async fn handle_workspaces_lifecycle(&self, req: ApiRequest) -> ApiResponse {
@@ -173,7 +173,7 @@ impl LocalApiDispatcher {
             }
             METHOD_WORKSPACES_PICK_FOLDER => {
                 let purpose = req.params.get("purpose").and_then(|v| v.as_str());
-                let picked = custos_adapters::host::workspace::pick_folder(purpose).await;
+                let picked = custos_integrations::host::workspace::pick_folder(purpose).await;
                 ApiResponse::success(req.id, serde_json::json!({ "path": picked }))
             }
             METHOD_WORKSPACES_AGENT_STEER => {
@@ -196,7 +196,13 @@ impl LocalApiDispatcher {
                 } else if let Some(r_id) = run_id {
                     let mut steered = false;
                     for desc in self.env.harnesses.list() {
-                        if self.env.harnesses.steer(&desc.id, r_id, guidance).await.is_ok() {
+                        if self
+                            .env
+                            .harnesses
+                            .steer(&desc.id, r_id, guidance)
+                            .await
+                            .is_ok()
+                        {
                             steered = true;
                             break;
                         }
@@ -224,8 +230,8 @@ impl LocalApiDispatcher {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use custos_adapters::workspace::LocalWorkspaceProvider;
-    use custos_persistence::SqliteTaskStore;
+    use custos_integrations::workspace::LocalWorkspaceProvider;
+    use custos_storage::SqliteTaskStore;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -241,7 +247,7 @@ pub(crate) mod tests {
         let ws_path = tmp.path().join("lifecycle_test_ws");
         let create_req = CreateWorkspaceRequest {
             name: "lifecycle-test".to_string(),
-            kind: custos_domain::WorkspaceKind::Folder {
+            kind: custos_contracts::WorkspaceKind::Folder {
                 path: ws_path.to_string_lossy().to_string(),
             },
             path: ws_path.to_string_lossy().to_string(),
@@ -268,7 +274,7 @@ pub(crate) mod tests {
         assert!(after_archive.is_some());
         assert_eq!(
             after_archive.unwrap().status,
-            custos_domain::WorkspaceStatus::Archived
+            custos_contracts::WorkspaceStatus::Archived
         );
     }
 }

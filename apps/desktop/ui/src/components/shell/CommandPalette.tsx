@@ -15,9 +15,11 @@ import {
   Plus,
   ArrowRight,
   GitBranch,
+  TrendingUp,
 } from 'lucide-react';
 import type { ActiveWorkbench } from '@/types/workbench';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { getActiveContributions } from '@/components/workbenches/registry';
 import { useNavigate } from 'react-router-dom';
 import { formatKeyCombo } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
@@ -55,7 +57,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenWorktrees,
   currentMode
 }) => {
-  const { workspaces, setActiveWorkspaceId, activeWorkspaceId } = useAppContext();
+  const { workspaces, setActiveWorkspaceId, activeWorkspaceId, installedWorkbenches } = useAppContext();
+  const activeIds = new Set(getActiveContributions(installedWorkbenches).map((c) => c.canonicalId));
+  const hasCoding = activeIds.has('coding');
+  const hasResearch = activeIds.has('research');
+  const hasQuant = activeIds.has('quant');
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -102,9 +108,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       shortcut: `${formatKeyCombo({ alt: true, key: '3' })}`,
       action: () => { onSwitchMode('copilot'); onClose(); }
     },
-    {
+    ...(hasCoding ? [{
       id: 'mode-engineering',
-      category: 'modes',
+      category: 'modes' as const,
       title: 'Switch to Coding Workbench (ADE)',
       subtitle: 'Worktrees, code editing, terminal & git diffs',
       icon: Code2,
@@ -112,10 +118,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       badge: currentMode === 'engineering' ? 'Current' : undefined,
       shortcut: `${formatKeyCombo({ alt: true, key: '1' })}`,
       action: () => { onSwitchMode('engineering'); onClose(); }
-    },
-    {
+    }] : []),
+    ...(hasResearch ? [{
       id: 'mode-research',
-      category: 'modes',
+      category: 'modes' as const,
       title: 'Switch to Research Lab',
       subtitle: 'Literature corpus, claims matrix & reproducible runs',
       icon: FlaskConical,
@@ -123,54 +129,80 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       badge: currentMode === 'research' ? 'Current' : undefined,
       shortcut: `${formatKeyCombo({ alt: true, key: '2' })}`,
       action: () => { onSwitchMode('research'); onClose(); }
-    },
+    }] : []),
+    ...(hasQuant ? [{
+      id: 'mode-quant',
+      category: 'modes' as const,
+      title: 'Switch to Quant Workbench',
+      subtitle: 'Alpha studio, backtesting tearsheets & paper execution',
+      icon: TrendingUp,
+      iconColor: 'text-[#fbbf24]',
+      badge: currentMode === 'quant' ? 'Current' : undefined,
+      shortcut: `${formatKeyCombo({ alt: true, key: '4' })}`,
+      action: () => { onSwitchMode('quant'); onClose(); }
+    }] : []),
 
     // Workbench Tabs
-    {
-      id: 'tab-terminal',
-      category: 'tabs',
-      title: 'Open Terminal',
-      subtitle: 'Bounded sovereign sandbox PTY shell',
-      icon: Terminal,
-      iconColor: 'text-[#58a6ff]',
-      action: () => { onOpenTab('terminal', 'Terminal', 'custos://terminal'); onClose(); }
-    },
-    {
-      id: 'tab-changes',
-      category: 'tabs',
-      title: 'Open Git Changes & Diffs',
-      subtitle: 'Review staged and unstaged worktree patches',
-      icon: FileDiff,
-      iconColor: 'text-[#3fb950]',
-      action: () => { onOpenTab('changes', 'Changes', 'custos://changes'); onClose(); }
-    },
-    {
-      id: 'tab-files',
-      category: 'tabs',
-      title: 'Open Workspace Files',
-      subtitle: 'Browse repository tree and source files',
-      icon: FolderTree,
-      iconColor: 'text-[#e6edf3]',
-      action: () => { onOpenTab('files', 'Files', 'custos://files'); onClose(); }
-    },
-    {
-      id: 'tab-literature',
-      category: 'tabs',
-      title: 'Open Literature Corpus',
-      subtitle: 'Verified scientific papers, DOIs and passages',
-      icon: BookOpen,
-      iconColor: 'text-[#a371f7]',
-      action: () => { onOpenTab('literature', 'Literature', 'custos://research/literature'); onClose(); }
-    },
-    {
-      id: 'tab-claims',
-      category: 'tabs',
-      title: 'Open Claims Matrix',
-      subtitle: 'Grounding levels, contradiction detection & evidence',
-      icon: ShieldCheck,
-      iconColor: 'text-[#388bfd]',
-      action: () => { onOpenTab('claims', 'Claims Matrix', 'custos://research/claims'); onClose(); }
-    },
+    ...(hasCoding ? [
+      {
+        id: 'tab-terminal',
+        category: 'tabs' as const,
+        title: 'Open Terminal',
+        subtitle: 'Bounded sovereign sandbox PTY shell',
+        icon: Terminal,
+        iconColor: 'text-[#58a6ff]',
+        action: () => { onOpenTab('terminal', 'Terminal', 'custos://terminal'); onClose(); }
+      },
+      {
+        id: 'tab-changes',
+        category: 'tabs' as const,
+        title: 'Open Git Changes & Diffs',
+        subtitle: 'Review staged and unstaged worktree patches',
+        icon: FileDiff,
+        iconColor: 'text-[#3fb950]',
+        action: () => { onOpenTab('changes', 'Changes', 'custos://changes'); onClose(); }
+      },
+      {
+        id: 'tab-files',
+        category: 'tabs' as const,
+        title: 'Open Workspace Files',
+        subtitle: 'Browse repository tree and source files',
+        icon: FolderTree,
+        iconColor: 'text-[#e6edf3]',
+        action: () => { onOpenTab('files', 'Files', 'custos://files'); onClose(); }
+      },
+    ] : []),
+    ...(hasResearch ? [
+      {
+        id: 'tab-literature',
+        category: 'tabs' as const,
+        title: 'Open Literature Corpus',
+        subtitle: 'Verified scientific papers, DOIs and passages',
+        icon: BookOpen,
+        iconColor: 'text-[#a371f7]',
+        action: () => { onOpenTab('literature', 'Literature', 'custos://research/literature'); onClose(); }
+      },
+      {
+        id: 'tab-claims',
+        category: 'tabs' as const,
+        title: 'Open Claims Matrix',
+        subtitle: 'Grounding levels, contradiction detection & evidence',
+        icon: ShieldCheck,
+        iconColor: 'text-[#388bfd]',
+        action: () => { onOpenTab('claims', 'Claims Matrix', 'custos://research/claims'); onClose(); }
+      },
+    ] : []),
+    ...(hasQuant ? [
+      {
+        id: 'tab-alpha',
+        category: 'tabs' as const,
+        title: 'Open Alpha Studio',
+        subtitle: 'Formula synthesis, point-in-time backtest & strategy verification',
+        icon: TrendingUp,
+        iconColor: 'text-[#fbbf24]',
+        action: () => { onOpenTab('alpha', 'Alpha Studio', 'custos://quant/alpha'); onClose(); }
+      },
+    ] : []),
     {
       id: 'tab-kanban',
       category: 'tabs',
@@ -183,28 +215,30 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
 
     // Worktrees
-    {
-      id: 'worktree-manager',
-      category: 'worktrees',
-      title: 'Manage Git Worktrees (OrCa Lifecycle)',
-      subtitle: 'Switch branches, inspect modified files, merge or ship',
-      icon: WorktreeIcon,
-      iconColor: 'text-[#58a6ff]',
-      action: () => { onOpenWorktrees(); onClose(); }
-    },
-    ...workspaces.map((ws) => ({
-      id: `jump-wt-${ws.id}`,
-      category: 'worktrees' as const,
-      title: `Jump to Worktree: ${ws.name}`,
-      subtitle: `${ws.path} (${ws.active_branch || ws.name || 'worktree'})`,
-      icon: GitBranch,
-      iconColor: ws.id === activeWorkspaceId ? 'text-workbench-accent' : 'text-sky-400',
-      badge: ws.id === activeWorkspaceId ? 'Active' : (ws.dirty_manifest?.is_dirty ? `${ws.dirty_manifest.modified_files?.length || 0}*` : undefined),
-      action: () => {
-        setActiveWorkspaceId(ws.id);
-        onClose();
+    ...(hasCoding ? [
+      {
+        id: 'worktree-manager',
+        category: 'worktrees' as const,
+        title: 'Manage Git Worktrees (OrCa Lifecycle)',
+        subtitle: 'Switch branches, inspect modified files, merge or ship',
+        icon: WorktreeIcon,
+        iconColor: 'text-[#58a6ff]',
+        action: () => { onOpenWorktrees(); onClose(); }
       },
-    })),
+      ...workspaces.map((ws) => ({
+        id: `jump-wt-${ws.id}`,
+        category: 'worktrees' as const,
+        title: `Jump to Worktree: ${ws.name}`,
+        subtitle: `${ws.path} (${ws.active_branch || ws.name || 'worktree'})`,
+        icon: GitBranch,
+        iconColor: ws.id === activeWorkspaceId ? 'text-workbench-accent' : 'text-sky-400',
+        badge: ws.id === activeWorkspaceId ? 'Active' : (ws.dirty_manifest?.is_dirty ? `${ws.dirty_manifest.modified_files?.length || 0}*` : undefined),
+        action: () => {
+          setActiveWorkspaceId(ws.id);
+          onClose();
+        },
+      })),
+    ] : []),
 
     // Quick Actions
     {

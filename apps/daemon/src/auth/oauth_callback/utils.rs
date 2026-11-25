@@ -61,4 +61,3 @@ pub(crate) fn urlencoding_decode(val: &str) -> String {
     }
     result
 }
-

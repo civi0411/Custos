@@ -30,6 +30,7 @@ full = [
 ]
 lite = [
     "custos-engine/lite",
+    "custos-workbench-assistant",
 ]
 local-inference = [
     "custos-integrations/local-inference-native",
@@ -62,6 +63,7 @@ blake3 = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
+custos-integrations = { workspace = true, features = ["test-support"] }
 tempfile = { workspace = true }
 
 

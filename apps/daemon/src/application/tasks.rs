@@ -4,8 +4,8 @@ use super::*;
 use crate::custos_local_api::{
     AdvanceTaskRequest, ApiResponse, CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest,
 };
-use custos_core::{AdvanceTask, CancelTask, CompleteTask, CreateTask, TaskService};
-use custos_domain::TaskStatus;
+use custos_contracts::TaskStatus;
+use custos_engine::{AdvanceTask, CancelTask, CompleteTask, CreateTask, TaskService};
 
 struct TaskApiHandler;
 

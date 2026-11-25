@@ -344,7 +344,7 @@ export function useSessionsSlice({
           author: 'Custos Engine',
           badge: 'No LLM Available',
           stepName: 'LLM Gateway',
-          text: `⚠️ No LLM providers configured.\n\n${llmStatus.message || 'The system is running in Sovereign & Offline Kernel mode. Please configure an API Key (Anthropic Claude, OpenAI Codex, Google Gemini...) or select a Local Model in Settings > Providers to enable AI reasoning.'}`,
+          text: `⚠️ No LLM providers configured.\n\n${llmStatus.message || 'No active AI provider or local model is connected. Please configure an API Key, OAuth account, or local Ollama model in Settings > Providers to enable AI reasoning.'}`,
         };
         reportTurnFailure(noLlmMsg);
         return false;

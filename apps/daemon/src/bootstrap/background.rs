@@ -1,7 +1,7 @@
 //! Background Sweepers and Jobs (SADE R8 §6.8)
 
+use custos_storage::SqliteTaskStore;
 use std::sync::Arc;
-use custos_persistence::SqliteTaskStore;
 
 /// Spawns startup credential initialization, the 5-minute OAuth sweeper, and the 60-second uncertain runs reconciler.
 pub fn spawn_background_sweepers(
@@ -31,13 +31,13 @@ pub fn spawn_background_sweepers(
                 .await
             {
                 for tok in expiring {
-                    let settings = match custos_adapters::connectors::oauth::oauth_settings(
+                    let settings = match custos_integrations::connectors::oauth::oauth_settings(
                         &tok.service_type,
                     ) {
                         Ok(v) => v,
                         Err(_) => continue,
                     };
-                    let manager = custos_adapters::connectors::oauth::OAuthPkceManager::new(
+                    let manager = custos_integrations::connectors::oauth::OAuthPkceManager::new(
                         &settings.0,
                         &settings.1,
                     );
@@ -70,7 +70,7 @@ pub fn spawn_background_sweepers(
 
                     if is_expired {
                         tracing::warn!(run_id = %run.id, "Uncertain run timed out after 24h; marking failed");
-                        run.status = custos_domain::RunStatus::Failed;
+                        run.status = custos_contracts::RunStatus::Failed;
                         run.ended_at = Some(now);
                         let _ = uncertain_store.runs().save_run(&mut run);
                     }
@@ -87,9 +87,15 @@ pub fn spawn_background_sweepers(
             interval.tick().await;
             let now_ms = chrono::Utc::now().timestamp_millis();
             let cutoff_30d_ms = now_ms - (30 * 24 * 3600 * 1000);
-            match pruning_store.runs().prune_telemetry_before(cutoff_30d_ms, cutoff_30d_ms) {
+            match pruning_store
+                .runs()
+                .prune_telemetry_before(cutoff_30d_ms, cutoff_30d_ms)
+            {
                 Ok(pruned) if pruned > 0 => {
-                    tracing::info!(pruned, "Pruned historical telemetry records older than 30 days");
+                    tracing::info!(
+                        pruned,
+                        "Pruned historical telemetry records older than 30 days"
+                    );
                 }
                 Ok(_) => {}
                 Err(err) => {

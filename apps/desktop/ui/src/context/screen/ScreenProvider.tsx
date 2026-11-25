@@ -158,18 +158,24 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const newName =
         currentWb === 'research'
           ? 'Research Desk'
+          : currentWb === 'quant'
+          ? 'Quant Desk'
           : currentWb === 'copilot'
           ? 'Executive Desk'
           : 'Main Dev';
       const newIcon =
         currentWb === 'research'
           ? 'FlaskConical'
+          : currentWb === 'quant'
+          ? 'TrendingUp'
           : currentWb === 'copilot'
           ? 'CheckSquare'
           : 'Code';
       const initialTabIds =
         currentWb === 'research'
           ? ['conversation', 'lab']
+          : currentWb === 'quant'
+          ? ['conversation', 'alpha']
           : currentWb === 'copilot'
           ? ['conversation', 'tasks']
           : ['conversation', 'terminal'];
@@ -226,6 +232,11 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ? [
           { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
           { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
+        ]
+      : currentWb === 'quant'
+      ? [
+          { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+          { id: 'alpha', type: 'alpha', title: 'Alpha Studio', url: 'custos://resource/alpha' },
         ]
       : currentWb === 'copilot'
       ? [

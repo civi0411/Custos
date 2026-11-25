@@ -10,4 +10,3 @@ pub mod resolver;
 pub use credential_store::*;
 pub use oauth_callback::*;
 pub use resolver::*;
-

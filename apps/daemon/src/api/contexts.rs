@@ -7,9 +7,9 @@ pub(crate) struct KernelServices {
     pub(crate) session_manager: Arc<SessionManager>,
     pub(crate) bridge_service: Arc<BridgeService>,
     pub(crate) workflow: Option<Arc<dyn WorkflowPort>>,
-    pub(crate) usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
-    pub(crate) sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
-    pub(crate) supervision: Arc<custos_runtime::workflow::SupervisionCoordinator>,
+    pub(crate) usage_runs: Option<Arc<dyn custos_engine::contracts::storage::RunPort>>,
+    pub(crate) sqlite_store: Option<Arc<custos_storage::SqliteTaskStore>>,
+    pub(crate) supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
 }
 
 pub(crate) struct EnvironmentServices {
@@ -19,23 +19,26 @@ pub(crate) struct EnvironmentServices {
     pub(crate) files: Arc<dyn WorkspaceFilesPort>,
     pub(crate) harnesses: Arc<HarnessRegistry>,
     pub(crate) python_kernel: Option<Arc<PythonKernelCoordinator>>,
-    pub(crate) admission_coordinator: Option<Arc<custos_runtime::compute::WorkloadAdmissionCoordinator>>,
-    pub(crate) environment_coordinator: Option<Arc<custos_runtime::environment::EnvironmentCoordinator>>,
+    pub(crate) admission_coordinator:
+        Option<Arc<custos_engine::compute::WorkloadAdmissionCoordinator>>,
+    pub(crate) environment_coordinator:
+        Option<Arc<custos_engine::environment::EnvironmentCoordinator>>,
     pub(crate) target_resolver: Arc<dyn ExecutionTargetResolver>,
 }
 
 pub(crate) struct ProviderServices {
     pub(crate) repo: Option<Arc<ProviderRepository>>,
     pub(crate) credentials: Option<Arc<crate::credentials::ProviderCredentials>>,
-    pub(crate) model_availability: custos_provider::routing::availability::ModelAvailability,
-    pub(crate) model_catalog: custos_provider::catalog::ModelCatalogService,
-    pub(crate) oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
+    pub(crate) model_availability: custos_integrations::routing::availability::ModelAvailability,
+    pub(crate) model_catalog: custos_integrations::catalog::ModelCatalogService,
+    pub(crate) oauth_callback_server:
+        Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
 }
 
 pub(crate) struct WorkbenchServices {
-    pub(crate) pack_registry: Arc<custos_packs::DomainPackRegistry>,
-    pub(crate) mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
-    pub(crate) shared_capabilities: Option<Arc<custos_persistence::SharedCapabilitiesRepository>>,
+    pub(crate) pack_registry: Arc<custos_engine::DomainPackRegistry>,
+    pub(crate) mcp_hub: Arc<custos_integrations::mcp::McpFederationHub>,
+    pub(crate) shared_capabilities: Option<Arc<custos_storage::SharedCapabilitiesRepository>>,
     pub(crate) outbox: Option<Arc<OutboxRepository>>,
     #[cfg(feature = "custos-workbench-research")]
     pub(crate) research: std::sync::RwLock<Option<Arc<ResearchRepository>>>,
@@ -46,4 +49,3 @@ pub(crate) struct WorkbenchServices {
     pub(crate) browser: Option<Arc<BrowserRepository>>,
     pub(crate) fleet_automation: Option<Arc<FleetAutomationRepository>>,
 }
-
