@@ -9,8 +9,7 @@ fn test_message_serialization() {
         .with_text("Hello, I'll help you with that.")
         .with_tool_request(
             "tool123",
-            Ok(CallToolRequestParams::new("test_tool")
-                .with_arguments(object!({"param": "value"}))),
+            Ok(CallToolRequestParams::new("test_tool").with_arguments(object!({"param": "value"}))),
         );
 
     let json_str = serde_json::to_string_pretty(&message).unwrap();

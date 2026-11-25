@@ -1,9 +1,9 @@
 use super::super::*;
 use super::helpers::TestCredentialResolver;
-use std::sync::Arc;
+use crate::{ModelProvider, ProviderRequest};
 use async_trait::async_trait;
-use custos_domain::DomainError;
-use custos_provider::{ModelProvider, ProviderRequest};
+use custos_contracts::DomainError;
+use std::sync::Arc;
 
 #[test]
 fn ollama_namespace_wins_over_cloud_model_names() {
@@ -115,7 +115,7 @@ async fn ollama_stream_payload_routes_custom_tag_without_credentials() {
     );
     let mut completed = false;
     while let Some(event) = receiver.recv().await {
-        if event.event_type == custos_provider::ProviderEventType::Completed {
+        if event.event_type == crate::ProviderEventType::Completed {
             assert_eq!(event.usage.unwrap().output_tokens, Some(2));
             completed = true;
         }
@@ -170,8 +170,6 @@ async fn ollama_live_smoke() {
     assert!(!response.content.trim().is_empty());
     assert!(response.tokens_used > 0);
 }
-
-
 
 #[tokio::test]
 async fn oauth_with_configured_endpoint_uses_codex_and_preserves_model() {

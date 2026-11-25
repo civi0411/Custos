@@ -1,6 +1,4 @@
-use crate::conversation::message::{
-    InferenceMetadata, Message, MessageContentBlock,
-};
+use crate::conversation::message::{InferenceMetadata, Message, MessageContentBlock};
 use crate::conversation::{fix_conversation, Conversation};
 use rmcp::model::{CallToolRequestParams, ContentBlock, Role};
 use rmcp::object;

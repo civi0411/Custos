@@ -1,12 +1,12 @@
 //! Async host Git operations for workspace inspection, candidate spawning, and integration.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::Serialize;
 use std::path::Path;
 use tokio::process::Command;
 
-use crate::host::binaries::resolve_git_binary;
 use super::git_discovery::{list_git_worktrees, parse_github_remote, resolve_deep_git_paths};
+use crate::host::binaries::resolve_git_binary;
 
 #[derive(Debug, Clone)]
 pub struct GitMergeOutcome {
@@ -71,7 +71,9 @@ pub async fn is_working_tree_clean(repo_dir: &Path) -> Result<bool, DomainError>
         .args(["status", "--porcelain", "--untracked-files=all"])
         .output()
         .await
-        .map_err(|e| DomainError::Validation(format!("Could not inspect workspace git status: {e}")))?;
+        .map_err(|e| {
+            DomainError::Validation(format!("Could not inspect workspace git status: {e}"))
+        })?;
     if !out.status.success() {
         return Err(DomainError::Validation(
             "Could not inspect workspace git status".into(),
@@ -114,8 +116,8 @@ pub async fn merge_no_ff(repo_dir: &Path, branch: &str, message: &str) -> GitMer
             let text = String::from_utf8_lossy(&o.stdout).to_string()
                 + &String::from_utf8_lossy(&o.stderr);
             let success = o.status.success();
-            let conflict_detected = !success
-                && (text.contains("CONFLICT") || text.contains("Automatic merge failed"));
+            let conflict_detected =
+                !success && (text.contains("CONFLICT") || text.contains("Automatic merge failed"));
             GitMergeOutcome {
                 success,
                 detail: text.trim().to_string(),
@@ -177,7 +179,10 @@ pub async fn detect_repository(canonical_path: &Path) -> DetectedGitRepository {
     let mut is_dirty = false;
     let mut dirty_count = 0;
     let mut remote_url: Option<String> = None;
-    let mut is_worktree = deep_git_probe.as_ref().map(|(_, _, wt)| *wt).unwrap_or(false);
+    let mut is_worktree = deep_git_probe
+        .as_ref()
+        .map(|(_, _, wt)| *wt)
+        .unwrap_or(false);
 
     if let Ok(out) = Command::new(&git_bin)
         .current_dir(canonical_path)
@@ -327,4 +332,3 @@ pub async fn has_merge_head(repo_path: &Path) -> bool {
     };
     output.status.success()
 }
-

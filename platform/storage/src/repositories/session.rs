@@ -1,5 +1,5 @@
 use crate::connection::DbConnection;
-use custos_domain::{
+use custos_contracts::{
     DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
 };
 use rusqlite::{params, Connection};

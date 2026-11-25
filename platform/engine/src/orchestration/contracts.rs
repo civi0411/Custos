@@ -1,6 +1,6 @@
 //! Workflow contracts and execution context
 
-use custos_domain::{DomainError, ExecutionReceipt, ReceiptStatus};
+use custos_contracts::{DomainError, ExecutionReceipt, ReceiptStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

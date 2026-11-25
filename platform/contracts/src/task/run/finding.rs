@@ -148,7 +148,10 @@ pub fn group_step_errors(errors: &[StepError]) -> Vec<ErrorGroupSummary> {
     }
 
     let mut result: Vec<_> = groups.into_values().collect();
-    result.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| b.last_seen_ms.cmp(&a.last_seen_ms)));
+    result.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| b.last_seen_ms.cmp(&a.last_seen_ms))
+    });
     result
 }
-

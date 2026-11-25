@@ -1,7 +1,5 @@
 use super::helpers::{custom_config, make_provider};
-use crate::cloud::openai::builder::{
-    derive_base_path, ensure_url_scheme, from_declarative_config,
-};
+use crate::cloud::openai::builder::{derive_base_path, ensure_url_scheme, from_declarative_config};
 use crate::cloud::openai::provider::OpenAiProvider;
 use crate::model::ModelConfig;
 use serde_json::json;
@@ -64,8 +62,7 @@ fn custom_chat_path_maps_to_responses_path() {
 
 #[test]
 fn responses_path_maps_to_models_path() {
-    let models_path =
-        OpenAiProvider::map_base_path("openai/v1/responses", "models", "v1/models");
+    let models_path = OpenAiProvider::map_base_path("openai/v1/responses", "models", "v1/models");
     assert_eq!(models_path, "openai/v1/models");
 }
 

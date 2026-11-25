@@ -1,5 +1,5 @@
 use super::SharedCapabilitiesRepository;
-use custos_domain::{DomainError, NoteRecord, NoteVersionRecord};
+use custos_contracts::{DomainError, NoteRecord, NoteVersionRecord};
 use rusqlite::params;
 
 impl SharedCapabilitiesRepository {
@@ -156,4 +156,3 @@ impl SharedCapabilitiesRepository {
         })
     }
 }
-

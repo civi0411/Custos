@@ -249,4 +249,3 @@ fn test_format_tools_empty() -> anyhow::Result<()> {
     assert!(spec.is_empty());
     Ok(())
 }
-

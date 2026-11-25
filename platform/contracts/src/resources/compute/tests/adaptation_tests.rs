@@ -1,6 +1,6 @@
-use crate::fleet::compute::adaptation::*;
-use crate::fleet::compute::backend::*;
-use crate::fleet::compute::checkpoint::*;
+use crate::resources::compute::adaptation::*;
+use crate::resources::compute::backend::*;
+use crate::resources::compute::checkpoint::*;
 
 #[test]
 fn invalid_hardware_dimensions_do_not_panic_or_fabricate_a_plan() {
@@ -31,8 +31,7 @@ fn test_hardware_adaptation_a100_to_t4() {
     )
     .with_precision("bf16");
 
-    let eval =
-        HardwareAdaptationPlan::evaluate_gate(&source_a100, &target_t4, 8, 2, &checkpoint);
+    let eval = HardwareAdaptationPlan::evaluate_gate(&source_a100, &target_t4, 8, 2, &checkpoint);
 
     assert!(matches!(
         eval.verdict,
@@ -63,8 +62,7 @@ fn test_hardware_adaptation_t4_to_4090() {
     )
     .with_full_state("meta-llama/Llama-3-8B", "unsloth-2024.8", "train:100/1000");
 
-    let eval =
-        HardwareAdaptationPlan::evaluate_gate(&source_t4, &target_4090, 4, 4, &checkpoint);
+    let eval = HardwareAdaptationPlan::evaluate_gate(&source_t4, &target_4090, 4, 4, &checkpoint);
 
     assert_eq!(eval.verdict, CompatibilityVerdict::Compatible);
 
@@ -90,4 +88,3 @@ fn test_compatibility_gate_insufficient_vram() {
     ));
     assert!(eval.plan.is_none());
 }
-

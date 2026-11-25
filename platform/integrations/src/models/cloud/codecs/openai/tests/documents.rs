@@ -64,4 +64,3 @@ fn unsupported_document_media_type_becomes_an_explicit_text_part() {
     assert!(text.contains("application/pdf"), "{text}");
     assert!(!text.contains("cm93cw=="), "{text}");
 }
-

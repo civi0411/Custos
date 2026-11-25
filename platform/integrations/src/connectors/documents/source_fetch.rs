@@ -4,8 +4,8 @@
 //! complete UTF-8 text from local files beneath an explicitly configured root.
 
 use async_trait::async_trait;
-use custos_core::contracts::source_acquisition::SourceAcquisitionPort;
-use custos_domain::DomainError;
+use custos_contracts::contracts::source_acquisition::SourceAcquisitionPort;
+use custos_contracts::DomainError;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt;
 
@@ -147,7 +147,7 @@ mod tests {
     async fn test_source_fetch_reads_file() {
         let temp_dir = std::env::temp_dir().join(format!(
             "custos_fetch_test_{}",
-            custos_domain::new_id("test")
+            custos_contracts::new_id("test")
         ));
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
         let file_path = temp_dir.join("sample.txt");
@@ -166,7 +166,7 @@ mod tests {
     async fn test_source_fetch_rejects_traversal() {
         let temp_dir = std::env::temp_dir().join(format!(
             "custos_fetch_trav_{}",
-            custos_domain::new_id("test")
+            custos_contracts::new_id("test")
         ));
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
 

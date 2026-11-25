@@ -11,16 +11,16 @@ use super::options::{
     OLLAMA_MAX_RETRIES, OLLAMA_MAX_RETRY_INTERVAL_MS, OLLAMA_PROVIDER_NAME, OLLAMA_TIMEOUT,
 };
 use super::streaming::stream_ollama;
-use crate::cloud::transport::api_client::ApiClient;
 use crate::base::{
     ConfigKey, MessageStream, ModelInfo, Provider, ProviderDescriptor, ProviderMetadata,
 };
+use crate::cloud::codecs::ollama::create_request;
+use crate::cloud::transport::api_client::ApiClient;
+use crate::cloud::transport::openai_compatible::handle_status;
 use crate::conversation::message::Message;
 use crate::errors::ProviderError;
-use crate::cloud::codecs::ollama::create_request;
 use crate::images::ImageFormat;
 use crate::model::ModelConfig;
-use crate::cloud::transport::openai_compatible::handle_status;
 use crate::request_log::{start_log, LoggerHandleExt};
 use crate::retry::{ProviderRetry, RetryConfig};
 

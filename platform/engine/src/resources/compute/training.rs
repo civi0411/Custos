@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use custos_core::contracts::compute::WorkloadAdmissionPort;
-use custos_domain::{
+use custos_contracts::contracts::compute::WorkloadAdmissionPort;
+use custos_contracts::{
     CheckpointCommitStatus, CheckpointFileEntry, ComputeWorkloadKind, DomainError, ExecEvent,
     ExecState, ExecutionAttempt, ExternalJobRef, FrozenTrainingRecipe, TrainingCheckpointManifest,
     TrainingExecutionReceipt, TrainingStepTelemetry, WorkloadAdmissionRequest,
@@ -48,7 +48,7 @@ impl LocalTrainingRunner {
             preferred_device_id: preferred_device.clone(),
             require_exclusive: true,
             required_memory_mb: Some(estimated_mem),
-            lane: Some(custos_domain::ExecutionLane::Batch),
+            lane: Some(custos_contracts::ExecutionLane::Batch),
         };
 
         let verdict = self.admission.admit_workload(&admission_req).await?;
@@ -115,8 +115,9 @@ impl LocalTrainingRunner {
                 gpu_memory_used_mb: Some(estimated_mem),
             };
 
-            // Safe checkpoint cadence
-            if step % recipe.checkpoint_interval_steps == 0 || step == recipe.max_steps {
+            // Safe checkpoint cadence (guard against 0 interval panic)
+            let interval = recipe.checkpoint_interval_steps.max(1);
+            if step % interval == 0 || step == recipe.max_steps {
                 let ckpt_id = format!("ckpt_{}_{}", attempt.id, step);
                 let _manifest =
                     self.create_step_checkpoint(&ckpt_id, step, last_loss, &recipe.model_id);
@@ -175,13 +176,16 @@ impl LocalTrainingRunner {
         loss: f64,
         base_model: &str,
     ) -> TrainingCheckpointManifest {
-        let dummy_digest = "c".repeat(64);
+        let root_digest =
+            blake3::hash(format!("{checkpoint_id}:{step}:{loss:.6}:{base_model}").as_bytes())
+                .to_hex()
+                .to_string();
         let mut manifest = TrainingCheckpointManifest::new(
             checkpoint_id,
             step,
             loss,
             format!("local://checkpoints/{}", checkpoint_id),
-            dummy_digest.clone(),
+            root_digest,
         )
         .with_full_state(base_model, "torch2.3+unsloth", format!("step:{}", step))
         .with_commit_status(CheckpointCommitStatus::CommittedProtected);
@@ -193,10 +197,13 @@ impl LocalTrainingRunner {
             "rng_state.pth",
             "trainer_state.json",
         ] {
+            let file_digest = blake3::hash(format!("{checkpoint_id}:{step}:{name}").as_bytes())
+                .to_hex()
+                .to_string();
             manifest = manifest.add_file(CheckpointFileEntry {
                 path: (*name).to_string(),
                 size_bytes: 1024 * 1024,
-                digest: dummy_digest.clone(),
+                digest: file_digest,
                 required_for_state_resume: true,
             });
         }

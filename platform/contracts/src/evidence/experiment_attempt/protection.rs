@@ -95,4 +95,3 @@ pub fn protection_status(
         ProtectionStatus::Protected
     }
 }
-

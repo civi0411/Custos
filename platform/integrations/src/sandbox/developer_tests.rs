@@ -1,5 +1,5 @@
 use super::*;
-use custos_domain::{Action, Permit, RiskClass, RiskLevel};
+use custos_contracts::{Action, Permit, RiskClass, RiskLevel};
 
 #[tokio::test]
 async fn legitimate_new_nested_files_remain_readable() {
@@ -44,8 +44,7 @@ async fn new_file_below_escaping_symlink_is_rejected_before_creation() {
 
 #[tokio::test]
 async fn test_sovereign_developer_adapter_read_write_flow() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(&temp_dir).await.unwrap();
 
     let adapter = SovereignDeveloperAdapter::new(&temp_dir);
@@ -65,7 +64,7 @@ async fn test_sovereign_developer_adapter_read_write_flow() {
     let write_permit = Permit::new(
         "task_1".into(),
         "act_write_1".into(),
-        "developer".into(),
+        "developer__write".into(),
         None,
         RiskClass::Medium,
         60,
@@ -89,7 +88,7 @@ async fn test_sovereign_developer_adapter_read_write_flow() {
     let read_permit = Permit::new(
         "task_1".into(),
         "act_read_1".into(),
-        "developer".into(),
+        "developer__read".into(),
         None,
         RiskClass::Low,
         60,
@@ -105,8 +104,7 @@ async fn test_sovereign_developer_adapter_read_write_flow() {
 
 #[tokio::test]
 async fn test_sovereign_developer_adapter_rejects_path_traversal() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(&temp_dir).await.unwrap();
 
     let adapter = SovereignDeveloperAdapter::new(&temp_dir);
@@ -125,7 +123,7 @@ async fn test_sovereign_developer_adapter_rejects_path_traversal() {
     let permit = Permit::new(
         "task_1".into(),
         "act_escape".into(),
-        "developer".into(),
+        "developer__read".into(),
         None,
         RiskClass::High,
         60,
@@ -140,4 +138,3 @@ async fn test_sovereign_developer_adapter_rejects_path_traversal() {
 
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 }
-

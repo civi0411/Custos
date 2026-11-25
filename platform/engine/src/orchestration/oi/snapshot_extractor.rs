@@ -3,8 +3,8 @@
 //! Extracts an immutable DecisionSnapshot from the current state of reality:
 //! Task, Budget, Outbox, and Contract criteria.
 
-use custos_core::contracts::storage::{OutboxPort, OutboxStatus};
-use custos_domain::{DecisionSnapshot, DomainError, Task};
+use custos_contracts::contracts::storage::{OutboxPort, OutboxStatus};
+use custos_contracts::{DecisionSnapshot, DomainError, Task};
 
 pub struct DecisionSnapshotExtractor;
 
@@ -49,7 +49,7 @@ impl DecisionSnapshotExtractor {
             remaining_budget_usd,
             pending_effects_count: pending_effects,
             uncertain_effects_count: uncertain_effects,
-            active_worker_runs_count: if task.status == custos_domain::TaskStatus::Running {
+            active_worker_runs_count: if task.status == custos_contracts::TaskStatus::Running {
                 1
             } else {
                 0
@@ -67,7 +67,7 @@ impl DecisionSnapshotExtractor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{ContractEvidence, EvidenceKind, TaskContract, TaskStatus};
+    use custos_contracts::{ContractEvidence, EvidenceKind, TaskContract, TaskStatus};
 
     #[tokio::test]
     async fn test_extract_snapshot_from_task() {

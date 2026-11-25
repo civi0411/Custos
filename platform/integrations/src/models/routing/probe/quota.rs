@@ -1,4 +1,4 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde_json::Value;
 use std::time::Duration;
 

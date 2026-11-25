@@ -2,13 +2,11 @@ use anyhow::Result;
 use std::time::Duration;
 use url::Url;
 
-use super::options::{
-    OllamaOptions, OLLAMA_DEFAULT_PORT, OLLAMA_PROVIDER_NAME, OLLAMA_TIMEOUT,
-};
+use super::options::{OllamaOptions, OLLAMA_DEFAULT_PORT, OLLAMA_PROVIDER_NAME, OLLAMA_TIMEOUT};
 use super::provider::OllamaProvider;
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 use crate::base::ModelInfo;
 use crate::cloud::declarative::{DeclarativeProviderConfig, KeyResolver};
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 
 pub struct OllamaProviderBuilder {
     api_client: ApiClient,

@@ -1,5 +1,5 @@
 use crate::connection::DbConnection;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::Transaction;
 
 /// UnitOfWork wraps a transactional boundary (T1–T5) in SQLite WAL.
@@ -19,9 +19,8 @@ impl UnitOfWork {
 
         let result = f(&tx)?;
 
-        tx.commit().map_err(|e| {
-            DomainError::Validation(format!("Failed to commit transaction: {}", e))
-        })?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(format!("Failed to commit transaction: {}", e)))?;
 
         Ok(result)
     }
@@ -50,9 +49,11 @@ mod tests {
         // Verify row exists
         let exists = db
             .read(|conn| {
-                let mut stmt = conn.prepare("SELECT count(*) FROM tasks WHERE id = 'uow_task_1'")
+                let mut stmt = conn
+                    .prepare("SELECT count(*) FROM tasks WHERE id = 'uow_task_1'")
                     .map_err(|e| DomainError::Validation(e.to_string()))?;
-                let count: i64 = stmt.query_row([], |row| row.get(0))
+                let count: i64 = stmt
+                    .query_row([], |row| row.get(0))
                     .map_err(|e| DomainError::Validation(e.to_string()))?;
                 Ok(count == 1)
             })
@@ -74,9 +75,11 @@ mod tests {
         // Verify row was rolled back and does not exist
         let exists_2 = db
             .read(|conn| {
-                let mut stmt = conn.prepare("SELECT count(*) FROM tasks WHERE id = 'uow_task_2'")
+                let mut stmt = conn
+                    .prepare("SELECT count(*) FROM tasks WHERE id = 'uow_task_2'")
                     .map_err(|e| DomainError::Validation(e.to_string()))?;
-                let count: i64 = stmt.query_row([], |row| row.get(0))
+                let count: i64 = stmt
+                    .query_row([], |row| row.get(0))
                     .map_err(|e| DomainError::Validation(e.to_string()))?;
                 Ok(count == 1)
             })

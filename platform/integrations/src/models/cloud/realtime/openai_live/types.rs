@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
-use std::time::Duration;
 use rmcp::model::Role;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
+use std::time::Duration;
 
-use crate::cloud::realtime::live::{LiveSession, LiveSessionEvent};
 use super::protocol::OpenAiLiveProtocol;
+use crate::cloud::realtime::live::{LiveSession, LiveSessionEvent};
 
 pub const DEFAULT_OPENAI_LIVE_HTTP_URL: &str = "https://api.openai.com/v1/live/sessions";
 pub const DEFAULT_OPENAI_LIVE_WEBSOCKET_URL: &str = "wss://api.openai.com/v1/live/sessions";

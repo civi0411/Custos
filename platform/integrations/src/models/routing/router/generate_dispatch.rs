@@ -1,5 +1,5 @@
-use custos_domain::DomainError;
-use custos_provider::{ModelResponse, ProviderRequest};
+use crate::{ModelResponse, ProviderRequest};
+use custos_contracts::DomainError;
 use tracing::debug;
 
 use super::catalog::{find_by_service, strip_model_prefix};
@@ -36,28 +36,76 @@ impl RouterModelProvider {
         match target_provider {
             "native-local" => {
                 let local = self.native_local.as_ref().ok_or_else(|| {
-                    DomainError::Validation("Native local inference runtime is not configured".to_string())
+                    DomainError::Validation(
+                        "Native local inference runtime is not configured".to_string(),
+                    )
                 })?;
                 local.generate(req).await
             }
             "copilot" => {
-                let github = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("copilot")).await?.ok_or_else(|| DomainError::Validation("Connect GitHub Copilot first".into()))?;
+                let github = self
+                    .resolver
+                    .get_token(req.provider_account_id.as_deref().unwrap_or("copilot"))
+                    .await?
+                    .ok_or_else(|| {
+                        DomainError::Validation("Connect GitHub Copilot first".into())
+                    })?;
                 let token = crate::cloud::transport::copilot_session_token(&github).await?;
-                let model = requested_model.strip_prefix("copilot/").ok_or_else(|| DomainError::Validation("Invalid Copilot model".into()))?;
-                self.execute_openai_compatible("https://api.githubcopilot.com", Some(&token), model, req, "GitHub Copilot").await
+                let model = requested_model
+                    .strip_prefix("copilot/")
+                    .ok_or_else(|| DomainError::Validation("Invalid Copilot model".into()))?;
+                self.execute_openai_compatible(
+                    "https://api.githubcopilot.com",
+                    Some(&token),
+                    model,
+                    req,
+                    "GitHub Copilot",
+                )
+                .await
             }
             "gemini-oauth" => {
-                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("gemini")).await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
-                self.observe_adapter_error(crate::cloud::google_codeassist::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await, req).await
+                let token = self
+                    .resolver
+                    .get_token(req.provider_account_id.as_deref().unwrap_or("gemini"))
+                    .await?
+                    .ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
+                self.observe_adapter_error(
+                    crate::cloud::google_codeassist::generate_codeassist_content(
+                        "gemini",
+                        "https://cloudcode-pa.googleapis.com",
+                        &token,
+                        req,
+                    )
+                    .await,
+                    req,
+                )
+                .await
             }
             "google" | "antigravity" => {
-                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("google")).await?;
+                let token = self
+                    .resolver
+                    .get_token(req.provider_account_id.as_deref().unwrap_or("google"))
+                    .await?;
                 let token = match token {
                     Some(t) => t,
-                    None => self.resolver.get_token("antigravity").await?.ok_or_else(|| DomainError::Validation("Connect Google OAuth first".into()))?,
+                    None => self
+                        .resolver
+                        .get_token("antigravity")
+                        .await?
+                        .ok_or_else(|| {
+                            DomainError::Validation("Connect Google OAuth first".into())
+                        })?,
                 };
-                let base = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("google")).await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
-                self.observe_adapter_error(crate::cloud::google_codeassist::generate_content(&base, &token, req).await, req).await
+                let base = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("google"))
+                    .await?
+                    .unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
+                self.observe_adapter_error(
+                    crate::cloud::google_codeassist::generate_content(&base, &token, req).await,
+                    req,
+                )
+                .await
             }
             "openai" => {
                 let oauth = self
@@ -89,7 +137,9 @@ impl RouterModelProvider {
                     .ok()
                     .flatten();
                 if oauth {
-                    return self.execute_chatgpt_codex(&token, requested_model, req).await;
+                    return self
+                        .execute_chatgpt_codex(&token, requested_model, req)
+                        .await;
                 }
                 let base_url =
                     custom_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
@@ -101,8 +151,16 @@ impl RouterModelProvider {
                 } else {
                     requested_model
                 };
-                if custos_provider::model::is_openai_responses_model(model) {
-                    return self.execute_responses(&token, model, req, &format!("{}/responses", base_url.trim_end_matches('/')), false).await;
+                if crate::model::is_openai_responses_model(model) {
+                    return self
+                        .execute_responses(
+                            &token,
+                            model,
+                            req,
+                            &format!("{}/responses", base_url.trim_end_matches('/')),
+                            false,
+                        )
+                        .await;
                 }
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, "OpenAI")
                     .await
@@ -157,14 +215,8 @@ impl RouterModelProvider {
                 } else {
                     requested_model
                 };
-                self.execute_openai_compatible(
-                    &base_url,
-                    Some(&token),
-                    model,
-                    req,
-                    "Google Gemini",
-                )
-                .await
+                self.execute_openai_compatible(&base_url, Some(&token), model, req, "Google Gemini")
+                    .await
             }
             "deepseek" => {
                 let token = (if let Some(account) = req.provider_account_id.as_deref() {
@@ -265,26 +317,57 @@ impl RouterModelProvider {
                 })?;
                 let custom_url = self
                     .resolver
-                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider))
+                    .get_endpoint_url(
+                        req.provider_account_id
+                            .as_deref()
+                            .unwrap_or(target_provider),
+                    )
                     .await
                     .ok()
                     .flatten();
                 let base_url = custom_url.unwrap_or_else(|| endpoint.default_base_url.to_string());
                 let clean_model = strip_model_prefix(requested_model, endpoint);
-                self.execute_openai_compatible(&base_url, Some(&token), clean_model, req, target_provider)
-                    .await
-            }
-            _ if self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.ok().flatten().is_some() => {
-                let base_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.unwrap().unwrap();
-                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.ok().flatten();
-                let clean_model = if let Some((_, rem)) = requested_model.split_once('/') { rem } else { requested_model };
-                self.execute_openai_compatible(&base_url, token.as_deref(), clean_model, req, target_provider).await
+                self.execute_openai_compatible(
+                    &base_url,
+                    Some(&token),
+                    clean_model,
+                    req,
+                    target_provider,
+                )
+                .await
             }
             _ => {
-                Err(DomainError::Validation(format!(
-                    "Unsupported model or provider for '{}'. Please select a supported model in the Model Selector.",
-                    requested_model
-                )))
+                let account_key = req
+                    .provider_account_id
+                    .as_deref()
+                    .unwrap_or(target_provider);
+                if let Some(base_url) = self
+                    .resolver
+                    .get_endpoint_url(account_key)
+                    .await
+                    .ok()
+                    .flatten()
+                {
+                    let token = self.resolver.get_token(account_key).await.ok().flatten();
+                    let clean_model = if let Some((_, rem)) = requested_model.split_once('/') {
+                        rem
+                    } else {
+                        requested_model
+                    };
+                    self.execute_openai_compatible(
+                        &base_url,
+                        token.as_deref(),
+                        clean_model,
+                        req,
+                        target_provider,
+                    )
+                    .await
+                } else {
+                    Err(DomainError::Validation(format!(
+                        "Unsupported model or provider for '{}'. Please select a supported model in the Model Selector.",
+                        requested_model
+                    )))
+                }
             }
         }
     }

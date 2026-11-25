@@ -1,5 +1,5 @@
-use custos_provider::conversation::message::{Message, MessageContent};
-use custos_provider::errors::ProviderError;
+use crate::conversation::message::{Message, MessageContent};
+use crate::errors::ProviderError;
 use rmcp::model::CallToolRequestParams;
 use serde_json::Value;
 use std::borrow::Cow;

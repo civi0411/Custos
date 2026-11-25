@@ -1,6 +1,6 @@
 //! Immutable bundles stored only in the operating system credential store.
 use base64::{engine::general_purpose::STANDARD, Engine};
-use custos_core::contracts::credentials::{
+use custos_contracts::contracts::credentials::{
     credential_part_count, CredentialLocation, CredentialVault, CredentialVaultError as Error,
     CREDENTIAL_SEGMENT_SIZE, MAX_CREDENTIAL_BYTES,
 };
@@ -184,6 +184,19 @@ impl FileCredentialVault {
     }
 }
 
+fn write_private_file(path: &std::path::Path, data: &[u8]) -> Result<(), Error> {
+    use std::io::Write;
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut file = opts.open(path).map_err(|_| Error::Unavailable)?;
+    file.write_all(data).map_err(|_| Error::Unavailable)
+}
+
 impl CredentialVault for FileCredentialVault {
     fn write(&self, location: &CredentialLocation, secret: &[u8]) -> Result<(), Error> {
         if secret.is_empty() || secret.len() > MAX_CREDENTIAL_BYTES {
@@ -201,12 +214,7 @@ impl CredentialVault for FileCredentialVault {
         {
             let value = std::str::from_utf8(chunk).map_err(|_| Error::Invalid)?;
             let part_path = self.entry_path(location, &index.to_string())?;
-            fs::write(&part_path, value.as_bytes()).map_err(|_| Error::Unavailable)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&part_path, fs::Permissions::from_mode(0o600));
-            }
+            write_private_file(&part_path, value.as_bytes())?;
         }
         let manifest = Manifest {
             version: 1,
@@ -218,12 +226,7 @@ impl CredentialVault for FileCredentialVault {
             digest: format!("{:x}", Sha256::digest(secret)),
         };
         let json = serde_json::to_string(&manifest).map_err(|_| Error::Invalid)?;
-        fs::write(&manifest_path, json.as_bytes()).map_err(|_| Error::Unavailable)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600));
-        }
+        write_private_file(&manifest_path, json.as_bytes())?;
         Ok(())
     }
 

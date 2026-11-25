@@ -10,10 +10,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use custos_core::contracts::checkpoint_store::{
+use custos_contracts::contracts::checkpoint_store::{
     BlobMetadata, CheckpointStorePort, PromotionOutcome, StoreCapabilities,
 };
-use custos_domain::{DomainError, TrainingCheckpointManifest};
+use custos_contracts::{DomainError, TrainingCheckpointManifest};
 
 type BlobMap = HashMap<String, (Vec<u8>, BlobMetadata)>;
 

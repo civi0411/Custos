@@ -1,14 +1,14 @@
 use super::*;
-use std::sync::Arc;
-use custos_core::contracts::supervision::{
+use custos_contracts::contracts::supervision::{
     NormalizedTelemetryBatch, SupervisionIngestPort, SupervisionQueryPort, SupervisionTraceSink,
 };
-use custos_domain::supervision::{
+use custos_contracts::supervision::{
     FindingKind, RunStepSpan, StepSpanKind, StepSpanStatus, SupervisionProfile,
     SupervisionRunRecord, SupervisionRunStatus, ThresholdPolicy,
 };
-use custos_domain::UsageMeasurement;
+use custos_contracts::UsageMeasurement;
 use serde_json::json;
+use std::sync::Arc;
 
 #[test]
 fn redactor_masks_secrets_before_persistence() {
@@ -100,15 +100,29 @@ async fn coordinator_ingests_and_queries_persisted_waterfall() {
     };
 
     coord.ingest_batch(batch).await.unwrap();
-    let waterfall = coord.get_run_waterfall("run_test_1").await.unwrap().unwrap();
+    let waterfall = coord
+        .get_run_waterfall("run_test_1")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(waterfall.spans.len(), 3);
     assert_eq!(waterfall.spans[0].metadata["api_key"], "[REDACTED]");
     assert!(waterfall
         .findings
         .iter()
         .any(|f| f.kind == FindingKind::PossibleLoop));
-    assert_eq!(waterfall.applied_profile.workbench_id.as_deref(), Some("coding"));
+    assert_eq!(
+        waterfall.applied_profile.workbench_id.as_deref(),
+        Some("coding")
+    );
 
     // Non-blocking observer sink smoke call outside background task
-    coord.notify_run_state("run_test_1", Some("coding"), "code_implementer", false, 1000, Some(2000));
+    coord.notify_run_state(
+        "run_test_1",
+        Some("coding"),
+        "code_implementer",
+        false,
+        1000,
+        Some(2000),
+    );
 }

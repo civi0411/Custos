@@ -5,4 +5,3 @@ pub mod observation;
 
 pub use config::*;
 pub use observation::*;
-

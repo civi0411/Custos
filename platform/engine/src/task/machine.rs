@@ -2,7 +2,7 @@
 //!
 //! Validates state graph transitions and provides introspection.
 
-use custos_domain::{DomainError, TaskStatus};
+use custos_contracts::{DomainError, TaskStatus};
 
 pub struct TaskStateMachine;
 

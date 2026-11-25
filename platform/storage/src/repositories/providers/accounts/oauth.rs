@@ -1,5 +1,5 @@
 use super::super::ProviderRepository;
-use custos_domain::{DomainError, OAuthTokenRecord, ProviderConfig};
+use custos_contracts::{DomainError, OAuthTokenRecord, ProviderConfig};
 use rusqlite::params;
 
 impl ProviderRepository {
@@ -228,7 +228,7 @@ impl ProviderRepository {
     pub fn get_connector_capabilities(
         &self,
         provider_id: &str,
-    ) -> Result<Vec<custos_domain::ResourceActionCapability>, DomainError> {
+    ) -> Result<Vec<custos_contracts::ResourceActionCapability>, DomainError> {
         let token = self.get_oauth_token(provider_id)?;
         let mut caps = Vec::new();
         match token {
@@ -244,7 +244,7 @@ impl ProviderRepository {
                     || scopes.contains("mail.send")
                     || scopes.contains("*")
                 {
-                    caps.push(custos_domain::ResourceActionCapability {
+                    caps.push(custos_contracts::ResourceActionCapability {
                         id: "connector.email".into(),
                         label: "Email Dispatch".into(),
                         status: "available".into(),
@@ -253,7 +253,7 @@ impl ProviderRepository {
                         shortcut: None,
                     });
                 } else {
-                    caps.push(custos_domain::ResourceActionCapability {
+                    caps.push(custos_contracts::ResourceActionCapability {
                         id: "connector.email".into(),
                         label: "Email Dispatch".into(),
                         status: "unavailable".into(),
@@ -268,7 +268,7 @@ impl ProviderRepository {
                     || scopes.contains("calendar.write")
                     || scopes.contains("*")
                 {
-                    caps.push(custos_domain::ResourceActionCapability {
+                    caps.push(custos_contracts::ResourceActionCapability {
                         id: "connector.calendar".into(),
                         label: "Calendar Schedule".into(),
                         status: "available".into(),
@@ -277,7 +277,7 @@ impl ProviderRepository {
                         shortcut: None,
                     });
                 } else {
-                    caps.push(custos_domain::ResourceActionCapability {
+                    caps.push(custos_contracts::ResourceActionCapability {
                         id: "connector.calendar".into(),
                         label: "Calendar Schedule".into(),
                         status: "unavailable".into(),
@@ -288,7 +288,7 @@ impl ProviderRepository {
                 }
             }
             Some(_) => {
-                caps.push(custos_domain::ResourceActionCapability {
+                caps.push(custos_contracts::ResourceActionCapability {
                     id: "connector.email".into(),
                     label: "Email Dispatch".into(),
                     status: "unavailable".into(),
@@ -296,7 +296,7 @@ impl ProviderRepository {
                     primary: false,
                     shortcut: None,
                 });
-                caps.push(custos_domain::ResourceActionCapability {
+                caps.push(custos_contracts::ResourceActionCapability {
                     id: "connector.calendar".into(),
                     label: "Calendar Schedule".into(),
                     status: "unavailable".into(),
@@ -306,7 +306,7 @@ impl ProviderRepository {
                 });
             }
             None => {
-                caps.push(custos_domain::ResourceActionCapability {
+                caps.push(custos_contracts::ResourceActionCapability {
                     id: "connector.email".into(),
                     label: "Email Dispatch".into(),
                     status: "unavailable".into(),
@@ -314,7 +314,7 @@ impl ProviderRepository {
                     primary: false,
                     shortcut: None,
                 });
-                caps.push(custos_domain::ResourceActionCapability {
+                caps.push(custos_contracts::ResourceActionCapability {
                     id: "connector.calendar".into(),
                     label: "Calendar Schedule".into(),
                     status: "unavailable".into(),
@@ -327,4 +327,3 @@ impl ProviderRepository {
         Ok(caps)
     }
 }
-

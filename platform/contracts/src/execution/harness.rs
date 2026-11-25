@@ -167,4 +167,3 @@ pub struct HarnessDescriptor {
     pub maturity: HarnessMaturity,
     pub profile: HarnessProfile,
 }
-

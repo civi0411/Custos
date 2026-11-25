@@ -1,8 +1,8 @@
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::base::{Provider, ProviderDescriptor};
 use crate::cloud::openrouter::provider::{
     merge_openrouter_parameters, OpenRouterProvider, OPENROUTER_PARAMETERS_CONFIG_KEY,
 };
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod};
 use crate::conversation::message::Message;
 use crate::model::ModelConfig;
 use serde_json::json;

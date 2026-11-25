@@ -1,5 +1,5 @@
-use custos_domain::LoadedModelInstance;
-use custos_provider::errors::ProviderError;
+use crate::errors::ProviderError;
+use custos_contracts::LoadedModelInstance;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use super::types::{
 /// A healthy existing process is replaced only after the candidate is healthy.
 pub async fn start_sidecar(
     model_path: &Path,
-    profile: &custos_domain::LocalModelLoadProfile,
+    profile: &custos_contracts::LocalModelLoadProfile,
 ) -> Result<LoadedModelInstance, ProviderError> {
     let context_size = usize::try_from(profile.context_size).map_err(|_| {
         ProviderError::ExecutionError("Local model context size exceeds this platform".to_string())
@@ -197,7 +197,7 @@ pub async fn start_sidecar(
     let loaded_at = chrono::Utc::now().timestamp_millis();
     let instance_id = format!(
         "sidecar_{}",
-        &custos_domain::digest(model_name.as_bytes())[..12]
+        &custos_contracts::digest(model_name.as_bytes())[..12]
     );
 
     let reported_gpu_layers = if matches!(profile.gpu_mode.as_str(), "manual" | "off") {

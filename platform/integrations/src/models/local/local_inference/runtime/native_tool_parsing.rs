@@ -1,7 +1,7 @@
-use custos_provider::conversation::message::{Message, MessageContent};
-use custos_provider::errors::ProviderError;
-use custos_provider::codecs::openai::is_valid_function_name;
-use custos_provider::json::safely_parse_json;
+use crate::codecs::openai::is_valid_function_name;
+use crate::conversation::message::{Message, MessageContent};
+use crate::errors::ProviderError;
+use crate::json::safely_parse_json;
 use rmcp::model::{object, CallToolRequestParams, ErrorCode, ErrorData};
 use serde_json::{json, Value};
 use std::borrow::Cow;

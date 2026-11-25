@@ -1,7 +1,6 @@
 use super::messages::{format_messages, DatabricksMessage};
 use super::tools::format_tools;
 use crate::cache_semantics::{apply_chat_payload_breakpoints, CacheSemantics};
-use crate::conversation::message::Message;
 use crate::cloud::codecs::anthropic::{
     adaptive_output_effort, model_supports_temperature, requires_explicit_thinking_disable,
     thinking_budget_tokens, thinking_type_for_provider, ThinkingType,
@@ -10,6 +9,7 @@ use crate::cloud::codecs::openai::{
     extract_reasoning_effort, is_openai_responses_model, openai_reasoning_effort_for_thinking,
     validate_tool_schemas,
 };
+use crate::conversation::message::Message;
 use crate::images::ImageFormat;
 use crate::model::{is_goose_internal_request_param, ModelConfig};
 use anyhow::{anyhow, Error};

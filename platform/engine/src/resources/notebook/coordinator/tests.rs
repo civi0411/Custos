@@ -1,6 +1,6 @@
 use super::*;
+use custos_contracts::contracts::notebook::{CellExecutionStatus, ExecuteCellParams, NotebookCell};
 use std::collections::HashMap;
-use custos_core::contracts::notebook::{CellExecutionStatus, ExecuteCellParams, NotebookCell};
 
 #[derive(Default)]
 struct InMemoryNotebookStorage {
@@ -12,26 +12,41 @@ impl NotebookStoragePort for InMemoryNotebookStorage {
     async fn list_notebook_cells(&self, _s: &str) -> Result<Vec<NotebookCell>, DomainError> {
         Ok(vec![])
     }
-    async fn replace_notebook_cells(&self, _s: &str, _c: &[NotebookCell]) -> Result<(), DomainError> {
+    async fn replace_notebook_cells(
+        &self,
+        _s: &str,
+        _c: &[NotebookCell],
+    ) -> Result<(), DomainError> {
         Ok(())
     }
     async fn save_notebook_cell(&self, _c: &NotebookCell) -> Result<(), DomainError> {
         Ok(())
     }
     async fn get_notebook_kernel_state(&self, s: &str) -> Result<NotebookKernelState, DomainError> {
-        self.states.lock().unwrap().get(s).cloned().ok_or_else(|| DomainError::NotFound {
-            kind: "NotebookKernelState".to_string(),
-            id: s.to_string(),
-        })
+        self.states
+            .lock()
+            .unwrap()
+            .get(s)
+            .cloned()
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "NotebookKernelState".to_string(),
+                id: s.to_string(),
+            })
     }
-    async fn save_notebook_kernel_state(&self, state: &NotebookKernelState) -> Result<(), DomainError> {
-        self.states.lock().unwrap().insert(state.session_id.clone(), state.clone());
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &NotebookKernelState,
+    ) -> Result<(), DomainError> {
+        self.states
+            .lock()
+            .unwrap()
+            .insert(state.session_id.clone(), state.clone());
         Ok(())
     }
 }
 
 fn test_coordinator() -> PythonKernelCoordinator {
-    PythonKernelCoordinator::new(Arc::new(custos_adapters::notebook::LocalPythonDriver))
+    PythonKernelCoordinator::new(Arc::new(custos_integrations::notebook::LocalPythonDriver))
 }
 
 #[tokio::test]

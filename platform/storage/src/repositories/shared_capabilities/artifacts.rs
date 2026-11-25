@@ -1,5 +1,5 @@
 use super::SharedCapabilitiesRepository;
-use custos_domain::{
+use custos_contracts::{
     ArtifactLineageGraph, ArtifactLineageNode, ArtifactSummary, DomainError, LineageGraphEdge,
     LineageGraphNode,
 };
@@ -233,4 +233,3 @@ impl SharedCapabilitiesRepository {
         })
     }
 }
-

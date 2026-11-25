@@ -4,7 +4,7 @@
 //! (e.g. `../` escapes, symlink traversal, or arbitrary absolute paths).
 //! Pure policy validation; concrete OS stats/symlinks are injected via observations.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone)]

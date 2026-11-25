@@ -1,11 +1,11 @@
+use crate::cloud::codecs::openai::{
+    extract_reasoning_effort, is_openai_responses_model, openai_reasoning_effort_for_thinking,
+    sanitize_function_name,
+};
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::documents::{
     convert_document, document_media_type_is_supported, unsupported_document_text, DocumentFormat,
     ASSISTANT_ROLE_REASON, UNSUPPORTED_MEDIA_TYPE_REASON,
-};
-use crate::cloud::codecs::openai::{
-    extract_reasoning_effort, is_openai_responses_model, openai_reasoning_effort_for_thinking,
-    sanitize_function_name,
 };
 use crate::mcp_utils::extract_text_from_resource;
 use crate::model::ModelConfig;
@@ -13,7 +13,11 @@ use anyhow::{anyhow, Error};
 use rmcp::model::{ContentBlock, Role, Tool};
 use serde_json::{json, Value};
 
-pub(crate) fn add_message_items(input_items: &mut Vec<Value>, messages: &[Message], supports_vision: bool) {
+pub(crate) fn add_message_items(
+    input_items: &mut Vec<Value>,
+    messages: &[Message],
+    supports_vision: bool,
+) {
     for message in messages.iter().filter(|m| m.is_agent_visible()) {
         let role = match message.role {
             Role::User => "user",

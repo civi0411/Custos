@@ -3,7 +3,7 @@
 //! Queries physical RAM, CPU brand string, real-time free memory, and
 //! Metal unified memory allocation ceiling.
 
-use custos_domain::LocalHardwareProfile;
+use custos_contracts::LocalHardwareProfile;
 #[cfg(target_os = "macos")]
 use std::process::Command;
 

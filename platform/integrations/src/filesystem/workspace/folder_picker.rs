@@ -28,4 +28,3 @@ pub async fn pick_folder(purpose: Option<&str>) -> Option<String> {
         None
     }
 }
-

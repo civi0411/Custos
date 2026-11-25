@@ -83,4 +83,3 @@ mod tests {
         assert!(!obs.is_operable());
     }
 }
-

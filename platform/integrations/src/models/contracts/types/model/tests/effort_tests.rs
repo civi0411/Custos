@@ -50,8 +50,7 @@ fn with_default_thinking_effort_preserves_unparseable_raw_param() {
 
 #[test]
 fn with_default_thinking_effort_applies_when_absent() {
-    let config =
-        ModelConfig::new("test").with_default_thinking_effort(Some(ThinkingEffort::High));
+    let config = ModelConfig::new("test").with_default_thinking_effort(Some(ThinkingEffort::High));
 
     assert_eq!(config.thinking_effort(), Some(ThinkingEffort::High));
 }
@@ -62,8 +61,8 @@ fn preserves_explicit_thinking_effort() {
         "previous",
         HashMap::from([("thinking_effort".to_string(), serde_json::json!("high"))]),
     );
-    let config = ModelConfig::new("next")
-        .with_inherited_session_settings_from(Some(&previous), None);
+    let config =
+        ModelConfig::new("next").with_inherited_session_settings_from(Some(&previous), None);
 
     assert_eq!(
         config
@@ -108,8 +107,8 @@ fn inherits_reasoning_controls_but_not_provider_specific_params() {
             ("anthropic_beta".to_string(), serde_json::json!("beta")),
         ]),
     );
-    let config = ModelConfig::new("next")
-        .with_inherited_session_settings_from(Some(&previous), None);
+    let config =
+        ModelConfig::new("next").with_inherited_session_settings_from(Some(&previous), None);
 
     let params = config.request_params.expect("reasoning controls inherited");
     assert_eq!(params.get("budget_tokens"), Some(&serde_json::json!(8192)));
@@ -262,4 +261,3 @@ fn parse_aliases() {
     assert_eq!("xhigh".parse::<ThinkingEffort>(), Ok(ThinkingEffort::Max));
     assert!("invalid".parse::<ThinkingEffort>().is_err());
 }
-

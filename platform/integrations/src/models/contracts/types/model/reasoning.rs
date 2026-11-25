@@ -228,4 +228,3 @@ impl ModelConfig {
         self.request_param::<String>("cache_ttl")
     }
 }
-

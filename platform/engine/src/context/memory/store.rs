@@ -7,8 +7,8 @@
 use super::traits::{MemoryStore, MemoryTier};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use custos_core::contracts::memory::MemoryPort;
-use custos_domain::{
+use custos_contracts::contracts::memory::MemoryPort;
+use custos_contracts::{
     new_id, DomainError, Fact, FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact,
     ProposalReceipt, ProposalStatus, RecallQuery, WorkerRunId,
 };

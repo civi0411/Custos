@@ -6,19 +6,19 @@ use safemlx_lm::gemma4_mtp::generate_gemma4_mtp;
 use safemlx_lm::models::{gemma4_assistant::load_gemma4_assistant_model, LoadedModel, Model};
 use safemlx_lm_utils::tokenizer::Tokenizer;
 
+use crate::conversation::token_usage::{DraftStats, ProviderStats, ProviderUsage, Usage};
+use crate::errors::ProviderError;
 use crate::local_inference::backend::{
     BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend,
 };
 use crate::local_inference::model::{ModelSettings, ToolCallingMode};
 use crate::local_inference::tool_emulation::CODE_EXECUTION_TOOL;
 use crate::local_inference::ResolvedModelPaths;
-use custos_provider::conversation::token_usage::{DraftStats, ProviderStats, ProviderUsage, Usage};
-use custos_provider::errors::ProviderError;
-use custos_provider::request_log::LoggerHandleExt;
+use crate::request_log::LoggerHandleExt;
 
 use super::generation::{
-    emit_generated_response, generate_single_model, mlx_error, mlx_max_tokens, prng_key,
-    sampling, MlxGeneration, MlxStreamEmitter,
+    emit_generated_response, generate_single_model, mlx_error, mlx_max_tokens, prng_key, sampling,
+    MlxGeneration, MlxStreamEmitter,
 };
 use super::prompt::{build_prompt, ToolMode};
 
@@ -128,8 +128,7 @@ impl LocalInferenceBackend for MlxBackend {
         let model_dir = model_dir_from_path(&resolved.model_path)?;
         let stream = Stream::new_with_device(&Device::new(DeviceType::Gpu, 0));
         let weights_stream = Stream::new_with_device(&Device::new(DeviceType::Cpu, 0));
-        let model =
-            LoadedModel::load(&model_dir, &stream, &weights_stream).map_err(mlx_error)?;
+        let model = LoadedModel::load(&model_dir, &stream, &weights_stream).map_err(mlx_error)?;
         let tokenizer =
             Tokenizer::from_file(model_dir.join("tokenizer.json")).map_err(mlx_error)?;
         tracing::info!(
@@ -166,10 +165,7 @@ impl LocalInferenceBackend for MlxBackend {
             match request.settings.tool_calling {
                 ToolCallingMode::ForceNative => ToolMode::Native,
                 ToolCallingMode::Auto | ToolCallingMode::ForceEmulated => ToolMode::Emulated {
-                    code_mode_enabled: request
-                        .tools
-                        .iter()
-                        .any(|t| t.name == CODE_EXECUTION_TOOL),
+                    code_mode_enabled: request.tools.iter().any(|t| t.name == CODE_EXECUTION_TOOL),
                 },
             }
         };

@@ -207,7 +207,10 @@ mod tests {
     #[test]
     fn test_ping_matching() {
         match FastPathFilter::evaluate("ping") {
-            FastPathResult::Matched { command_kind, response } => {
+            FastPathResult::Matched {
+                command_kind,
+                response,
+            } => {
                 assert_eq!(command_kind, FastPathCommand::Ping);
                 assert!(response.contains("pong"));
             }
@@ -218,7 +221,10 @@ mod tests {
     #[test]
     fn test_workbenches_matching() {
         match FastPathFilter::evaluate("list workbenches") {
-            FastPathResult::Matched { command_kind, response } => {
+            FastPathResult::Matched {
+                command_kind,
+                response,
+            } => {
                 assert_eq!(command_kind, FastPathCommand::Workbenches);
                 assert!(response.contains("Assistant"));
                 assert!(response.contains("Quant"));
@@ -247,7 +253,8 @@ mod tests {
     fn test_is_fast_path_helper() {
         assert!(FastPathFilter::is_fast_path("clear"));
         assert!(FastPathFilter::is_fast_path("/version"));
-        assert!(!FastPathFilter::is_fast_path("Refactor the login controller"));
+        assert!(!FastPathFilter::is_fast_path(
+            "Refactor the login controller"
+        ));
     }
 }
-

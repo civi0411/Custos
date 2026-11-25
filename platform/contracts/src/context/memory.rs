@@ -1,6 +1,6 @@
 //! Memory Value Objects (Custos.md §9.3)
 //!
-//! Pure data types used by `custos_core::contracts::MemoryPort`.
+//! Pure data types used by `custos_contracts::MemoryPort`.
 //! The model may READ memory and PROPOSE facts; it can never write or delete directly.
 //!
 //! STATUS: DRAFT under Interface Freeze (Sprint 0). Field changes require an RFC.

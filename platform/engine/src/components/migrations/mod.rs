@@ -75,7 +75,8 @@ impl MigrationDispatcher {
     /// the scoped naming convention `mod_<workbench_id>_*` to prevent kernel pollution.
     pub fn validate_scoped_tables(workbench_id: &str, sql: &str) -> Result<()> {
         let expected_prefix = format!("mod_{}_", workbench_id);
-        let re = regex::Regex::new(r"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)")?;
+        let re =
+            regex::Regex::new(r"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)")?;
 
         for cap in re.captures_iter(sql) {
             let table_name = &cap[1];
@@ -120,4 +121,3 @@ mod tests {
         assert!(res.unwrap_err().to_string().contains("Scope violation"));
     }
 }
-

@@ -1,7 +1,7 @@
 use crate::repositories::{
     CommandLedgerRepository, ExperimentAttemptRepository, OutboxRepository, RunRepository,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Summary of records reconciled upon crash recovery / startup.
@@ -81,13 +81,9 @@ mod tests {
         let attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let command_repo = CommandLedgerRepository::new(db.clone());
 
-        let summary = CrashReconciler::reconcile_all(
-            &outbox_repo,
-            &run_repo,
-            &attempt_repo,
-            &command_repo,
-        )
-        .expect("reconciliation succeeds");
+        let summary =
+            CrashReconciler::reconcile_all(&outbox_repo, &run_repo, &attempt_repo, &command_repo)
+                .expect("reconciliation succeeds");
 
         assert_eq!(summary.outbox_reconciled, 0);
         assert_eq!(summary.runs_reconciled, 0);

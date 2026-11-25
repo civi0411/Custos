@@ -2,11 +2,11 @@ use std::time::Instant;
 
 use serde_json::json;
 
+use crate::cloud::codecs::databricks::DATABRICKS_PROVIDER_NAME;
 use crate::cloud::databricks::types::{
     CachedDatabricksEndpointInfo, DatabricksEndpointInfo, DatabricksProvider,
     EndpointMetadataLookup,
 };
-use crate::cloud::codecs::databricks::DATABRICKS_PROVIDER_NAME;
 use crate::model::ModelConfig;
 
 #[test]
@@ -219,8 +219,8 @@ fn vision_support_resolves_from_upstream_model_behind_endpoint_alias() {
     assert_eq!(resolved.supports_vision, Some(true));
     assert_eq!(resolved.model_name, "production-chat");
 
-    let catalog_alias = ModelConfig::new("gpt-3.5-turbo")
-        .with_canonical_vision_support(DATABRICKS_PROVIDER_NAME);
+    let catalog_alias =
+        ModelConfig::new("gpt-3.5-turbo").with_canonical_vision_support(DATABRICKS_PROVIDER_NAME);
     assert_eq!(catalog_alias.supports_vision, Some(false));
 
     let corrected = DatabricksProvider::resolve_vision_support(&catalog_alias, "gpt-4o")
@@ -268,4 +268,3 @@ fn responses_routing_falls_back_to_model_name_without_metadata() {
         &["databricks-claude-sonnet-4"]
     ));
 }
-

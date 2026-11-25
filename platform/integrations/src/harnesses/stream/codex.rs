@@ -1,6 +1,6 @@
 //! OpenAI Codex exec JSON protocol normalization.
 
-use custos_core::contracts::harness::RunObserver;
+use custos_contracts::contracts::harness::RunObserver;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;

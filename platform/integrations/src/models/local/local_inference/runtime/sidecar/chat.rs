@@ -1,4 +1,4 @@
-use custos_provider::errors::ProviderError;
+use crate::errors::ProviderError;
 use futures::StreamExt;
 
 use super::types::get_sidecar_port;
@@ -8,14 +8,14 @@ use super::types::get_sidecar_port;
 pub async fn stream_sidecar_chat(
     model_name: &str,
     system: &str,
-    messages: &[custos_provider::conversation::message::Message],
+    messages: &[crate::conversation::message::Message],
     temperature: Option<f32>,
     max_tokens: Option<i32>,
     tx: tokio::sync::mpsc::Sender<
         Result<
             (
-                Option<custos_provider::conversation::message::Message>,
-                Option<custos_provider::conversation::token_usage::ProviderUsage>,
+                Option<crate::conversation::message::Message>,
+                Option<crate::conversation::token_usage::ProviderUsage>,
             ),
             ProviderError,
         >,
@@ -58,12 +58,10 @@ pub async fn stream_sidecar_chat(
     }
 
     let client = reqwest::Client::new();
-    let res = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| ProviderError::ExecutionError(format!("Sidecar HTTP request failed: {e}")))?;
+    let res =
+        client.post(&url).json(&body).send().await.map_err(|e| {
+            ProviderError::ExecutionError(format!("Sidecar HTTP request failed: {e}"))
+        })?;
 
     if !res.status().is_success() {
         let err_text = res.text().await.unwrap_or_default();
@@ -108,9 +106,7 @@ pub async fn stream_sidecar_chat(
                                     })
                                     .unwrap_or("");
                                 if !text.is_empty() {
-                                    let msg =
-                                        custos_provider::conversation::message::Message::assistant(
-                                        )
+                                    let msg = crate::conversation::message::Message::assistant()
                                         .with_text(text);
                                     let _ = tx.send(Ok((Some(msg), None))).await;
                                 }
@@ -130,16 +126,15 @@ pub async fn stream_sidecar_chat(
                             .get("total_tokens")
                             .and_then(|v| v.as_i64())
                             .map(|v| v as i32);
-                        let usage = custos_provider::conversation::token_usage::Usage::new(
+                        let usage = crate::conversation::token_usage::Usage::new(
                             prompt_tokens,
                             completion_tokens,
                             total_tokens,
                         );
-                        let provider_usage =
-                            custos_provider::conversation::token_usage::ProviderUsage::new(
-                                model_name.to_string(),
-                                usage,
-                            );
+                        let provider_usage = crate::conversation::token_usage::ProviderUsage::new(
+                            model_name.to_string(),
+                            usage,
+                        );
                         let _ = tx.send(Ok((None, Some(provider_usage)))).await;
                     }
                 }

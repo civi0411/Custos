@@ -1,6 +1,6 @@
 //! Harness observer primitives: no-op discarding and cancellation wrapping.
 
-use custos_core::contracts::harness::RunObserver;
+use custos_contracts::contracts::harness::RunObserver;
 use serde_json::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

@@ -1,11 +1,11 @@
 use super::port::{
     AttachMode, BridgePort, ForkReceipt, RecallReceipt, SteerReceipt, SteerResult, TaskObservation,
 };
-use async_trait::async_trait;
-use crate::task::{CreateTask, TaskService};
-use custos_domain::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
 use crate::session::SessionManager;
+use crate::task::{CreateTask, TaskService};
 use crate::workflow::TaskRuntime;
+use async_trait::async_trait;
+use custos_contracts::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
 use std::sync::Arc;
 
 pub struct BridgeService {

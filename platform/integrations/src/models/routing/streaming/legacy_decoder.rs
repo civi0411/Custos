@@ -1,8 +1,8 @@
 //! Incremental provider framing decoder for legacy provider events.
 
 use super::types::{actual_model, count, event, Wire};
-use custos_domain::DomainError;
-use custos_provider::{ProviderEvent, ProviderEventType, TokenUsage, ToolCall};
+use crate::{ProviderEvent, ProviderEventType, TokenUsage, ToolCall};
+use custos_contracts::DomainError;
 use serde_json::Value;
 
 #[derive(Default)]

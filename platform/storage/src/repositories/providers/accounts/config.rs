@@ -1,5 +1,5 @@
 use super::super::ProviderRepository;
-use custos_domain::{ClientApiKeyRecord, DomainError, ProviderConfig};
+use custos_contracts::{ClientApiKeyRecord, DomainError, ProviderConfig};
 use rusqlite::params;
 
 impl ProviderRepository {
@@ -226,7 +226,7 @@ impl ProviderRepository {
         conn.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("provider"),
+                custos_contracts::new_id("provider"),
                 topic,
                 payload,
                 chrono::Utc::now().to_rfc3339()
@@ -236,4 +236,3 @@ impl ProviderRepository {
         Ok(())
     }
 }
-

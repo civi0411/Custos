@@ -3,7 +3,7 @@
 //! Evaluates policy rules before granting permits.
 
 use async_trait::async_trait;
-use custos_domain::{Action, DomainError, RiskLevel};
+use custos_contracts::{Action, DomainError, RiskLevel};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -103,17 +103,17 @@ impl PolicyEvaluator for DefaultPolicyEvaluator {
         _task_id: &str,
         action: &Action,
     ) -> Result<PolicyDecision, DomainError> {
-        match action.risk_level {
-            custos_domain::RiskLevel::Low | custos_domain::RiskLevel::Medium => {
+        match crate::authority::risk::RiskEvaluator::classify_action(action) {
+            custos_contracts::RiskLevel::Low | custos_contracts::RiskLevel::Medium => {
                 Ok(PolicyDecision::Allow)
             }
-            custos_domain::RiskLevel::High => Ok(PolicyDecision::RequireApproval {
+            custos_contracts::RiskLevel::High => Ok(PolicyDecision::RequireApproval {
                 reason: format!(
                     "High-risk action '{}' requires explicit human confirmation",
                     action.name
                 ),
             }),
-            custos_domain::RiskLevel::Critical => Ok(PolicyDecision::Deny {
+            custos_contracts::RiskLevel::Critical => Ok(PolicyDecision::Deny {
                 reason: format!(
                     "Critical action '{}' is blocked by default policy",
                     action.name

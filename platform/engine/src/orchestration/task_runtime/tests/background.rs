@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
-use custos_domain::StartRunCommand;
 use custos_contracts::inference::{ModelResponse, ProviderEvent, ProviderRequest};
+use custos_contracts::StartRunCommand;
 
 struct SlowStreamModel;
 #[async_trait]
@@ -9,10 +9,7 @@ impl ModelPort for SlowStreamModel {
     fn provider_id(&self) -> &str {
         "slow"
     }
-    async fn generate(
-        &self,
-        _: &ProviderRequest,
-    ) -> Result<ModelResponse, DomainError> {
+    async fn generate(&self, _: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         Err(DomainError::Validation("Streaming only".into()))
     }
     async fn stream(
@@ -22,9 +19,7 @@ impl ModelPort for SlowStreamModel {
         let (tx, rx) = tokio::sync::mpsc::channel(4);
         let id = req.request_id.clone();
         tokio::spawn(async move {
-            tx.send(ProviderEvent::chunk(&id, "partial"))
-                .await
-                .unwrap();
+            tx.send(ProviderEvent::chunk(&id, "partial")).await.unwrap();
             tokio::select! {_=tx.closed()=>{},_=tokio::time::sleep(std::time::Duration::from_secs(30))=>{}}
         });
         Ok(rx)
@@ -96,14 +91,14 @@ async fn background_returns_early_and_stop_preserves_partial() {
 
 #[tokio::test]
 async fn durable_background_result_restores_without_duplicate_journal() {
-    use custos_core::contracts::storage::RunPort;
-    use custos_core::TaskStore;
+    use custos_contracts::contracts::storage::RunPort;
+    use custos_contracts::TaskStore;
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let task = custos_domain::Task::new("durable-live-task".into(), "Durable live".into());
+    let task = custos_contracts::Task::new("durable-live-task".into(), "Durable live".into());
     store.save_task(&task).await.unwrap();
     let sessions = Arc::new(crate::session::SessionManager::with_store(store.clone()));
     let session = sessions
-        .create_session(custos_domain::SessionMode::Assisted)
+        .create_session(custos_contracts::SessionMode::Assisted)
         .await;
     let runtime = TaskRuntime::new()
         .with_run_store(store.clone())
@@ -151,7 +146,7 @@ async fn durable_background_result_restores_without_duplicate_journal() {
             .count(),
         1
     );
-    let mut interrupted = custos_domain::Run::new(task.id.clone(), 2);
+    let mut interrupted = custos_contracts::Run::new(task.id.clone(), 2);
     interrupted.transition(RunStatus::Active).unwrap();
     interrupted.metadata = serde_json::json!({"session_id":session.id,"background":true});
     store.save_run(&mut interrupted).await.unwrap();
@@ -190,4 +185,3 @@ async fn live_capacity_rejection_releases_dispatch_claim() {
         .await
         .is_none());
 }
-

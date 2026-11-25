@@ -118,4 +118,3 @@ fn truncate_utf8(input: &str, max_bytes: usize) -> String {
     }
     format!("{} [truncated]", &input[..end])
 }
-

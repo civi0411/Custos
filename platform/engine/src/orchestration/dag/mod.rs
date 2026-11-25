@@ -3,7 +3,7 @@
 //! Validates directed acyclic graphs, performs cycle detection (Kahn's algorithm),
 //! computes topological execution waves, and orchestrates dependency-gated step advancement.
 
-use custos_domain::{new_id, DomainError, WorkflowPlan};
+use custos_contracts::{new_id, DomainError, WorkflowPlan};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
@@ -62,15 +62,15 @@ impl DagNode {
     }
 
     /// Returns the strongly-typed WorkflowNodeId for this node.
-    pub fn typed_id(&self) -> custos_domain::WorkflowNodeId {
-        custos_domain::WorkflowNodeId::new(&self.id)
+    pub fn typed_id(&self) -> custos_contracts::WorkflowNodeId {
+        custos_contracts::WorkflowNodeId::new(&self.id)
     }
 
     /// Returns strongly-typed WorkflowNodeId vector for all dependencies.
-    pub fn typed_dependencies(&self) -> Vec<custos_domain::WorkflowNodeId> {
+    pub fn typed_dependencies(&self) -> Vec<custos_contracts::WorkflowNodeId> {
         self.depends_on
             .iter()
-            .map(custos_domain::WorkflowNodeId::new)
+            .map(custos_contracts::WorkflowNodeId::new)
             .collect()
     }
 }

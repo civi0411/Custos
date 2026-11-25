@@ -1,4 +1,4 @@
-use custos_domain::{
+use custos_contracts::{
     DomainError, HeadlessAutomationJob, HeadlessJobStatus, HeadlessTaskSpec, HeadlessTrigger,
 };
 use rusqlite::{params, OptionalExtension};
@@ -145,7 +145,10 @@ impl FleetAutomationRepository {
         Ok(jobs)
     }
 
-    fn row_to_headless_job(&self, row: HeadlessJobRow) -> Result<HeadlessAutomationJob, DomainError> {
+    fn row_to_headless_job(
+        &self,
+        row: HeadlessJobRow,
+    ) -> Result<HeadlessAutomationJob, DomainError> {
         let (
             id,
             name,
@@ -188,4 +191,3 @@ impl FleetAutomationRepository {
         })
     }
 }
-

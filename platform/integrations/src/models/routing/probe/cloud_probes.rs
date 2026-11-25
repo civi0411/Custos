@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, ProbedModel};
+use custos_contracts::{DomainError, ProbedModel};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::Value;
 use std::time::Duration;
@@ -167,7 +167,7 @@ pub(crate) fn parse_provider_models(
             }
             let id = m.get("id")?.as_str()?.to_string();
             let endpoint = required_endpoint.unwrap_or_else(|| {
-                if custos_provider::model::is_openai_responses_model(&id) {
+                if crate::model::is_openai_responses_model(&id) {
                     "/responses"
                 } else {
                     "/chat/completions"

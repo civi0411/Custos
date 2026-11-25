@@ -139,4 +139,3 @@ mod tests {
         assert!(matches!(res.unwrap_err(), DomainError::Unauthorized(_)));
     }
 }
-

@@ -3,7 +3,7 @@
 //! Evaluates fan-in results at synchronization join nodes.
 
 pub use super::write_set::WriteSetConflictChecker;
-use custos_domain::oi::{WorkerResult, WorkerStatus};
+use custos_contracts::oi::{WorkerResult, WorkerStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

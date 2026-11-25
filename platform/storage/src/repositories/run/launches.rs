@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, LaunchAttempt, LaunchStatus};
+use custos_contracts::{DomainError, LaunchAttempt, LaunchStatus};
 use rusqlite::{params, OptionalExtension};
 
 use super::RunRepository;

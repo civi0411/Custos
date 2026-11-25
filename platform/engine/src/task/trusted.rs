@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use custos_domain::{
+use custos_contracts::{
     ActionIntent, DomainError, Permit, Task, TaskContract, TaskStatus, VerificationClaim,
 };
 
 use crate::authority::AuthorityEngine;
 use crate::contracts::kernel::KernelPort;
 use crate::evidence::{EvidenceBundle, EvidencePipeline};
-use crate::kernel::{CompleteTask, CreateTask, TaskService, TaskStore};
+use crate::task::{CompleteTask, CreateTask, TaskService, TaskStore};
 
 /// Reference implementation composing the three trusted engines already in this crate.
 pub struct TrustedKernel {
@@ -104,6 +104,21 @@ impl KernelPort for TrustedKernel {
         permit_id: &str,
         intent: &ActionIntent,
     ) -> Result<Permit, DomainError> {
+        let existing = self.authority.permits.verify_permit(permit_id)?;
+        if existing.capability != intent.name {
+            return Err(DomainError::Unauthorized(format!(
+                "Permit '{}' capability '{}' does not match action '{}'",
+                permit_id, existing.capability, intent.name
+            )));
+        }
+        if let Some(ref task_id) = intent.task_id {
+            if &existing.task_id != task_id {
+                return Err(DomainError::Unauthorized(format!(
+                    "Permit '{}' belongs to task '{}', not '{}'",
+                    permit_id, existing.task_id, task_id
+                )));
+            }
+        }
         self.authority
             .permits
             .consume_permit(permit_id, &intent.argument_digest())
@@ -121,8 +136,8 @@ impl KernelPort for TrustedKernel {
         task_id: &str,
         grantee: &str,
         capability: &str,
-    ) -> Result<custos_domain::Grant, DomainError> {
-        let grant = custos_domain::Grant::new(
+    ) -> Result<custos_contracts::Grant, DomainError> {
+        let grant = custos_contracts::Grant::new(
             task_id.to_string(),
             grantee.to_string(),
             capability.to_string(),
@@ -137,7 +152,7 @@ impl KernelPort for TrustedKernel {
         &self,
         task_id: &str,
         capability: &str,
-    ) -> Result<Option<custos_domain::Grant>, DomainError> {
+    ) -> Result<Option<custos_contracts::Grant>, DomainError> {
         Ok(self.authority.grants.find_active_grant(task_id, capability))
     }
 
@@ -167,4 +182,3 @@ impl KernelPort for TrustedKernel {
         Ok(updated)
     }
 }
-

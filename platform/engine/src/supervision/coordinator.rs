@@ -5,17 +5,17 @@ use super::processor::{ActiveRunWindow, SupervisionCommand};
 use super::SupervisionProfileRegistry;
 use crate::workflow::live::LiveRuns;
 use async_trait::async_trait;
-use custos_core::contracts::supervision::{
+use custos_contracts::contracts::supervision::{
     NormalizedTelemetryBatch, RunWaterfallView, SupervisionFindingFilter, SupervisionIngestPort,
     SupervisionLogFilter, SupervisionOverview, SupervisionQueryPort, SupervisionRunFilter,
     SupervisionStorePort, SupervisionTraceSink,
 };
-use custos_domain::supervision::{
+use custos_contracts::supervision::{
     default_rules, group_step_errors, ErrorGroupSummary, RunStepSpan, StepError,
     SupervisionFinding, SupervisionLogEntry, SupervisionProfile, SupervisionRule,
     SupervisionRunRecord,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -82,10 +82,13 @@ impl SupervisionCoordinator {
             return;
         };
 
-        let coordinator = Arc::clone(self);
+        let weak_coord = Arc::downgrade(self);
         tokio::spawn(async move {
             let mut batch: Vec<SupervisionCommand> = Vec::with_capacity(64);
             while let Some(first) = rx.recv().await {
+                let Some(coordinator) = weak_coord.upgrade() else {
+                    break;
+                };
                 batch.push(first);
                 while batch.len() < 64 {
                     match rx.try_recv() {
@@ -98,20 +101,36 @@ impl SupervisionCoordinator {
             }
         });
 
-        let sweeper = Arc::clone(self);
+        let weak_sweeper = Arc::downgrade(self);
         tokio::spawn(async move {
             loop {
+                let Some(sweeper) = weak_sweeper.upgrade() else {
+                    break;
+                };
                 let has_active = sweeper
                     .active_runs
                     .lock()
                     .map(|g| !g.is_empty())
                     .unwrap_or(false);
                 if !has_active {
-                    // Event-driven sleep: 0% CPU and 0 DB queries while no active runs exist.
-                    sweeper.sweeper_notify.notified().await;
+                    let notify = sweeper.sweeper_notify.clone();
+                    drop(sweeper);
+                    // Wait for notification or exit cleanly once coordinator is dropped.
+                    tokio::select! {
+                        _ = notify.notified() => {}
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(SWEEP_INTERVAL_SECS)) => {
+                            if weak_sweeper.strong_count() == 0 {
+                                break;
+                            }
+                        }
+                    }
                     continue;
                 }
+                drop(sweeper);
                 tokio::time::sleep(std::time::Duration::from_secs(SWEEP_INTERVAL_SECS)).await;
+                let Some(sweeper) = weak_sweeper.upgrade() else {
+                    break;
+                };
                 let _ = sweeper.sweep_active_runs().await;
             }
         });
@@ -202,7 +221,10 @@ impl SupervisionQueryPort for SupervisionCoordinator {
         Ok(guard.values().map(|w| w.record.clone()).collect())
     }
 
-    async fn get_run_waterfall(&self, run_id: &str) -> Result<Option<RunWaterfallView>, DomainError> {
+    async fn get_run_waterfall(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<RunWaterfallView>, DomainError> {
         if let Some(ref store) = self.store {
             let Some(run) = store.get_run_record(run_id).await? else {
                 return Ok(None);

@@ -1,6 +1,6 @@
 use super::SharedCapabilitiesRepository;
 use chrono::{DateTime, Utc};
-use custos_domain::{AnnotationRecord, AnnotationStatus, AnnotationTarget, DomainError};
+use custos_contracts::{AnnotationRecord, AnnotationStatus, AnnotationTarget, DomainError};
 use rusqlite::params;
 
 impl SharedCapabilitiesRepository {
@@ -55,7 +55,7 @@ impl SharedCapabilitiesRepository {
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("ann_event"),
+                custos_contracts::new_id("ann_event"),
                 "artifact.annotation.saved",
                 serde_json::json!({
                     "annotation_id": ann.id,
@@ -187,4 +187,3 @@ impl SharedCapabilitiesRepository {
         })
     }
 }
-

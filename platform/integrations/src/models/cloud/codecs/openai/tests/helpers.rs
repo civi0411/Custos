@@ -43,7 +43,9 @@ pub(crate) struct StreamingUsageTestResult {
     pub(crate) output_token_limit_message_ids: Vec<Option<String>>,
 }
 
-pub(crate) async fn run_streaming_test(response_lines: &str) -> anyhow::Result<StreamingUsageTestResult> {
+pub(crate) async fn run_streaming_test(
+    response_lines: &str,
+) -> anyhow::Result<StreamingUsageTestResult> {
     let lines: Vec<String> = response_lines.lines().map(|s| s.to_string()).collect();
     let response_stream = tokio_stream::iter(lines.into_iter().map(Ok));
     let messages = response_to_streaming_message(response_stream);

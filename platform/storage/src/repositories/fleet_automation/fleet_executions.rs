@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, FleetExecReceipt};
+use custos_contracts::{DomainError, FleetExecReceipt};
 use rusqlite::params;
 
 use super::FleetAutomationRepository;
@@ -134,4 +134,3 @@ impl FleetAutomationRepository {
         ))
     }
 }
-

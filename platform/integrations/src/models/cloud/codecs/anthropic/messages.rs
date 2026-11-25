@@ -1,3 +1,4 @@
+use super::options::*;
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::documents::{
     convert_document, document_media_type_is_supported, unsupported_document_text, DocumentFormat,
@@ -7,7 +8,6 @@ use crate::images::{convert_image, ImageFormat};
 use crate::mcp_utils::extract_text_from_resource;
 use rmcp::model::{ContentBlock, JsonObject, ResourceContents, Role};
 use serde_json::{json, Value};
-use super::options::*;
 
 pub fn args_to_input_value(arguments: Option<JsonObject>) -> Value {
     Value::Object(arguments.unwrap_or_default())
@@ -280,4 +280,3 @@ pub fn format_messages_with_options(
 
     anthropic_messages
 }
-

@@ -1,5 +1,5 @@
-use std::{fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -64,4 +64,3 @@ pub enum ThinkingEffortSupport {
     /// The provider passes through a harness-advertised effort option.
     Options(ThinkingEffortCapability),
 }
-

@@ -119,4 +119,3 @@ mod tests {
         assert_ne!(note.content_hash, v1_hash);
     }
 }
-

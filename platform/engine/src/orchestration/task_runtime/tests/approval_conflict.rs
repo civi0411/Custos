@@ -1,12 +1,14 @@
 use super::*;
-use custos_domain::StartRunCommand;
+use custos_contracts::StartRunCommand;
 
 #[tokio::test]
 async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
-    use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
-    use custos_core::contracts::kernel::KernelPort;
-    use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
-    use custos_domain::{
+    use custos_contracts::contracts::harness::{
+        AgentRuntimePort, HarnessProfile, ToolMediationLevel,
+    };
+    use custos_contracts::contracts::kernel::KernelPort;
+    use custos_contracts::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+    use custos_contracts::{
         Action, ActionLifecycleState, Assurance, ContextPack, RiskLevel, TaskStatus, WorkerRun,
     };
     use tokio::sync::Mutex;
@@ -24,7 +26,7 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
             &self,
             worker_run: &WorkerRun,
             _ctx: &ContextPack,
-        ) -> Result<Vec<custos_domain::ActionIntent>, DomainError> {
+        ) -> Result<Vec<custos_contracts::ActionIntent>, DomainError> {
             let mut intent = Action::new(
                 "act_delete".into(),
                 "delete_database".into(),
@@ -44,22 +46,22 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
     }
     #[async_trait::async_trait]
     impl KernelPort for TaskStatusKernel {
-        async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> {
+        async fn create_task(&self, _: String) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn create_task_with_contract(
             &self,
             _: String,
-            _: custos_domain::TaskContract,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _: custos_contracts::TaskContract,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
         async fn get_task(
             &self,
             task_id: &str,
-        ) -> Result<Option<custos_domain::Task>, DomainError> {
+        ) -> Result<Option<custos_contracts::Task>, DomainError> {
             let status = *self.task_status.lock().await;
-            let mut t = custos_domain::Task::new(task_id.into(), "Conflict".into());
+            let mut t = custos_contracts::Task::new(task_id.into(), "Conflict".into());
             t.status = status;
             Ok(Some(t))
         }
@@ -67,19 +69,19 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
             &self,
             _: &str,
             next: TaskStatus,
-        ) -> Result<custos_domain::Task, DomainError> {
+        ) -> Result<custos_contracts::Task, DomainError> {
             let mut status = self.task_status.lock().await;
             *status = next;
-            let mut t = custos_domain::Task::new("task_conflict_02".into(), "Conflict".into());
+            let mut t = custos_contracts::Task::new("task_conflict_02".into(), "Conflict".into());
             t.status = next;
             Ok(t)
         }
         async fn request_permit(
             &self,
             _: &str,
-            _: &custos_domain::ActionIntent,
+            _: &custos_contracts::ActionIntent,
             _: &str,
-        ) -> Result<custos_domain::Permit, DomainError> {
+        ) -> Result<custos_contracts::Permit, DomainError> {
             Err(DomainError::Conflict(
                 "Approval required for high risk delete".into(),
             ))
@@ -87,14 +89,14 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
         async fn consume_permit(
             &self,
             _: &str,
-            _: &custos_domain::ActionIntent,
-        ) -> Result<custos_domain::Permit, DomainError> {
+            _: &custos_contracts::ActionIntent,
+        ) -> Result<custos_contracts::Permit, DomainError> {
             unreachable!()
         }
         async fn verify_evidence(
             &self,
-            _: &custos_core::evidence::EvidenceBundle,
-        ) -> Result<custos_domain::VerificationClaim, DomainError> {
+            _: &custos_contracts::evidence::EvidenceBundle,
+        ) -> Result<custos_contracts::VerificationClaim, DomainError> {
             unreachable!()
         }
         async fn grant_capability(
@@ -102,22 +104,22 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
             _: &str,
             _: &str,
             _: &str,
-        ) -> Result<custos_domain::Grant, DomainError> {
+        ) -> Result<custos_contracts::Grant, DomainError> {
             unreachable!()
         }
         async fn find_active_grant(
             &self,
             _: &str,
             _: &str,
-        ) -> Result<Option<custos_domain::Grant>, DomainError> {
+        ) -> Result<Option<custos_contracts::Grant>, DomainError> {
             unreachable!()
         }
         async fn complete_task(
             &self,
             _: &str,
             _: String,
-            _: Vec<custos_domain::VerificationClaim>,
-        ) -> Result<custos_domain::Task, DomainError> {
+            _: Vec<custos_contracts::VerificationClaim>,
+        ) -> Result<custos_contracts::Task, DomainError> {
             unreachable!()
         }
     }
@@ -176,7 +178,7 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
         async fn mark_receipted(
             &self,
             _: &str,
-            _: custos_domain::Receipt,
+            _: custos_contracts::Receipt,
         ) -> Result<(), DomainError> {
             Ok(())
         }
@@ -189,8 +191,8 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
     }
 
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let task = custos_domain::Task::new("task_conflict_02".into(), "Conflict Test".into());
-    custos_core::TaskStore::save_task(&*store, &task)
+    let task = custos_contracts::Task::new("task_conflict_02".into(), "Conflict Test".into());
+    custos_contracts::TaskStore::save_task(&*store, &task)
         .await
         .unwrap();
 
@@ -265,17 +267,17 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
         let mut entries = outbox_entries.lock().await;
         entries[0].status = OutboxStatus::Approved;
         let entry_id = entries[0].id.clone();
-        entries[0].receipt = Some(custos_domain::ExecutionReceipt {
+        entries[0].receipt = Some(custos_contracts::ExecutionReceipt {
             receipt_id: format!("rcpt_{entry_id}"),
             permit_id: format!("pmt_{entry_id}"),
             action_id: "test_action".into(),
-            status: custos_domain::ReceiptStatus::Success,
+            status: custos_contracts::ReceiptStatus::Success,
             output_digest: "sha256:executed".into(),
             output_data: Some(serde_json::json!({"action": "executed"})),
             error_message: None,
             duration_ms: Some(10),
             executed_at: chrono::Utc::now(),
-            assurance: custos_domain::Assurance::CustosMediated,
+            assurance: custos_contracts::Assurance::CustosMediated,
         });
     }
     let resumed = runtime.resume(&handle.run_id).await.unwrap();
@@ -298,4 +300,3 @@ async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
         "Task must succeed after resumed approval execution"
     );
 }
-

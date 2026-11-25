@@ -1,3 +1,5 @@
+use super::streaming::output_token_limit_tool_error;
+use super::streaming::types::{describe_json_value, StreamingChunk};
 use crate::conversation::message::{Message, MessageContentBlock};
 use crate::conversation::token_usage::{CostSource, ProviderUsage, Usage};
 use crate::json::{parse_tool_arguments, truncation_error_message};
@@ -5,8 +7,6 @@ use crate::thinking::split_think_blocks;
 use rmcp::model::{object, CallToolRequestParams, ErrorCode, ErrorData, Role};
 use serde_json::Value;
 use std::borrow::Cow;
-use super::streaming::types::{describe_json_value, StreamingChunk};
-use super::streaming::output_token_limit_tool_error;
 
 pub fn record_response_metadata(usage: &mut ProviderUsage, response: &Value) {
     usage.response_id = response
@@ -257,7 +257,6 @@ pub fn get_cost(usage: &Value) -> Option<f64> {
         .and_then(|v| v.as_f64())
         .filter(|c| c.is_finite() && *c >= 0.0)
 }
-
 
 pub(crate) fn extract_usage_with_output_tokens(
     chunk: &StreamingChunk,

@@ -25,6 +25,3 @@ pub use snapshot::*;
 pub use spec::*;
 pub use state::*;
 pub use terminal::*;
-
-// Re-export compute for fleet module compatibility
-pub use crate::resources::compute;

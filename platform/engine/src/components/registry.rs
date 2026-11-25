@@ -3,11 +3,13 @@
 //! Provides composition-root discovery and lookups for all Domain Packs,
 //! Workbench Jobs, Worker Roles (Subagents), and Verifiers.
 
-use custos_domain::session::WorkbenchLens;
+use custos_contracts::session::WorkbenchLens;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::contracts::pack::{DomainPack, DomainPackManifest, PackVerifier, WorkbenchJob, WorkerRole};
+use crate::contracts::pack::{
+    DomainPack, DomainPackManifest, PackVerifier, WorkbenchJob, WorkerRole,
+};
 
 /// Central registry housing all active domain packs in Custos.
 pub struct DomainPackRegistry {
@@ -117,7 +119,7 @@ impl DomainPackRegistry {
     /// Collects lazy supervision profiles contributed by currently enabled domain packs.
     pub fn list_supervision_profiles(
         &self,
-    ) -> Vec<(String, custos_domain::supervision::SupervisionProfile)> {
+    ) -> Vec<(String, custos_contracts::supervision::SupervisionProfile)> {
         let Ok(packs) = self.packs.read() else {
             return Vec::new();
         };
@@ -194,8 +196,8 @@ impl DomainPackRegistry {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::session::WorkbenchLens;
-    use custos_domain::DomainError;
+    use custos_contracts::session::WorkbenchLens;
+    use custos_contracts::DomainError;
 
     struct TestPack;
 
@@ -217,7 +219,7 @@ mod tests {
             custos_contracts::PackProfile::new(
                 "assistant",
                 "Test Profile",
-                custos_domain::oi::ExecutionTopology::T1SingleWorker,
+                custos_contracts::oi::ExecutionTopology::T1SingleWorker,
                 vec![],
                 "test_oracle",
                 50_000,
@@ -248,8 +250,13 @@ mod tests {
         fn description(&self) -> &'static str {
             "Test oracle"
         }
-        async fn verify(&self, _ctx: &custos_contracts::VerificationContext) -> custos_contracts::VerificationResult {
-            custos_contracts::VerificationResult::Pass { detail: "ok".into() }
+        async fn verify(
+            &self,
+            _ctx: &custos_contracts::VerificationContext,
+        ) -> custos_contracts::VerificationResult {
+            custos_contracts::VerificationResult::Pass {
+                detail: "ok".into(),
+            }
         }
     }
 
@@ -265,7 +272,9 @@ mod tests {
         assert!(registry.has_pack("assistant"));
         assert_eq!(registry.list_packs().len(), 1);
 
-        let manifest = registry.get_pack_manifest("assistant").expect("assistant manifest");
+        let manifest = registry
+            .get_pack_manifest("assistant")
+            .expect("assistant manifest");
         assert_eq!(manifest.id, "assistant");
         assert_eq!(manifest.lens, WorkbenchLens::Assistant);
 

@@ -1,5 +1,5 @@
+use custos_contracts::DomainError;
 use custos_protocol::worker::{WorkerBudget, WorkerObservation, WorkerOperation};
-use custos_domain::DomainError;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Instant;
@@ -189,7 +189,9 @@ impl WorkerLease {
             }
 
             // 1. Try parsing as typed WorkerResponse envelope
-            if let Ok(resp) = serde_json::from_slice::<custos_protocol::worker::WorkerResponse>(&stdout_buf) {
+            if let Ok(resp) =
+                serde_json::from_slice::<custos_protocol::worker::WorkerResponse>(&stdout_buf)
+            {
                 match resp {
                     custos_protocol::worker::WorkerResponse::Observation(obs) => {
                         if obs.operation_id != self.operation_id {
@@ -219,7 +221,9 @@ impl WorkerLease {
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&stdout_buf) {
                 if val.get("response").and_then(|r| r.as_str()) == Some("observation") {
                     if let Some(obs_val) = val.get("observation") {
-                        if let Ok(obs) = serde_json::from_value::<WorkerObservation>(obs_val.clone()) {
+                        if let Ok(obs) =
+                            serde_json::from_value::<WorkerObservation>(obs_val.clone())
+                        {
                             if obs.operation_id != self.operation_id {
                                 return Ok(WorkerObservation::failure(
                                     &self.operation_id,
@@ -290,7 +294,11 @@ impl WorkerLease {
                         .or_else(|| parsed_output.get("message"))
                         .map(|v| v.to_string())
                         .unwrap_or_else(|| format!("Worker returned {status}"));
-                    return Ok(WorkerObservation::failure(&self.operation_id, err_msg, wall_ms));
+                    return Ok(WorkerObservation::failure(
+                        &self.operation_id,
+                        err_msg,
+                        wall_ms,
+                    ));
                 }
             }
 

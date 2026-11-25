@@ -1,9 +1,9 @@
 use super::SharedCapabilitiesRepository;
 use crate::connection::DbConnection;
-use custos_core::contracts::notebook::{
+use custos_contracts::contracts::notebook::{
     CellExecutionStatus, KernelStatus, NotebookCell, NotebookCellType, NotebookKernelState,
 };
-use custos_domain::{
+use custos_contracts::{
     AnnotationRecord, AnnotationStatus, ArtifactLineageNode, FindingSeverity, NoteRecord,
     ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType, ReviewerRecord,
 };
@@ -191,4 +191,3 @@ fn test_scoped_notebook_cell_and_kernel_persistence() {
         Some("nb_beta")
     );
 }
-

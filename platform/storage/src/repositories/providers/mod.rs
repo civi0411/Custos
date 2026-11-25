@@ -4,16 +4,7 @@ pub mod credentials;
 pub mod local_profiles;
 pub mod usage;
 
-#[allow(unused_imports)]
-pub use accounts::*;
-#[allow(unused_imports)]
-pub use catalog::*;
-#[allow(unused_imports)]
 pub use credentials::*;
-#[allow(unused_imports)]
-pub use local_profiles::*;
-#[allow(unused_imports)]
-pub use usage::*;
 
 use crate::connection::DbConnection;
 
@@ -30,7 +21,7 @@ impl ProviderRepository {
 
 #[cfg(test)]
 mod catalog_snapshot_tests {
-    use custos_domain::{
+    use custos_contracts::{
         LocalModelDescriptor, LocalModelFolder, LocalModelLoadProfile, ModelCatalogOption,
         ModelCompatibility, OAuthTokenRecord, ProviderConfig,
     };
@@ -277,7 +268,7 @@ mod catalog_snapshot_tests {
 
 #[cfg(test)]
 mod catalog_capability_tests {
-    use custos_domain::ModelCatalogOption;
+    use custos_contracts::ModelCatalogOption;
 
     #[test]
     fn exact_capabilities_survive_restart_and_empty_refresh() {

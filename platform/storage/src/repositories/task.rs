@@ -1,6 +1,6 @@
 use crate::connection::DbConnection;
-use custos_core::kernel::{TaskEvent, TaskSnapshotImported};
-use custos_domain::{DomainError, Task, TaskStatus};
+use custos_contracts::kernel::{TaskEvent, TaskSnapshotImported};
+use custos_contracts::{DomainError, Task, TaskStatus};
 use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Clone)]

@@ -1,6 +1,6 @@
 use super::*;
 use chrono::Utc;
-use custos_domain::{
+use custos_contracts::{
     ContractEvidence, EvidenceKind, SpanState, Task, TaskAdvanced, TaskContract, TaskCreated,
     TaskEvent, TaskStatus,
 };
@@ -114,10 +114,7 @@ async fn task_events_commit_with_snapshot_and_replay_exact_state() {
     assert_eq!(persisted.contract.unwrap().pack_id, "engineering");
 
     let same_event = TaskEvent::Created(created_event);
-    store
-        .commit_task_event(&same_event, &task)
-        .await
-        .unwrap();
+    store.commit_task_event(&same_event, &task).await.unwrap();
     assert_eq!(store.get_task_events(&task.id).await.unwrap().len(), 2);
 }
 
@@ -196,7 +193,7 @@ async fn test_foreign_key_enforcement() {
 
 #[tokio::test]
 async fn test_session_store_crud_and_journal() {
-    use custos_domain::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
+    use custos_contracts::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
 
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let session_id = SessionId("ses_test_1".into());
@@ -263,7 +260,7 @@ async fn test_session_store_crud_and_journal() {
 
 #[tokio::test]
 async fn test_run_and_worker_run_persistence() {
-    use custos_domain::{Run, RunStatus, WorkerRun};
+    use custos_contracts::{Run, RunStatus, WorkerRun};
 
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let task = Task::new("task_run_1".into(), "Run Test Task".into());
@@ -318,7 +315,7 @@ async fn test_run_and_worker_run_persistence() {
 
 #[tokio::test]
 async fn test_workflow_revision_and_replan_ports() {
-    use custos_domain::{ReplanBrief, ReplanTrigger, RevisionNode};
+    use custos_contracts::{ReplanBrief, ReplanTrigger, RevisionNode};
 
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let task = Task::new("task_store_rev_1".to_string(), "Rev Test".to_string());
@@ -380,8 +377,8 @@ async fn test_workflow_revision_and_replan_ports() {
 
 #[tokio::test]
 async fn test_execution_workspace_persistence() {
-    use custos_core::contracts::workspace::WorkspaceRepository as _;
-    use custos_domain::{ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus};
+    use custos_contracts::contracts::workspace::WorkspaceRepository as _;
+    use custos_contracts::{ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus};
 
     let store = SqliteTaskStore::new_in_memory().unwrap();
     let ws_id = WorkspaceId::generate();

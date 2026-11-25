@@ -1,10 +1,8 @@
 use super::*;
 use async_trait::async_trait;
-use custos_core::contracts::harness::ToolMediationLevel;
-use custos_domain::{
-    ActionLifecycleState, ContextPack, DomainError, WorkerRun,
-};
+use custos_contracts::contracts::harness::ToolMediationLevel;
 use custos_contracts::inference::{ModelResponse, ToolCall};
+use custos_contracts::{ActionLifecycleState, ContextPack, DomainError, WorkerRun};
 use std::collections::HashSet;
 use tokio::sync::RwLock;
 
@@ -32,8 +30,7 @@ async fn test_cancel_run_graceful_stop() {
     .with_tool_executor(executor);
 
     let worker_run = WorkerRun::new("task_cancel".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     // Cancel the run in advance
     runtime.cancel_run(&worker_run.id).await.unwrap();
@@ -112,8 +109,7 @@ async fn test_cancel_run_during_loop_stops_and_errors() {
     runtime.cancelled_runs = cancelled_runs;
 
     let worker_run = WorkerRun::new("task_cancel_mid".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     let err = runtime
         .execute_turn(&worker_run, &context_pack)
@@ -190,8 +186,7 @@ async fn test_iteration_exhaustion_returns_limited_error() {
     .with_max_iterations(2); // Only 2 iterations allowed
 
     let worker_run = WorkerRun::new("task_exhaust".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_ex".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_ex".to_string(), vec![], 0, "sha256:0".to_string());
 
     let err = runtime
         .execute_turn(&worker_run, &context_pack)
@@ -210,8 +205,7 @@ async fn test_cleanup_steering_handles_after_execution() {
 
     let runtime = GovernedAgentRuntime::new(provider, "System prompt", vec![]);
     let worker_run = WorkerRun::new("task_steer_clean".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_st".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_st".to_string(), vec![], 0, "sha256:0".to_string());
 
     // Add steering guidance
     runtime
@@ -288,8 +282,7 @@ async fn pending_approval_does_not_retry_as_failure() {
     .with_max_iterations(5);
 
     let worker_run = WorkerRun::new("task_approval".to_string(), "coder".to_string(), 1);
-    let context_pack =
-        ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+    let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
 
     let intents = runtime
         .execute_turn(&worker_run, &context_pack)

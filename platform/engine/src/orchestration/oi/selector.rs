@@ -10,8 +10,8 @@
 //! `alternatives_considered` as abstained with reasons.
 
 use super::hard_filters::HardFilters;
-use custos_domain::oi::{Candidate, DecisionSnapshot, StrategyProposal};
-use custos_domain::DomainError;
+use custos_contracts::oi::{Candidate, DecisionSnapshot, StrategyProposal};
+use custos_contracts::DomainError;
 
 /// Pareto utility weights — sum should equal 1.0 (not enforced; normalisation is relative).
 struct Weights {
@@ -22,7 +22,11 @@ struct Weights {
 
 impl Default for Weights {
     fn default() -> Self {
-        Self { quality: 0.5, cost: 0.3, latency: 0.2 }
+        Self {
+            quality: 0.5,
+            cost: 0.3,
+            latency: 0.2,
+        }
     }
 }
 
@@ -42,7 +46,9 @@ impl Selector {
         w: &Weights,
     ) -> Result<StrategyProposal, DomainError> {
         if candidates.is_empty() {
-            return Err(DomainError::Validation("No candidates provided to selector".into()));
+            return Err(DomainError::Validation(
+                "No candidates provided to selector".into(),
+            ));
         }
 
         // Separate admissible from rejected, collecting rejection reasons
@@ -117,7 +123,10 @@ impl Selector {
 
         // Remaining admissible candidates go to alternatives as deferred
         for (cand, _) in admissible {
-            alternatives.push(format!("{} (admitted, deferred by Pareto score)", cand.harness_id));
+            alternatives.push(format!(
+                "{} (admitted, deferred by Pareto score)",
+                cand.harness_id
+            ));
         }
 
         let reasoning = format!(
@@ -132,8 +141,10 @@ impl Selector {
             best_cand.est_latency_ms,
         );
 
-        Ok(Self::candidate_to_proposal(&best_cand, snapshot, alternatives)
-            .with_reasoning(reasoning))
+        Ok(
+            Self::candidate_to_proposal(&best_cand, snapshot, alternatives)
+                .with_reasoning(reasoning),
+        )
     }
 
     fn candidate_to_proposal(
@@ -142,7 +153,7 @@ impl Selector {
         alternatives: Vec<String>,
     ) -> StrategyProposal {
         StrategyProposal {
-            id: custos_domain::new_id("prop"),
+            id: custos_contracts::new_id("prop"),
             task_id: snapshot.task_id.clone(),
             chosen_topology: cand.topology,
             candidate_harness: cand.harness_id.clone(),
@@ -158,11 +169,10 @@ impl Selector {
 
 /// Chooses a context windowing strategy based on snapshot complexity.
 fn context_strategy_for(snap: &DecisionSnapshot) -> String {
-    let complexity = snap.unknowns.len()
-        + snap.uncertain_effects_count
-        + snap.pending_effects_count;
+    let complexity =
+        snap.unknowns.len() + snap.uncertain_effects_count + snap.pending_effects_count;
     if complexity >= 5 {
-        "cache_anchored".into()      // prefer prefix-cached context for complex tasks
+        "cache_anchored".into() // prefer prefix-cached context for complex tasks
     } else {
         "default_windowed".into()
     }
@@ -182,7 +192,7 @@ impl WithReasoning for StrategyProposal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::oi::{Candidate, DecisionSnapshot, ExecutionTopology};
+    use custos_contracts::oi::{Candidate, DecisionSnapshot, ExecutionTopology};
 
     fn snap() -> DecisionSnapshot {
         DecisionSnapshot {

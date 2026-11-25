@@ -7,7 +7,7 @@
 //! - Strictly empty write-set (write_set: []).
 //! - Zero execution permissions or authority requests.
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::debug;

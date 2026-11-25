@@ -1,5 +1,5 @@
 use super::*;
-use custos_domain::ComputeWorkloadKind;
+use custos_contracts::ComputeWorkloadKind;
 
 #[tokio::test]
 async fn test_device_discovery_and_exclusive_mutual_exclusion() {
@@ -114,8 +114,8 @@ async fn test_lane_quota_enforcement() {
     // Policy: max 2 agent workloads
     let mut policy = LanePolicy::coding_fanout(2);
     policy.allow_preemption = false;
-    let coord = WorkloadAdmissionCoordinator::with_custom_devices(vec![cpu.clone()])
-        .with_policy(policy);
+    let coord =
+        WorkloadAdmissionCoordinator::with_custom_devices(vec![cpu.clone()]).with_policy(policy);
 
     let req1 = WorkloadAdmissionRequest::new(ComputeWorkloadKind::NotebookKernel, "agent_1")
         .with_lane(ExecutionLane::Agent);
@@ -132,7 +132,10 @@ async fn test_lane_quota_enforcement() {
     assert!(matches!(v2, WorkloadAdmissionVerdict::Admitted { .. }));
     // 3rd agent request must be queued because quota (2) is reached
     match v3 {
-        WorkloadAdmissionVerdict::Queued { queue_position, reason } => {
+        WorkloadAdmissionVerdict::Queued {
+            queue_position,
+            reason,
+        } => {
             assert_eq!(queue_position, 1);
             assert!(reason.contains("quota"));
         }
@@ -147,11 +150,9 @@ async fn test_priority_preemption_interactive_over_ambient() {
     let coord = WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]);
 
     // 1. Ambient background embedding running on GPU
-    let req_ambient = WorkloadAdmissionRequest::new(
-        ComputeWorkloadKind::BackgroundEmbedding,
-        "ocr_ambient_task",
-    )
-    .with_exclusive(true);
+    let req_ambient =
+        WorkloadAdmissionRequest::new(ComputeWorkloadKind::BackgroundEmbedding, "ocr_ambient_task")
+            .with_exclusive(true);
 
     let v_ambient = coord.admit_workload(&req_ambient).await.unwrap();
     let lease_ambient = match v_ambient {
@@ -162,17 +163,18 @@ async fn test_priority_preemption_interactive_over_ambient() {
     assert_eq!(coord.active_lane_count(ExecutionLane::Ambient).await, 1);
 
     // 2. High-priority interactive chat request arrives requiring exclusive device access
-    let req_interactive = WorkloadAdmissionRequest::new(
-        ComputeWorkloadKind::LocalInference,
-        "interactive_chat_user",
-    )
-    .with_lane(ExecutionLane::Interactive)
-    .with_exclusive(true);
+    let req_interactive =
+        WorkloadAdmissionRequest::new(ComputeWorkloadKind::LocalInference, "interactive_chat_user")
+            .with_lane(ExecutionLane::Interactive)
+            .with_exclusive(true);
 
     let v_interactive = coord.admit_workload(&req_interactive).await.unwrap();
     let lease_interactive = match v_interactive {
         WorkloadAdmissionVerdict::Admitted { lease } => lease,
-        other => panic!("Expected interactive admitted via preemption, got {:?}", other),
+        other => panic!(
+            "Expected interactive admitted via preemption, got {:?}",
+            other
+        ),
     };
     assert_eq!(lease_interactive.lane, ExecutionLane::Interactive);
 

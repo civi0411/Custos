@@ -1,6 +1,6 @@
 use super::ArtifactStore;
 use async_trait::async_trait;
-use custos_domain::{digest, new_id, ArtifactRef, DomainError};
+use custos_contracts::{digest, new_id, ArtifactRef, DomainError};
 use std::path::PathBuf;
 
 const MAX_SAFE_CAS_READ: u64 = 256 * 1024 * 1024; // 256 MiB
@@ -74,7 +74,7 @@ impl ArtifactStore for FsArtifactStore {
 
         Ok(ArtifactRef {
             id,
-            kind: custos_domain::ArtifactKind::Other,
+            kind: custos_contracts::ArtifactKind::Other,
             hash,
             path: path.to_string_lossy().to_string(),
             size_bytes,

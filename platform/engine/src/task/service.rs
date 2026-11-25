@@ -6,7 +6,7 @@
 use chrono::Utc;
 use std::sync::Arc;
 
-use custos_domain::{new_id, DomainError, Span, Task, TaskStatus};
+use custos_contracts::{new_id, DomainError, Span, Task, TaskStatus};
 
 use crate::commands::{AdvanceTask, BlockTask, CancelTask, CompleteTask, CreateTask};
 use crate::completion::CompletionGate;
@@ -254,7 +254,7 @@ impl TaskService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::{ContinuationPacket, Span};
+    use custos_contracts::{ContinuationPacket, Span};
     use std::collections::HashMap;
     use std::sync::RwLock;
 

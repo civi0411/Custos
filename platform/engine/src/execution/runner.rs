@@ -5,11 +5,11 @@
 //! Zero-Scatter Telemetry, StepSpan emission, and SupervisionTraceSink recording.
 
 use async_trait::async_trait;
-use custos_core::contracts::harness::{
+use custos_contracts::contracts::harness::{
     AgentRuntimePort, HarnessExecutionResult, HarnessProfile, RunObserver,
 };
-use custos_core::contracts::workflow::SupervisionTraceSink;
-use custos_domain::{
+use custos_contracts::contracts::workflow::SupervisionTraceSink;
+use custos_contracts::{
     ActionIntent, ContextPack, DomainError, LogSeverity, RunStepSpan, StepError, StepSpanKind,
     StepSpanStatus, SupervisionLogEntry, WorkerRun,
 };
@@ -24,7 +24,10 @@ pub struct SupervisedAgentRunner {
 }
 
 impl SupervisedAgentRunner {
-    pub fn new(inner: Arc<dyn AgentRuntimePort>, trace_sink: Arc<dyn SupervisionTraceSink>) -> Self {
+    pub fn new(
+        inner: Arc<dyn AgentRuntimePort>,
+        trace_sink: Arc<dyn SupervisionTraceSink>,
+    ) -> Self {
         Self {
             inner,
             trace_sink: Some(trace_sink),
@@ -214,7 +217,10 @@ impl AgentRuntimePort for SupervisedAgentRunner {
             agent_id: agent_id.clone(),
         });
 
-        let result = self.inner.run_native_observed(instruction, cwd, supervised_observer).await;
+        let result = self
+            .inner
+            .run_native_observed(instruction, cwd, supervised_observer)
+            .await;
         let ended_at_ms = chrono::Utc::now().timestamp_millis();
 
         if let Some(ref sink) = self.trace_sink {

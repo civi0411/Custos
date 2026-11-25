@@ -295,4 +295,3 @@ fn test_delta_tool_call_function_accepts_null_arguments() {
     let parsed: DeltaToolCallFunction = serde_json::from_str(raw).unwrap();
     assert_eq!(parsed.arguments, "{\"k\":1}");
 }
-

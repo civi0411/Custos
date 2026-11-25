@@ -13,8 +13,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use custos_core::contracts::storage::RunPort;
-use custos_domain::{ClaimStatus, DispatchClaim, DomainError, RunStatus};
+use custos_contracts::contracts::storage::RunPort;
+use custos_contracts::{ClaimStatus, DispatchClaim, DomainError, RunStatus};
 
 #[cfg(test)]
 mod tests;

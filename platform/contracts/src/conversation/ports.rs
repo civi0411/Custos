@@ -1,8 +1,8 @@
 //! Conversation SPI Trait Ports
 
-use async_trait::async_trait;
-use crate::identity::error::DomainError;
 use crate::conversation::session::{Session, SessionId, SessionJournalEntry};
+use crate::identity::error::DomainError;
+use async_trait::async_trait;
 
 /// Persistence Port for Interactive Sessions & Interaction Journals
 #[async_trait]
@@ -17,4 +17,3 @@ pub trait SessionStore: Send + Sync {
         session_id: &SessionId,
     ) -> Result<Vec<SessionJournalEntry>, DomainError>;
 }
-

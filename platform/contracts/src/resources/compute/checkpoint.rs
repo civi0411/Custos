@@ -251,4 +251,3 @@ impl TrainingCheckpointManifest {
         Ok(())
     }
 }
-

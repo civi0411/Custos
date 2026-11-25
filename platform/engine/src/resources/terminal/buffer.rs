@@ -3,7 +3,7 @@
 //! Enforces memory bounds on retained terminal output while supporting
 //! monotonic sequence cursors for reliable client reconnection and streaming.
 
-use custos_domain::TerminalOutputChunk;
+use custos_contracts::TerminalOutputChunk;
 use std::collections::VecDeque;
 
 #[derive(Debug)]

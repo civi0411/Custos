@@ -5,7 +5,7 @@ mod resume;
 mod runner;
 
 use super::*;
-use custos_domain::{new_id, RunHandle, StartRunCommand};
+use custos_contracts::{new_id, RunHandle, StartRunCommand};
 
 impl TaskRuntime {
     pub(super) async fn dispatch_run(

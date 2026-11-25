@@ -1,36 +1,42 @@
 use super::*;
 use async_trait::async_trait;
-use custos_domain::StartRunCommand;
 use custos_contracts::inference::{ModelResponse, ProviderRequest};
+use custos_contracts::StartRunCommand;
 
 mod approval_conflict;
 mod background;
 
-
 #[tokio::test]
 async fn cancel_only_changes_workers_of_the_selected_run() {
-    use custos_core::contracts::storage::RunPort;
+    use custos_contracts::contracts::storage::RunPort;
     let store = std::sync::Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
     let task = crate::TaskService::new(store.clone())
         .create_task("Cancel scope".into())
         .await
         .unwrap();
-    let mut first = custos_domain::Run::new(task.id.clone(), 1);
-    let mut second = custos_domain::Run::new(task.id.clone(), 2);
-    first.transition(custos_domain::RunStatus::Active).unwrap();
-    second.transition(custos_domain::RunStatus::Active).unwrap();
+    let mut first = custos_contracts::Run::new(task.id.clone(), 1);
+    let mut second = custos_contracts::Run::new(task.id.clone(), 2);
+    first
+        .transition(custos_contracts::RunStatus::Active)
+        .unwrap();
+    second
+        .transition(custos_contracts::RunStatus::Active)
+        .unwrap();
     store.save_run(&mut first).await.unwrap();
     store.save_run(&mut second).await.unwrap();
     let mut worker =
-        custos_domain::WorkerRun::new(task.id.clone(), "first".into(), 3).with_run_id(&first.id);
+        custos_contracts::WorkerRun::new(task.id.clone(), "first".into(), 3).with_run_id(&first.id);
     let mut peer =
-        custos_domain::WorkerRun::new(task.id, "second".into(), 3).with_run_id(&second.id);
-    worker.transition(custos_domain::RunStatus::Active).unwrap();
-    peer.transition(custos_domain::RunStatus::Active).unwrap();
+        custos_contracts::WorkerRun::new(task.id, "second".into(), 3).with_run_id(&second.id);
+    worker
+        .transition(custos_contracts::RunStatus::Active)
+        .unwrap();
+    peer.transition(custos_contracts::RunStatus::Active)
+        .unwrap();
     store.save_worker_run(&mut worker).await.unwrap();
     store.save_worker_run(&mut peer).await.unwrap();
     let runtime = TaskRuntime::new().with_run_store(store.clone());
-    custos_core::contracts::workflow::WorkflowPort::request_cancel(
+    custos_contracts::contracts::workflow::WorkflowPort::request_cancel(
         &runtime,
         &first.id,
         "user stop",
@@ -44,7 +50,7 @@ async fn cancel_only_changes_workers_of_the_selected_run() {
             .unwrap()
             .unwrap()
             .status,
-        custos_domain::RunStatus::Cancelled
+        custos_contracts::RunStatus::Cancelled
     );
     assert_eq!(
         store
@@ -53,7 +59,7 @@ async fn cancel_only_changes_workers_of_the_selected_run() {
             .unwrap()
             .unwrap()
             .status,
-        custos_domain::RunStatus::Active
+        custos_contracts::RunStatus::Active
     );
     assert_eq!(
         store
@@ -65,8 +71,10 @@ async fn cancel_only_changes_workers_of_the_selected_run() {
         second.state_version
     );
 }
-use custos_core::contracts::harness::{HarnessExecutionResult, HarnessProfile, ToolMediationLevel};
-use custos_domain::{ActionIntent, ContextPack};
+use custos_contracts::contracts::harness::{
+    HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
+};
+use custos_contracts::{ActionIntent, ContextPack};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -255,9 +263,9 @@ async fn legacy_worker_without_chat_identity_remains_active() {
 
 #[tokio::test]
 async fn rejected_background_mode_does_not_persist_a_phantom_run() {
-    use custos_core::{contracts::storage::RunPort, TaskStore};
+    use custos_contracts::{contracts::storage::RunPort, TaskStore};
     let store = Arc::new(custos_storage::SqliteTaskStore::new_in_memory().unwrap());
-    let task = custos_domain::Task::new("unconfigured-task".into(), "Unconfigured".into());
+    let task = custos_contracts::Task::new("unconfigured-task".into(), "Unconfigured".into());
     store.save_task(&task).await.unwrap();
     let runtime = TaskRuntime::new().with_run_store(store.clone());
     assert!(runtime
@@ -275,10 +283,7 @@ impl ModelPort for TestMockModel {
         "test_model"
     }
 
-    async fn generate(
-        &self,
-        req: &ProviderRequest,
-    ) -> Result<ModelResponse, DomainError> {
+    async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         Ok(ModelResponse::text(
             format!(
                 "Completed turn response for task {} with prompt: {}",
@@ -330,8 +335,8 @@ async fn test_task_runtime_model_turn_generates_and_completes() {
 #[tokio::test]
 async fn test_task_runtime_recovers_persisted_completed_chat_turn_claim() {
     use crate::TrustedKernel;
-    use custos_core::TaskStore;
-    use custos_domain::{DispatchClaim, Task};
+    use custos_contracts::TaskStore;
+    use custos_contracts::{DispatchClaim, Task};
     use custos_storage::SqliteTaskStore;
 
     let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
@@ -392,6 +397,5 @@ async fn test_task_runtime_recovers_persisted_completed_chat_turn_claim() {
         .unwrap()
         .is_none());
 }
-
 
 mod turns;

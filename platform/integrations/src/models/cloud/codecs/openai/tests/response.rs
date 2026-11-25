@@ -425,4 +425,3 @@ fn test_response_to_message_with_multiple_extra_fields() -> anyhow::Result<()> {
 
     Ok(())
 }
-

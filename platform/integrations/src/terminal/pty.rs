@@ -7,7 +7,7 @@
 //! - Raw non-blocking / streaming I/O with process lifecycle observation
 
 use async_trait::async_trait;
-use custos_core::contracts::terminal::{
+use custos_contracts::contracts::terminal::{
     TerminalDriverPort, TerminalOutputConsumer, TerminalProcessHandle,
 };
 use std::io;

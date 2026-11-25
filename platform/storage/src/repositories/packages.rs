@@ -4,7 +4,7 @@
 //! activation intents, and lifecycle event records.
 
 use crate::connection::DbConnection;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::OptionalExtension;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +118,7 @@ impl PackageRepository {
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         // Also record to append-only event ledger with command idempotency
-        let event_id = format!("ev_{}", custos_domain::new_id("act"));
+        let event_id = format!("ev_{}", custos_contracts::new_id("act"));
         tx.execute(
             "INSERT INTO package_activation_events (id, component_id, version, event_type, command_id, detail_json) \
              VALUES (?1, ?2, ?3, 'pending_install', ?4, ?5)",
@@ -159,7 +159,7 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let event_id = format!("ev_{}", custos_domain::new_id("act"));
+        let event_id = format!("ev_{}", custos_contracts::new_id("act"));
         tx.execute(
             "INSERT INTO package_activation_events (id, component_id, version, event_type, detail_json) \
              VALUES (?1, ?2, ?3, 'installed', ?4)",
@@ -214,7 +214,7 @@ impl PackageRepository {
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-            let event_id = format!("ev_{}", custos_domain::new_id("act"));
+            let event_id = format!("ev_{}", custos_contracts::new_id("act"));
             tx.execute(
                 "INSERT INTO package_activation_events (id, component_id, version, event_type, detail_json) \
                  VALUES (?1, ?2, ?3, 'discovered', ?4)",
@@ -250,7 +250,7 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let event_id = format!("ev_{}", custos_domain::new_id("act"));
+        let event_id = format!("ev_{}", custos_contracts::new_id("act"));
         tx.execute(
             "INSERT INTO package_activation_events (id, component_id, version, event_type, detail_json) \
              VALUES (?1, ?2, ?3, 'failed', ?4)",
@@ -280,7 +280,7 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let event_id = format!("ev_{}", custos_domain::new_id("act"));
+        let event_id = format!("ev_{}", custos_contracts::new_id("act"));
         tx.execute(
             "INSERT INTO package_activation_events (id, component_id, version, event_type, detail_json) \
              VALUES (?1, ?2, 'active', 'enabled', ?3)",
@@ -310,7 +310,7 @@ impl PackageRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let event_id = format!("ev_{}", custos_domain::new_id("act"));
+        let event_id = format!("ev_{}", custos_contracts::new_id("act"));
         tx.execute(
             "INSERT INTO package_activation_events (id, component_id, version, event_type, detail_json) \
              VALUES (?1, ?2, 'active', 'disabled', ?3)",
@@ -326,7 +326,7 @@ impl PackageRepository {
     /// Seeds the inventory with components from a specific distribution preset.
     pub fn seed_preset(
         &self,
-        preset: custos_domain::packages::DistributionPreset,
+        preset: custos_contracts::packages::DistributionPreset,
     ) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         for comp in preset.components() {
@@ -360,7 +360,7 @@ mod tests {
         assert!(!enabled.contains(&"custom_bench".to_string()));
 
         // 2. Seeding Developer preset activates coding
-        repo.seed_preset(custos_domain::packages::DistributionPreset::Developer)
+        repo.seed_preset(custos_contracts::packages::DistributionPreset::Developer)
             .unwrap();
         let enabled_dev = repo.list_enabled_components().unwrap();
         assert!(enabled_dev.contains(&"assistant".to_string()));

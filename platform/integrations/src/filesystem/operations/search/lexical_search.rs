@@ -8,7 +8,7 @@ use regex::Regex;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-use custos_core::contracts::skill::{
+use custos_contracts::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 

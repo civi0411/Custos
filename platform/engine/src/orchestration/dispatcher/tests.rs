@@ -113,40 +113,37 @@ impl MockRunStore {
 
 #[async_trait::async_trait]
 impl RunPort for MockRunStore {
-    async fn save_run(&self, _: &mut custos_domain::Run) -> Result<(), DomainError> {
+    async fn save_run(&self, _: &mut custos_contracts::Run) -> Result<(), DomainError> {
         Ok(())
     }
-    async fn get_run(&self, _: &str) -> Result<Option<custos_domain::Run>, DomainError> {
+    async fn get_run(&self, _: &str) -> Result<Option<custos_contracts::Run>, DomainError> {
         Ok(None)
     }
-    async fn list_runs_for_task(
-        &self,
-        _: &str,
-    ) -> Result<Vec<custos_domain::Run>, DomainError> {
+    async fn list_runs_for_task(&self, _: &str) -> Result<Vec<custos_contracts::Run>, DomainError> {
         Ok(Vec::new())
     }
     async fn save_worker_run(
         &self,
-        _: &mut custos_domain::WorkerRun,
+        _: &mut custos_contracts::WorkerRun,
     ) -> Result<(), DomainError> {
         Ok(())
     }
     async fn get_worker_run(
         &self,
         _: &str,
-    ) -> Result<Option<custos_domain::WorkerRun>, DomainError> {
+    ) -> Result<Option<custos_contracts::WorkerRun>, DomainError> {
         Ok(None)
     }
     async fn list_worker_runs_for_task(
         &self,
         _: &str,
-    ) -> Result<Vec<custos_domain::WorkerRun>, DomainError> {
+    ) -> Result<Vec<custos_contracts::WorkerRun>, DomainError> {
         Ok(Vec::new())
     }
     async fn list_worker_runs_for_run(
         &self,
         _: &str,
-    ) -> Result<Vec<custos_domain::WorkerRun>, DomainError> {
+    ) -> Result<Vec<custos_contracts::WorkerRun>, DomainError> {
         Ok(Vec::new())
     }
     async fn claim_ready(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
@@ -189,14 +186,14 @@ impl RunPort for MockRunStore {
     }
     async fn save_launch_attempt(
         &self,
-        _: &custos_domain::LaunchAttempt,
+        _: &custos_contracts::LaunchAttempt,
     ) -> Result<(), DomainError> {
         Ok(())
     }
     async fn get_launch_attempt(
         &self,
         _: &str,
-    ) -> Result<Option<custos_domain::LaunchAttempt>, DomainError> {
+    ) -> Result<Option<custos_contracts::LaunchAttempt>, DomainError> {
         Ok(None)
     }
     async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
@@ -220,9 +217,7 @@ async fn test_storage_error_propagation_preserves_claim_state() {
         .expect("Initial claim succeeds");
 
     // Simulate database failure
-    store
-        .fail_update
-        .store(true, Ordering::SeqCst);
+    store.fail_update.store(true, Ordering::SeqCst);
 
     // Attempt release -> must return Err
     let release_err = dispatcher.release_claim(&claim.id).await;
@@ -243,9 +238,7 @@ async fn test_storage_error_propagation_preserves_claim_state() {
         .is_err());
 
     // Recover DB and retry release -> must succeed
-    store
-        .fail_update
-        .store(false, Ordering::SeqCst);
+    store.fail_update.store(false, Ordering::SeqCst);
     assert!(dispatcher.release_claim(&claim.id).await.is_ok());
     assert!(dispatcher
         .get_active_claim("task_err_test", None)
@@ -310,9 +303,7 @@ async fn test_mark_dispatched_storage_error_preserves_state() {
         .await
         .expect("Initial claim succeeds");
 
-    store
-        .fail_update
-        .store(true, Ordering::SeqCst);
+    store.fail_update.store(true, Ordering::SeqCst);
 
     let err = dispatcher
         .mark_dispatched(&claim.id, "worker_run_999")

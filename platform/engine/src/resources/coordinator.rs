@@ -3,12 +3,12 @@
 //! Orchestrates the end-to-end provisioning, invariant verification, and teardown
 //! of sovereign Agent Execution Environments across all four Custos lenses.
 
-use async_trait::async_trait;
 use crate::authority::EnvironmentGate;
-use custos_core::contracts::environment::{EnvironmentHandle, EnvironmentPort, GateReport};
-use custos_core::contracts::terminal::TerminalPort;
-use custos_domain::environment::{EnvironmentProfile, EnvironmentSpec, EnvironmentState};
-use custos_domain::{DomainError, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus};
+use async_trait::async_trait;
+use custos_contracts::contracts::environment::{EnvironmentHandle, EnvironmentPort, GateReport};
+use custos_contracts::contracts::terminal::TerminalPort;
+use custos_contracts::environment::{EnvironmentProfile, EnvironmentSpec, EnvironmentState};
+use custos_contracts::{DomainError, ExecutionWorkspace, WorkspaceKind, WorkspaceStatus};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tokio::sync::{Mutex, OwnedMutexGuard};
@@ -196,7 +196,7 @@ impl EnvironmentPort for EnvironmentCoordinator {
             Ok(assurance) => assurance,
             Err(error) => {
                 warn!(env_id = %spec.env_id, %error, "Environment assurance unavailable");
-                custos_domain::environment::EnvironmentAssurance::unconstrained()
+                custos_contracts::environment::EnvironmentAssurance::unconstrained()
             }
         };
 

@@ -28,7 +28,7 @@ impl ProviderRequest {
     /// Creates a simple request with reasonable defaults.
     pub fn simple(prompt: impl Into<String>) -> Self {
         Self {
-            request_id: custos_domain::new_id("req"),
+            request_id: custos_contracts::new_id("req"),
             task_id: "default_task".to_string(),
             span_num: 1,
             prompt: prompt.into(),

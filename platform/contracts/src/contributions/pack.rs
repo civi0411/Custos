@@ -4,10 +4,10 @@
 //! defining DomainPack traits, WorkbenchJob descriptions, WorkerRole definitions,
 //! PackProfile constraints, and verification oracle interfaces.
 
-use async_trait::async_trait;
+use crate::conversation::session::WorkbenchLens;
 use crate::identity::error::DomainError;
 use crate::task::oi::ExecutionTopology;
-use crate::conversation::session::WorkbenchLens;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -297,7 +297,6 @@ pub trait WorkbenchModule: Send + Sync {
         &[]
     }
 }
-
 
 /// Lifecycle hooks invoked when a pack is dynamically loaded or unloaded from the registry
 #[async_trait]

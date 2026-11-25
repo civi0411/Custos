@@ -1,8 +1,8 @@
 //! Ephemeral Execution Resources & Coordinated Environment Application Service
 
-use std::sync::Arc;
-use crate::resources::workspace::WorkspaceCoordinator;
 use crate::resources::terminal::TerminalCoordinator;
+use crate::resources::workspace::WorkspaceCoordinator;
+use std::sync::Arc;
 
 /// Application service orchestrating workspace leases, terminals, compute, and notebooks.
 pub struct ResourceApplicationService {

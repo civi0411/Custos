@@ -1,18 +1,18 @@
-use std::sync::Arc;
 use serde_json::json;
+use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use wiremock::{
     matchers::{body_json, header, method, path},
     Mock, MockServer, ResponseTemplate,
 };
 
-use crate::cloud::realtime::browser_live_transport::BrowserLiveTransport;
-use crate::cloud::realtime::live::{LiveProtocol, LiveSessionEvent};
 use super::super::{
     OpenAiLiveClient, OpenAiLiveCommand, OpenAiLiveConnectionKind, OpenAiLiveEvent,
     OpenAiLiveEventKind, OpenAiLiveMessage, OpenAiLiveMessageRole, OpenAiLiveProtocol,
     OpenAiLiveSessionConfig, OpenAiLiveSessionId, DEFAULT_OPENAI_LIVE_WEBSOCKET_URL,
 };
+use crate::cloud::realtime::browser_live_transport::BrowserLiveTransport;
+use crate::cloud::realtime::live::{LiveProtocol, LiveSessionEvent};
 
 fn config() -> OpenAiLiveSessionConfig {
     OpenAiLiveSessionConfig {

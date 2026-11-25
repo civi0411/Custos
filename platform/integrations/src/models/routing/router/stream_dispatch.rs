@@ -1,5 +1,5 @@
-use custos_domain::DomainError;
-use custos_provider::ProviderRequest;
+use crate::ProviderRequest;
+use custos_contracts::DomainError;
 
 use super::catalog::{find_by_service, strip_model_prefix};
 use super::classification::classify_provider;
@@ -76,8 +76,13 @@ impl RouterModelProvider {
             };
             let response = self
                 .observe_adapter_error(
-                    crate::cloud::google_codeassist::stream_codeassist(codeassist_mode, &base, &token, req)
-                        .await,
+                    crate::cloud::google_codeassist::stream_codeassist(
+                        codeassist_mode,
+                        &base,
+                        &token,
+                        req,
+                    )
+                    .await,
                     req,
                 )
                 .await?;
@@ -111,12 +116,15 @@ impl RouterModelProvider {
             if let Some(v) = req.max_tokens {
                 options.insert("num_predict".into(), serde_json::json!(v));
             }
-            let request = self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({
-                "model": clean_model,
-                "messages": [{"role": "user", "content": req.prompt}],
-                "stream": true,
-                "options": options
-            }));
+            let request =
+                self.http_client
+                    .post(format!("{root}/api/chat"))
+                    .json(&serde_json::json!({
+                        "model": clean_model,
+                        "messages": [{"role": "user", "content": req.prompt}],
+                        "stream": true,
+                        "options": options
+                    }));
             let response = self.checked_response(request.send().await, req).await?;
             if !response.status().is_success() {
                 return Err(DomainError::Validation(format!(
@@ -167,9 +175,7 @@ impl RouterModelProvider {
             {
                 request = request.header("ChatGPT-Account-ID", id);
             }
-        } else if service == "openai"
-            && custos_provider::model::is_openai_responses_model(model)
-        {
+        } else if service == "openai" && crate::model::is_openai_responses_model(model) {
             wire = Wire::Codex;
             effective_model = model.to_string();
             let base = custom.unwrap_or_else(|| "https://api.openai.com/v1".into());
@@ -217,8 +223,10 @@ impl RouterModelProvider {
                     "https://api.githubcopilot.com".into(),
                     model.strip_prefix("copilot/").unwrap_or(model).to_string(),
                     Some(
-                        crate::cloud::transport::copilot_session_token(token.as_deref().unwrap_or(""))
-                            .await?,
+                        crate::cloud::transport::copilot_session_token(
+                            token.as_deref().unwrap_or(""),
+                        )
+                        .await?,
                     ),
                 ),
                 "openai" => (
@@ -319,7 +327,7 @@ impl RouterModelProvider {
     pub(crate) async fn dispatch_stream_attempt(
         &self,
         req: &ProviderRequest,
-    ) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<crate::ProviderEvent>, DomainError> {
         let service = classify_provider(&req.model);
         if service == "native-local" {
             let local = self.native_local.as_ref().ok_or_else(|| {

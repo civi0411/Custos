@@ -1,4 +1,4 @@
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 use super::project::discover_project;
 use super::transport::cloud_call;
@@ -11,7 +11,7 @@ pub fn supports_tiered_reasoning(id: &str) -> bool {
 pub async fn probe_models(
     base: &str,
     token: &str,
-) -> Result<Vec<custos_domain::ProbedModel>, DomainError> {
+) -> Result<Vec<custos_contracts::ProbedModel>, DomainError> {
     probe_codeassist_models("antigravity", base, token).await
 }
 
@@ -19,7 +19,7 @@ pub async fn probe_codeassist_models(
     service: &str,
     base: &str,
     token: &str,
-) -> Result<Vec<custos_domain::ProbedModel>, DomainError> {
+) -> Result<Vec<custos_contracts::ProbedModel>, DomainError> {
     let body = if service == "antigravity" {
         serde_json::json!({})
     } else {
@@ -52,7 +52,7 @@ pub async fn probe_codeassist_models(
     Ok(models
         .into_iter()
         .filter(|(_, model)| crate::routing::probe::model_is_selectable(model))
-        .map(|(id, model)| custos_domain::ProbedModel {
+        .map(|(id, model)| custos_contracts::ProbedModel {
             id: format!(
                 "{}/{id}",
                 if service == "gemini" {

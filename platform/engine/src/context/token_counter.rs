@@ -42,8 +42,7 @@ impl TokenCacheKey {
 impl TokenCounter {
     pub async fn new() -> Result<Self, String> {
         let tokenizer = get_tokenizer().await?;
-        let cache_capacity =
-            NonZeroUsize::new(MAX_TOKEN_CACHE_SIZE).expect("token cache capacity must be non-zero");
+        let cache_capacity = const { NonZeroUsize::new(MAX_TOKEN_CACHE_SIZE).unwrap() };
         Ok(Self {
             tokenizer,
             token_cache: Mutex::new(LruCache::new(cache_capacity)),
@@ -55,7 +54,7 @@ impl TokenCounter {
         if let Some(count) = self
             .token_cache
             .lock()
-            .expect("token cache mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .get(&cache_key)
             .copied()
         {
@@ -67,7 +66,7 @@ impl TokenCounter {
 
         self.token_cache
             .lock()
-            .expect("token cache mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .put(cache_key, count);
         count
     }
@@ -186,26 +185,27 @@ impl TokenCounter {
     pub fn clear_cache(&self) {
         self.token_cache
             .lock()
-            .expect("token cache mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clear();
     }
 
     pub fn cache_size(&self) -> usize {
         self.token_cache
             .lock()
-            .expect("token cache mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .len()
     }
 }
 
 async fn get_tokenizer() -> Result<Arc<CoreBPE>, String> {
-    Ok(TOKENIZER
-        .get_or_init(|| async {
-            let bpe = tiktoken_rs::o200k_base().expect("Failed to initialize o200k_base tokenizer");
-            Arc::new(bpe)
+    TOKENIZER
+        .get_or_try_init(|| async {
+            tiktoken_rs::o200k_base()
+                .map(Arc::new)
+                .map_err(|e| format!("Failed to initialize o200k_base tokenizer: {e}"))
         })
         .await
-        .clone())
+        .cloned()
 }
 
 pub async fn create_token_counter() -> Result<TokenCounter, String> {

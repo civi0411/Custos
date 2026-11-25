@@ -76,8 +76,8 @@ impl Provider for ModelPortToProvider {
     ) -> Result<(Message, ProviderUsage), ProviderError> {
         let prompt = Self::build_prompt(system, messages);
         let req = ProviderRequest::new(
-            custos_domain::new_id("req_bridge"),
-            custos_domain::new_id("task_bridge"),
+            custos_contracts::new_id("req_bridge"),
+            custos_contracts::new_id("task_bridge"),
             1,
             prompt,
             model_config.model_name.clone(),
@@ -108,8 +108,8 @@ impl Provider for ModelPortToProvider {
     ) -> Result<MessageStream, ProviderError> {
         let prompt = Self::build_prompt(system, messages);
         let req = ProviderRequest::new(
-            custos_domain::new_id("req_bridge"),
-            custos_domain::new_id("task_bridge"),
+            custos_contracts::new_id("req_bridge"),
+            custos_contracts::new_id("task_bridge"),
             1,
             prompt,
             model_config.model_name.clone(),
@@ -162,4 +162,3 @@ impl Provider for ModelPortToProvider {
         override_limit.unwrap_or(self.context_limit)
     }
 }
-

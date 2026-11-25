@@ -2,7 +2,7 @@
 //!
 //! Eliminates identical content chunks based on cryptographic digests (Custos.md §6.4 Step 5).
 
-use custos_domain::ContextItem;
+use custos_contracts::ContextItem;
 use std::collections::HashSet;
 
 pub struct HashDeduplicator;
@@ -17,7 +17,7 @@ impl HashDeduplicator {
             // Compute deterministic digest of item content
             let item_hash = format!(
                 "sha256:{}",
-                custos_domain::digest(item.content.trim().as_bytes())
+                custos_contracts::digest(item.content.trim().as_bytes())
             );
 
             if seen_hashes.insert(item_hash) {

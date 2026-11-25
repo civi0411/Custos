@@ -1,12 +1,12 @@
+use crate::base::{MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
+use crate::conversation::message::{Message, SystemNotificationType};
+use crate::conversation::token_usage::ProviderUsage;
+use crate::errors::ProviderError;
+use crate::model::ModelConfig;
+use crate::request_log::{start_log, LoggerHandleExt};
 use anyhow::Result;
 use async_stream::try_stream;
 use async_trait::async_trait;
-use custos_provider::base::{MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
-use custos_provider::conversation::message::{Message, SystemNotificationType};
-use custos_provider::conversation::token_usage::ProviderUsage;
-use custos_provider::errors::ProviderError;
-use custos_provider::model::ModelConfig;
-use custos_provider::request_log::{start_log, LoggerHandleExt};
 use rmcp::model::Tool;
 use serde_json::json;
 use std::sync::Arc;
@@ -75,7 +75,7 @@ impl Provider for LocalInferenceProvider {
     }
 
     async fn get_context_limit(&self, model: &str, override_limit: Option<usize>) -> usize {
-        custos_provider::context_limit::ContextLimitResolver::new(&self.name)
+        crate::context_limit::ContextLimitResolver::new(&self.name)
             .resolve(model, override_limit, || async {
                 Ok(resolve_model_path(model)
                     .await
@@ -231,20 +231,23 @@ impl Provider for LocalInferenceProvider {
                         }
 
                         if let Some(ref admission) = runtime.get_admission_coordinator() {
-                            let admission_req = custos_domain::WorkloadAdmissionRequest {
-                                workload_kind: custos_domain::ComputeWorkloadKind::LocalInference,
+                            let admission_req = custos_contracts::WorkloadAdmissionRequest {
+                                workload_kind:
+                                    custos_contracts::ComputeWorkloadKind::LocalInference,
                                 owner_id: format!("infer_{}", model_name),
                                 preferred_device_id: None,
                                 require_exclusive: false,
                                 required_memory_mb: Some(4096),
-                                lane: Some(custos_domain::ExecutionLane::Interactive),
+                                lane: Some(custos_contracts::ExecutionLane::Interactive),
                             };
                             match admission.admit_workload(&admission_req).await {
-                                Ok(custos_domain::WorkloadAdmissionVerdict::Admitted { lease }) => {
+                                Ok(custos_contracts::WorkloadAdmissionVerdict::Admitted {
+                                    lease,
+                                }) => {
                                     let mut l_guard = model_slot.lease_id.lock().unwrap();
                                     *l_guard = Some(lease.lease_id);
                                 }
-                                Ok(custos_domain::WorkloadAdmissionVerdict::Queued {
+                                Ok(custos_contracts::WorkloadAdmissionVerdict::Queued {
                                     reason,
                                     ..
                                 }) => {
@@ -256,7 +259,7 @@ impl Provider for LocalInferenceProvider {
                                     let _ = tx.send(Err(err)).await;
                                     return;
                                 }
-                                Ok(custos_domain::WorkloadAdmissionVerdict::Rejected {
+                                Ok(custos_contracts::WorkloadAdmissionVerdict::Rejected {
                                     reason,
                                 }) => {
                                     drop(cold_load_guard);
@@ -330,7 +333,7 @@ impl Provider for LocalInferenceProvider {
                                         model = %model_id,
                                         "In-process load failed ({err}), falling back to modern llama-server sidecar..."
                                     );
-                                    let sidecar_profile = custos_domain::LocalModelLoadProfile {
+                                    let sidecar_profile = custos_contracts::LocalModelLoadProfile {
                                         model_path: resolved_for_load
                                             .model_path
                                             .to_string_lossy()

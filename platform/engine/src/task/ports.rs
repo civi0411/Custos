@@ -2,5 +2,4 @@
 //!
 //! Decouples the kernel logic from underlying databases (SQLite, etc.).
 
-pub use custos_domain::{SessionStore, TaskStore};
-
+pub use custos_contracts::{SessionStore, TaskStore};

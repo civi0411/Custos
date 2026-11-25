@@ -6,8 +6,8 @@
 
 use super::calibration::ConfidenceCalibrator;
 use async_trait::async_trait;
-use custos_core::contracts::judgment::{JudgmentPort, JudgmentRequest, JudgmentResult};
-use custos_domain::DomainError;
+use custos_contracts::contracts::judgment::{JudgmentPort, JudgmentRequest, JudgmentResult};
+use custos_contracts::DomainError;
 use tracing::{debug, warn};
 
 /// S1 Fast Verifier with calibrated confidence estimation.

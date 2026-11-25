@@ -369,4 +369,3 @@ fn test_think_filter_accepts_bounded_streamed_attributes() {
     assert_eq!(second.thinking, "hidden");
     assert_eq!(final_out, FilterOut::default());
 }
-

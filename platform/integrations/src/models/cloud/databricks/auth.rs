@@ -56,7 +56,11 @@ impl AuthProvider for DatabricksAuthProvider {
     async fn get_auth_header(&self) -> Result<(String, String)> {
         let token = match &self.auth {
             DatabricksAuth::Token(original) => {
-                let cached = self.token_cache.lock().unwrap().clone();
+                let cached = self
+                    .token_cache
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
                 match cached {
                     Some(t) => t,
                     None => {
@@ -65,7 +69,8 @@ impl AuthProvider for DatabricksAuthProvider {
                             .as_ref()
                             .and_then(|resolve| resolve())
                             .unwrap_or_else(|| original.clone());
-                        *self.token_cache.lock().unwrap() = Some(fresh.clone());
+                        *self.token_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                            Some(fresh.clone());
                         fresh
                     }
                 }

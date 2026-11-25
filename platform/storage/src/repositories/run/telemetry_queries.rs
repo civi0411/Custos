@@ -1,9 +1,9 @@
 //! Read-only queries for run execution step spans, logs, errors, and watchdog findings.
 
-use custos_core::contracts::workflow::{
+use custos_contracts::contracts::workflow::{
     SupervisionFindingFilter, SupervisionLogFilter, SupervisionRunFilter,
 };
-use custos_domain::{
+use custos_contracts::{
     DomainError, FindingKind, LogSeverity, RunStepSpan, StepError, StepSpanKind, StepSpanStatus,
     SupervisionFinding, SupervisionLogEntry, SupervisionRunRecord, SupervisionRunStatus,
     SupervisionSeverity, UsageMeasurement,

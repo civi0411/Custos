@@ -2,9 +2,11 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig};
 use crate::base::ModelInfo;
 use crate::cloud::codecs::openai::{extract_reasoning_effort, is_openai_responses_model};
+use crate::cloud::transport::api_client::{
+    ApiClient, AuthMethod, RequestBuilderDecorator, TlsConfig,
+};
 use crate::model::ModelConfig;
 
 pub const AZURE_FOUNDRY_PROVIDER_NAME: &str = "azure_foundry";
@@ -152,26 +154,29 @@ pub(crate) fn with_api_version(link: &str, api_version: Option<&str>) -> String 
 }
 
 pub(crate) fn model_info_for_deployment(deployment_name: &str, model_name: &str) -> ModelInfo {
-    let canonical = crate::catalog::canonical::maybe_get_canonical_model("azure_foundry", model_name)
-        .or_else(|| {
-            crate::catalog::canonical::maybe_get_canonical_model(
-                "azure_foundry",
-                &model_name.to_ascii_lowercase(),
-            )
-        })
-        .or_else(|| {
-            let (base_model, effort) = extract_reasoning_effort(model_name);
-            effort.and_then(|_| {
-                crate::catalog::canonical::maybe_get_canonical_model("azure_foundry", &base_model).or_else(
-                    || {
+    let canonical =
+        crate::catalog::canonical::maybe_get_canonical_model("azure_foundry", model_name)
+            .or_else(|| {
+                crate::catalog::canonical::maybe_get_canonical_model(
+                    "azure_foundry",
+                    &model_name.to_ascii_lowercase(),
+                )
+            })
+            .or_else(|| {
+                let (base_model, effort) = extract_reasoning_effort(model_name);
+                effort.and_then(|_| {
+                    crate::catalog::canonical::maybe_get_canonical_model(
+                        "azure_foundry",
+                        &base_model,
+                    )
+                    .or_else(|| {
                         crate::catalog::canonical::maybe_get_canonical_model(
                             "azure_foundry",
                             &base_model.to_ascii_lowercase(),
                         )
-                    },
-                )
-            })
-        });
+                    })
+                })
+            });
     ModelInfo {
         name: deployment_name.to_string(),
         resolved_model: Some(model_name.to_string()),

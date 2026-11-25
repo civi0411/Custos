@@ -104,7 +104,7 @@ fn mapping_report() -> &'static serde_json::Value {
             env!("CARGO_MANIFEST_DIR"),
             "/data/canonical/canonical_mapping_report.json"
         )))
-            .expect("bundled canonical mapping report must be valid")
+        .expect("bundled canonical mapping report must be valid")
     });
     &REPORT
 }

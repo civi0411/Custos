@@ -3,7 +3,7 @@
 //! Manages time-based, interval, and recurring workflow job scheduling.
 
 use chrono::{DateTime, Duration, Utc};
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -29,13 +29,13 @@ impl std::fmt::Display for ScheduledJobId {
     }
 }
 
-impl From<custos_domain::JobId> for ScheduledJobId {
-    fn from(id: custos_domain::JobId) -> Self {
+impl From<custos_contracts::JobId> for ScheduledJobId {
+    fn from(id: custos_contracts::JobId) -> Self {
         Self(id.0)
     }
 }
 
-impl From<ScheduledJobId> for custos_domain::JobId {
+impl From<ScheduledJobId> for custos_contracts::JobId {
     fn from(id: ScheduledJobId) -> Self {
         Self(id.0)
     }

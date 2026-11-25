@@ -251,7 +251,9 @@ fn setup_field(config_key: &ConfigKey, setup: &ProviderSetupMetadata) -> Provide
     }
 }
 
-pub(crate) fn setup_entry_from_metadata(metadata: ProviderMetadata) -> Option<ProviderSetupCatalogEntry> {
+pub(crate) fn setup_entry_from_metadata(
+    metadata: ProviderMetadata,
+) -> Option<ProviderSetupCatalogEntry> {
     let setup = metadata.setup?;
     let fields = metadata
         .config_keys

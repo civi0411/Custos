@@ -2,8 +2,8 @@
 //!
 //! Sequential 3-stage pipeline: Workspace Analysis -> Patch Generation -> Verification Gate.
 
-use custos_domain::oi::{WorkPacket, WorkerResult, WorkerStatus};
-use custos_domain::DomainError;
+use custos_contracts::oi::{WorkPacket, WorkerResult, WorkerStatus};
+use custos_contracts::DomainError;
 
 pub struct T2StagedPipelineCoordinator;
 

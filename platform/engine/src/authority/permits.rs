@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_domain::{DomainError, Permit, RiskClass};
+use custos_contracts::{DomainError, Permit, RiskClass};
 
 /// Optional durable persistence hook for sovereign execution permits (INV-04)
 pub trait PermitStore: Send + Sync {

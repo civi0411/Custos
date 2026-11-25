@@ -17,7 +17,10 @@ pub(crate) fn set_up_tool_request_message(id: &str, tool_call: CallToolRequestPa
     )
 }
 
-pub(crate) fn set_up_action_required_message(id: &str, tool_call: CallToolRequestParams) -> Message {
+pub(crate) fn set_up_action_required_message(
+    id: &str,
+    tool_call: CallToolRequestParams,
+) -> Message {
     Message::new(
         Role::User,
         0,

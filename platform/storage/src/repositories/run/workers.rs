@@ -1,4 +1,4 @@
-use custos_domain::{DomainError, WorkerRun};
+use custos_contracts::{DomainError, WorkerRun};
 use rusqlite::{params, OptionalExtension};
 
 use super::RunRepository;

@@ -1,4 +1,4 @@
-use custos_domain::oi::{Candidate, DecisionSnapshot, ExecutionTopology};
+use custos_contracts::oi::{Candidate, DecisionSnapshot, ExecutionTopology};
 
 pub struct CandidateBuilder;
 

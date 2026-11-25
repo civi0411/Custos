@@ -78,8 +78,9 @@ async fn bounded_json_rejects_oversized_chunked_body() {
 
 #[tokio::test]
 async fn bounded_json_accepts_many_small_chunks() {
-    let mut raw = b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n"
-        .to_vec();
+    let mut raw =
+        b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n"
+            .to_vec();
     for byte in b"{\"ok\":true}" {
         raw.extend_from_slice(b"1\r\n");
         raw.push(*byte);
@@ -129,10 +130,10 @@ async fn bounded_json_limits_decompressed_body() {
 async fn bounded_status_preserves_authentication_for_oversized_error_body() {
     let server = MockServer::start().await;
     Mock::given(wiremock::matchers::method("GET"))
-        .respond_with(
-            ResponseTemplate::new(401)
-                .set_body_string(format!("{{\"error\":{{\"message\":\"{}\"}}}}", "a".repeat(128))),
-        )
+        .respond_with(ResponseTemplate::new(401).set_body_string(format!(
+            "{{\"error\":{{\"message\":\"{}\"}}}}",
+            "a".repeat(128)
+        )))
         .mount(&server)
         .await;
 
@@ -156,7 +157,10 @@ async fn bounded_status_preserves_retry_after_for_oversized_error_body() {
         .respond_with(
             ResponseTemplate::new(429)
                 .insert_header("retry-after", "12")
-                .set_body_string(format!("{{\"error\":{{\"message\":\"{}\"}}}}", "a".repeat(128))),
+                .set_body_string(format!(
+                    "{{\"error\":{{\"message\":\"{}\"}}}}",
+                    "a".repeat(128)
+                )),
         )
         .mount(&server)
         .await;
@@ -184,10 +188,10 @@ async fn bounded_status_preserves_retry_after_for_oversized_error_body() {
 async fn bounded_handle_response_rejects_oversized_success_body() {
     let server = MockServer::start().await;
     Mock::given(wiremock::matchers::method("GET"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
-            "{{\"value\":\"{}\"}}",
-            "a".repeat(128)
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(format!("{{\"value\":\"{}\"}}", "a".repeat(128))),
+        )
         .mount(&server)
         .await;
 

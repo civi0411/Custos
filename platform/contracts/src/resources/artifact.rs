@@ -142,7 +142,6 @@ impl std::fmt::Display for UniversalResourceRef {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HandoffConsent {
@@ -388,7 +387,9 @@ mod tests {
         assert_eq!(art_urr.kind, "filediff");
         assert_eq!(art_urr.id, "diff_42");
         assert_eq!(art_urr.sha256, "abc123hash");
-        assert_eq!(art_urr.to_uri(), "urr://engineering/filediff/diff_42#abc123hash");
+        assert_eq!(
+            art_urr.to_uri(),
+            "urr://engineering/filediff/diff_42#abc123hash"
+        );
     }
 }
-

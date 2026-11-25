@@ -1,10 +1,9 @@
 use super::*;
-use custos_domain::{new_id, Assurance, RiskLevel};
+use custos_contracts::{new_id, Assurance, RiskLevel};
 
 #[tokio::test]
 async fn test_generic_cli_adapter_mock_mode() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_dir).unwrap();
 
     let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
@@ -23,8 +22,7 @@ async fn test_generic_cli_adapter_mock_mode() {
 
 #[tokio::test]
 async fn test_generic_cli_profile_and_assurance_invariants() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
     let adapter = CliHarness::claude_code(&temp_dir);
     let profile = adapter.profile();
 
@@ -47,8 +45,7 @@ async fn test_generic_cli_profile_and_assurance_invariants() {
 
 #[tokio::test]
 async fn test_generic_cli_gate_4_fraud_rejection() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
     let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
     let profile = adapter.profile();
 
@@ -72,8 +69,7 @@ async fn test_generic_cli_gate_4_fraud_rejection() {
 
 #[tokio::test]
 async fn test_generic_cli_cancel_and_steer() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
     let adapter = CliHarness::claude_code(&temp_dir).with_mock_mode();
 
     let run_id = "run_test_123";
@@ -103,8 +99,7 @@ async fn test_generic_cli_cancel_and_steer() {
 
 #[tokio::test]
 async fn test_generic_cli_live_binary_missing_error() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("custos_cli_test_{}", uuid::Uuid::new_v4()));
     let adapter = CliHarness::new(
         "nonexistent-agent",
         "nonexistent_bin_12345",
@@ -113,7 +108,7 @@ async fn test_generic_cli_live_binary_missing_error() {
     );
 
     struct MockObserver;
-    impl custos_core::contracts::harness::RunObserver for MockObserver {
+    impl custos_contracts::contracts::harness::RunObserver for MockObserver {
         fn emit(&self, _kind: &str, _payload: serde_json::Value) {}
         fn is_cancelled(&self) -> bool {
             false
@@ -129,4 +124,3 @@ async fn test_generic_cli_live_binary_missing_error() {
         .to_string()
         .contains("is not installed or not found on PATH"));
 }
-

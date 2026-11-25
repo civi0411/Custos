@@ -5,7 +5,7 @@
 //! Incorporates OrCa's model catalog TTL store (10m fresh, 30s failure TTL) and effort mappings.
 
 use super::pricing::lookup_model_pricing;
-use custos_domain::{ModelCatalogOption, ModelCatalogResult, ProbedModel};
+use custos_contracts::{ModelCatalogOption, ModelCatalogResult, ProbedModel};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};

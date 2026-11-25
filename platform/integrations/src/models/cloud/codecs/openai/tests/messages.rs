@@ -24,8 +24,7 @@ fn test_format_messages_complex() -> anyhow::Result<()> {
         Message::user().with_text("How are you?"),
         Message::assistant().with_tool_request(
             "tool1",
-            Ok(CallToolRequestParams::new("example")
-                .with_arguments(object!({"param1": "value1"}))),
+            Ok(CallToolRequestParams::new("example").with_arguments(object!({"param1": "value1"}))),
         ),
     ];
 
@@ -463,4 +462,3 @@ fn test_format_messages_multiple_text_blocks() -> anyhow::Result<()> {
     );
     Ok(())
 }
-

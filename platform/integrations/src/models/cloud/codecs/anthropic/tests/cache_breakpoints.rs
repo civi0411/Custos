@@ -81,10 +81,7 @@ fn breakpoints_cover_tools_system_and_last_two_user_messages() {
 #[test]
 fn disable_prompt_cache_removes_every_breakpoint() {
     let config = cfg("claude-sonnet-4-5").with_merged_request_params(
-        std::collections::HashMap::from([(
-            "disable_prompt_cache".to_string(),
-            json!(true),
-        )]),
+        std::collections::HashMap::from([("disable_prompt_cache".to_string(), json!(true))]),
     );
     let req = create_request_with_default_options(
         &config,

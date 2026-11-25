@@ -10,7 +10,7 @@ pub mod message;
 
 pub use message::Message;
 
-pub use custos_core::SessionStore;
+pub use custos_contracts::SessionStore;
 pub use journal::SessionJournal;
 pub use manager::SessionManager;
 
@@ -18,7 +18,7 @@ pub use manager::SessionManager;
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::{
+    use custos_contracts::{
         DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
         WorkbenchLens,
     };

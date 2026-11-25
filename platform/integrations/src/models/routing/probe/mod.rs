@@ -12,13 +12,13 @@ pub mod quota;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) use cloud_probes::parse_provider_models;
 pub use cloud_probes::{
     parse_chatgpt_codex_models, parse_gemini_models, parse_openai_models,
     parse_openai_models_for_transport, probe_chatgpt_codex_endpoint, probe_copilot_models,
     probe_endpoint_models, probe_oauth_models,
 };
-#[cfg(test)]
-pub(crate) use cloud_probes::parse_provider_models;
 pub use metadata::{
     advertised_default_effort, advertised_efforts, codex_user_agent, conversation_model_is_visible,
     model_is_selectable, verified_catalog_key, CODEX_CLIENT_VERSION,

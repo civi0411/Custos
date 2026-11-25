@@ -1,8 +1,8 @@
 //! Evidence & Judgment Evaluation SPI Trait Ports
 
+use crate::identity::error::DomainError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use crate::identity::error::DomainError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JudgmentRequest {
@@ -38,4 +38,3 @@ pub trait JudgmentPort: Send + Sync {
     /// Evaluates a full JudgmentRequest and produces a calibrated JudgmentResult.
     async fn judge(&self, request: JudgmentRequest) -> Result<JudgmentResult, DomainError>;
 }
-

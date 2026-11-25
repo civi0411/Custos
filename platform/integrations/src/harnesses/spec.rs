@@ -1,6 +1,6 @@
 //! Declarative harness specifications, argument strategies, and streaming protocols.
 
-use custos_core::contracts::harness::{CostVisibility, HarnessMaturity, ToolMediationLevel};
+use custos_contracts::contracts::harness::{CostVisibility, HarnessMaturity, ToolMediationLevel};
 use serde::{Deserialize, Serialize};
 
 /// Wire protocol emitted by the harness process stdout/stderr.

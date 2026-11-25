@@ -233,7 +233,10 @@ impl LatencyBreakdown {
                 StepSpanKind::Llm => llm_ms += dur,
                 StepSpanKind::Tool => tool_ms += dur,
                 StepSpanKind::Harness => harness_ms += dur,
-                StepSpanKind::Agent | StepSpanKind::Session | StepSpanKind::Verification | StepSpanKind::Error => {
+                StepSpanKind::Agent
+                | StepSpanKind::Session
+                | StepSpanKind::Verification
+                | StepSpanKind::Error => {
                     other_ms += dur;
                 }
             }

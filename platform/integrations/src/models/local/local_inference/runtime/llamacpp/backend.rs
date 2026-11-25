@@ -19,6 +19,8 @@ use super::templates::{
     load_chat_templates, select_generation_template, should_use_native_tool_calling,
     supports_native_tool_calling,
 };
+use crate::codecs::openai::format_tools;
+use crate::errors::ProviderError;
 use crate::local::local_inference::backend::{
     BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend,
 };
@@ -29,8 +31,6 @@ use crate::local::local_inference::model::ToolCallingMode;
 use crate::local::local_inference::multimodal::ExtractedImage;
 use crate::local::local_inference::tool_parsing::compact_tools_json;
 use crate::local::local_inference::ResolvedModelPaths;
-use custos_provider::errors::ProviderError;
-use custos_provider::codecs::openai::format_tools;
 
 pub(crate) const LLAMACPP_BACKEND_ID: &str = "llamacpp";
 

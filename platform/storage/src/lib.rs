@@ -1,6 +1,3 @@
-extern crate custos_contracts as custos_domain;
-extern crate custos_contracts as custos_core;
-
 pub mod artifacts;
 pub mod connection;
 pub mod recovery;

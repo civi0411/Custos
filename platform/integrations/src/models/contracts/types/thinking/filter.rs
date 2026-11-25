@@ -1,5 +1,5 @@
-use std::sync::LazyLock;
 use regex::Regex;
+use std::sync::LazyLock;
 
 pub const GEMINI_THOUGHT_SIGNATURE_KEY: &str = "thoughtSignature";
 pub(crate) const MAX_BUFFERED_THINK_TAG_BYTES: usize = 8 * 1024;
@@ -299,4 +299,3 @@ fn contains_unquoted_gt(text: &str) -> bool {
     }
     false
 }
-

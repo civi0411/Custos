@@ -1,8 +1,8 @@
 //! Model turn SSE stream decoder and observer.
 
 use super::types::{actual_model, count, Wire};
-use custos_domain::DomainError;
-use custos_provider::turn::{ModelTurnEvent, TurnDelta};
+use crate::turn::{ModelTurnEvent, TurnDelta};
+use custos_contracts::DomainError;
 use serde_json::Value;
 use uuid::Uuid;
 

@@ -1,6 +1,4 @@
-use crate::conversation::message::{
-    Message, MessageContentBlock, ProviderMetadata, ToolResponse,
-};
+use crate::conversation::message::{Message, MessageContentBlock, ProviderMetadata, ToolResponse};
 use base64::Engine;
 use rmcp::model::{
     Annotations, CallToolResult, ContentBlock, EmbeddedResource, ErrorCode, ErrorData,
@@ -135,8 +133,7 @@ fn test_tool_response_sanitizes_text_resource() {
 
 #[test]
 fn test_tool_response_sanitizes_utf8_blob_resource() {
-    let blob =
-        base64::engine::general_purpose::STANDARD.encode("resource\u{E0041}text".as_bytes());
+    let blob = base64::engine::general_purpose::STANDARD.encode("resource\u{E0041}text".as_bytes());
     let resource = ResourceContents::BlobResourceContents {
         uri: "file:///result.txt".to_string(),
         mime_type: Some("text/plain".to_string()),

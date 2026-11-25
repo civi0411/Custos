@@ -1,5 +1,5 @@
 //! Repository-scoped Git and GitHub I/O. Credentials never leave this adapter.
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;

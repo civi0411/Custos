@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::cloud::transport::api_client::ApiClient;
 use super::auth::{DatabricksAuth, DatabricksRefreshHook, DatabricksSessionIdProvider};
+use crate::cloud::transport::api_client::ApiClient;
 use crate::images::ImageFormat;
 use crate::retry::RetryConfig;
 
@@ -79,4 +79,3 @@ pub struct DatabricksProvider {
     #[serde(skip)]
     pub(crate) session_id_provider: Option<DatabricksSessionIdProvider>,
 }
-

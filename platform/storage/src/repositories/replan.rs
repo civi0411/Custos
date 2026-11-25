@@ -1,5 +1,5 @@
 use crate::connection::DbConnection;
-use custos_domain::{DomainError, ReplanBrief, ReplanRecord};
+use custos_contracts::{DomainError, ReplanBrief, ReplanRecord};
 use rusqlite::{params, OptionalExtension};
 
 #[derive(Clone)]
@@ -109,7 +109,7 @@ impl ReplanRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::ReplanTrigger;
+    use custos_contracts::ReplanTrigger;
 
     #[test]
     fn test_save_and_get_replan_record() {

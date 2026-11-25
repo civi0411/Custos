@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::identity::DomainError;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub use crate::inference::events::ToolCall;

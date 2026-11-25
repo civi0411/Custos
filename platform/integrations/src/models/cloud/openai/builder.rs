@@ -1,7 +1,7 @@
 use super::provider::OpenAiProvider;
-use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 use crate::base::ModelInfo;
 use crate::cloud::declarative::{DeclarativeProviderConfig, KeyResolver};
+use crate::cloud::transport::api_client::{ApiClient, AuthMethod, TlsConfig};
 use anyhow::Result;
 use std::collections::HashMap;
 
