@@ -4,7 +4,7 @@
 //! probability that the highest-ranking in-sample strategy variant underperforms
 //! the median strategy out-of-sample (Bailey, Borwein, López de Prado & Zhu, 2014).
 
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -18,30 +18,38 @@ pub struct PboResult {
     pub status: String,
 }
 
-/// Helper to generate combinations of indices k out of n
-fn generate_combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
-    let mut result = Vec::new();
-    let mut current = Vec::new();
+/// Helper to generate up to `limit` combinations of indices k out of n without OOM.
+fn generate_combinations_bounded(n: usize, k: usize, limit: usize) -> Vec<Vec<usize>> {
+    let cap = if limit == 0 { 2_000 } else { limit.min(10_000) };
+    let mut result = Vec::with_capacity(cap.min(256));
+    let mut current = Vec::with_capacity(k);
 
     fn backtrack(
         start: usize,
         n: usize,
         k: usize,
+        limit: usize,
         current: &mut Vec<usize>,
         result: &mut Vec<Vec<usize>>,
     ) {
+        if result.len() >= limit {
+            return;
+        }
         if current.len() == k {
             result.push(current.clone());
             return;
         }
         for i in start..n {
+            if result.len() >= limit {
+                break;
+            }
             current.push(i);
-            backtrack(i + 1, n, k, current, result);
+            backtrack(i + 1, n, k, limit, current, result);
             current.pop();
         }
     }
 
-    backtrack(0, n, k, &mut current, &mut result);
+    backtrack(0, n, k, cap, &mut current, &mut result);
     result
 }
 
@@ -81,16 +89,7 @@ pub fn calculate_pbo_cscv(
     let num_candidates = score_matrix.len();
     let half_periods = min_periods / 2;
 
-    let mut combinations = generate_combinations(min_periods, half_periods);
-    if combinations.len() > max_combinations && max_combinations > 0 {
-        // Deterministic sub-sampling of combinations
-        let step = combinations.len() / max_combinations;
-        let mut subsampled = Vec::with_capacity(max_combinations);
-        for i in 0..max_combinations {
-            subsampled.push(combinations[i * step].clone());
-        }
-        combinations = subsampled;
-    }
+    let combinations = generate_combinations_bounded(min_periods, half_periods, max_combinations);
 
     let mut logits = Vec::with_capacity(combinations.len());
 

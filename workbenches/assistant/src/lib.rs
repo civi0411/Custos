@@ -3,12 +3,8 @@
 //! Authoritative mapping to Custos SADE Master Specification Part 12.
 //! Covers personal productivity, inbox triage, safe draft generation, calendar scheduling,
 //! and governed external mutations across the Copilot / Assistant Workbench Lens.
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
-extern crate custos_engine as custos_runtime;
 
 pub mod application;
-pub mod contribution;
 pub mod domain;
 pub mod fixtures;
 pub mod profile;
@@ -18,7 +14,6 @@ pub mod supervision;
 pub mod verifiers;
 
 pub use application::*;
-pub use contribution::*;
 pub use domain::{AssistantDraft, AssistantDraftPort, GovernedOutboxInvariant};
 pub use fixtures::*;
 pub use profile::*;
@@ -27,12 +22,12 @@ pub use skills::*;
 pub use verifiers::*;
 
 use async_trait::async_trait;
-use custos_domain::oi::ExecutionTopology;
-use custos_domain::session::WorkbenchLens;
-use custos_domain::DomainError;
+use custos_contracts::oi::ExecutionTopology;
+use custos_contracts::session::WorkbenchLens;
+use custos_contracts::DomainError;
 use std::sync::Arc;
 
-use custos_core::contracts::pack::{
+use custos_engine::contracts::pack::{
     DomainPack, DomainPackManifest, PackProfile, PackVerifier, WorkbenchJob, WorkbenchModule,
     WorkerRole,
 };
@@ -94,7 +89,7 @@ impl WorkbenchModule for AssistantModule {
         Arc::new(AssistantPack::new())
     }
 
-    fn register_skills(&self, registry: &mut dyn custos_core::contracts::skill::SkillSink) {
+    fn register_skills(&self, registry: &mut dyn custos_engine::contracts::skill::SkillSink) {
         skills::register_assistant_skills(registry);
     }
 
@@ -102,7 +97,6 @@ impl WorkbenchModule for AssistantModule {
         &[include_str!("../migrations/assistant_schema.sql")]
     }
 }
-
 
 #[async_trait]
 impl DomainPack for AssistantPack {
@@ -246,11 +240,11 @@ impl DomainPack for AssistantPack {
         Ok(())
     }
 
-    fn lane_policy(&self) -> custos_domain::LanePolicy {
-        custos_domain::LanePolicy::interactive_focused()
+    fn lane_policy(&self) -> custos_contracts::LanePolicy {
+        custos_contracts::LanePolicy::interactive_focused()
     }
 
-    fn supervision_profile(&self) -> Option<custos_domain::supervision::SupervisionProfile> {
+    fn supervision_profile(&self) -> Option<custos_contracts::supervision::SupervisionProfile> {
         Some(supervision::assistant_supervision_profile())
     }
 
@@ -275,22 +269,12 @@ impl DomainPack for AssistantPack {
     async fn execute_tool(
         &self,
         tool_name: &str,
-        params: &serde_json::Value,
+        _params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
         match tool_name {
-            "schedule_task" => {
-                let title = params
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Untitled Task");
-                let due_at = params.get("due_at").and_then(|v| v.as_str());
-                Ok(serde_json::json!({
-                    "status": "scheduled",
-                    "title": title,
-                    "due_at": due_at,
-                    "scheduled_at": chrono::Utc::now().to_rfc3339(),
-                }))
-            }
+            "schedule_task" => Err(DomainError::Validation(
+                "schedule_task requires a connected task scheduler service; stub execution is prohibited (Zero-Mock INV-11)".into(),
+            )),
             _ => Err(DomainError::Validation(format!(
                 "Unsupported assistant tool: '{tool_name}'"
             ))),

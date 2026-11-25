@@ -6,11 +6,11 @@
 //! and un-tampered payload signatures before Gate 4 completion.
 
 use async_trait::async_trait;
-use custos_core::authority::GrantStore;
+use custos_engine::authority::GrantStore;
 use serde_json::Value;
 use std::sync::Arc;
 
-use custos_core::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
+use custos_engine::contracts::pack::{PackVerifier, VerificationContext, VerificationResult};
 
 #[derive(Clone, Default)]
 pub struct UserAcceptanceOracle {
@@ -125,6 +125,17 @@ impl PackVerifier for UserAcceptanceOracle {
             };
         }
 
+        if let Some(bound_task) = grant.constraints.get("task_id").and_then(Value::as_str) {
+            if bound_task != ctx.task_id {
+                return VerificationResult::Fail {
+                    reason: format!(
+                        "approval record '{}' belongs to task '{}', not '{}'",
+                        approval_id, bound_task, ctx.task_id
+                    ),
+                };
+            }
+        }
+
         let record_digest = grant
             .constraints
             .get("payload_digest")
@@ -157,7 +168,7 @@ impl PackVerifier for UserAcceptanceOracle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::Grant;
+    use custos_contracts::Grant;
     use serde_json::json;
 
     #[tokio::test]

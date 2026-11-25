@@ -14,7 +14,11 @@ impl<P: AssistantDraftPort> DraftsService<P> {
         Self { port }
     }
 
-    pub async fn list(&self, session_id: Option<&str>, task_id: Option<&str>) -> Result<Vec<AssistantDraft>, DomainError> {
+    pub async fn list(
+        &self,
+        session_id: Option<&str>,
+        task_id: Option<&str>,
+    ) -> Result<Vec<AssistantDraft>, DomainError> {
         self.port.list_drafts(session_id, task_id).await
     }
 

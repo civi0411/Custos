@@ -4,13 +4,13 @@
 //! Covers academic literature integration, citation verification, dataset auditing,
 //! and experiment execution across the Research Workbench Lens.
 
-use std::sync::Arc;
 use async_trait::async_trait;
-use custos_domain::session::WorkbenchLens;
-use custos_domain::DomainError;
-use custos_core::contracts::pack::{
+use custos_contracts::session::WorkbenchLens;
+use custos_contracts::DomainError;
+use custos_engine::contracts::pack::{
     DomainPack, DomainPackManifest, PackProfile, PackVerifier, WorkbenchJob, WorkerRole,
 };
+use std::sync::Arc;
 
 use crate::jobs;
 use crate::profile;
@@ -90,11 +90,11 @@ impl DomainPack for ResearchPack {
         Ok(())
     }
 
-    fn lane_policy(&self) -> custos_domain::LanePolicy {
-        custos_domain::LanePolicy::research_fanout(8)
+    fn lane_policy(&self) -> custos_contracts::LanePolicy {
+        custos_contracts::LanePolicy::research_fanout(8)
     }
 
-    fn supervision_profile(&self) -> Option<custos_domain::supervision::SupervisionProfile> {
+    fn supervision_profile(&self) -> Option<custos_contracts::supervision::SupervisionProfile> {
         Some(crate::supervision::research_supervision_profile())
     }
 
@@ -119,21 +119,12 @@ impl DomainPack for ResearchPack {
     async fn execute_tool(
         &self,
         tool_name: &str,
-        params: &serde_json::Value,
+        _params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
         match tool_name {
-            "search_literature" => {
-                let query = params
-                    .get("query")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                Ok(serde_json::json!({
-                    "status": "success",
-                    "query": query,
-                    "results_count": 0,
-                    "citations": [],
-                }))
-            }
+            "search_literature" => Err(DomainError::Validation(
+                "search_literature requires a connected literature corpus/connector; stub execution is prohibited (Zero-Mock INV-11)".into(),
+            )),
             _ => Err(DomainError::Validation(format!(
                 "Unsupported research tool: '{tool_name}'"
             ))),

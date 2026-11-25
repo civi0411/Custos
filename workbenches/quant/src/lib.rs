@@ -2,38 +2,33 @@
 //!
 //! Autonomous alpha discovery, backtesting simulations, risk auditing,
 //! and execution planning for algo finance agents.
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
 
 pub mod application;
 pub mod contracts;
-pub mod contribution;
 pub mod domain;
-pub mod services;
 pub mod execution;
 pub mod jobs;
 pub mod pack;
 pub mod repository;
 pub mod roles;
+pub mod services;
 pub mod skills;
 pub mod supervision;
 pub mod verifiers;
 
-pub use contribution::*;
-
 pub use contracts::QuantPort;
 pub use domain::*;
-pub use services::{BacktestService, MarketService, OrderExecutionService};
 pub use execution::*;
 pub use jobs::*;
 pub use pack::{get_descriptor, QuantPack, QuantPackDescriptor};
 pub use repository::QuantRepository;
 pub use roles::*;
+pub use services::{BacktestService, MarketService, OrderExecutionService};
 pub use skills::*;
 pub use verifiers::*;
 
-use custos_core::contracts::pack::{DomainPack, WorkbenchModule};
-use custos_core::contracts::skill::SkillSink;
+use custos_engine::contracts::pack::{DomainPack, WorkbenchModule};
+use custos_engine::contracts::skill::SkillSink;
 use std::sync::Arc;
 
 /// Sovereign Workbench Module descriptor for Custos Quantitative Trading
@@ -59,4 +54,3 @@ impl WorkbenchModule for QuantModule {
         skills::register_quant_skills(registry);
     }
 }
-

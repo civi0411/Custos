@@ -5,7 +5,7 @@
 
 use crate::domain::{AssistantDraft, AssistantDraftPort};
 use async_trait::async_trait;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::{params, OptionalExtension};
 use std::sync::{Arc, Mutex};
 
@@ -18,8 +18,8 @@ impl DbConnection {
     }
 
     pub fn open(path: &str) -> Result<Self, DomainError> {
-        let conn = rusqlite::Connection::open(path)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let conn =
+            rusqlite::Connection::open(path).map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(Self(Arc::new(Mutex::new(conn))))
     }
 
@@ -57,7 +57,9 @@ impl AssistantRepository {
     pub fn ensure_tables(&self) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         conn.execute_batch(include_str!("../migrations/assistant_schema.sql"))
-            .map_err(|e| DomainError::Validation(format!("Failed to initialize assistant schema: {e}")))?;
+            .map_err(|e| {
+                DomainError::Validation(format!("Failed to initialize assistant schema: {e}"))
+            })?;
         Ok(())
     }
 
@@ -95,13 +97,14 @@ impl AssistantRepository {
         let _ = tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("draft_event"),
+                custos_contracts::new_id("draft_event"),
                 "assistant.draft.saved",
                 serde_json::json!({
                     "draft_id": draft.id,
                     "session_id": draft.session_id,
                     "status": draft.status
-                }).to_string(),
+                })
+                .to_string(),
                 chrono::Utc::now().timestamp()
             ],
         );
@@ -202,7 +205,7 @@ impl AssistantRepository {
             let _ = tx.execute(
                 "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
                 params![
-                    custos_domain::new_id("draft_event"),
+                    custos_contracts::new_id("draft_event"),
                     "assistant.draft.deleted",
                     serde_json::json!({"draft_id": id}).to_string(),
                     chrono::Utc::now().timestamp()
@@ -237,4 +240,3 @@ impl AssistantDraftPort for AssistantRepository {
         self.delete_draft_sync(id)
     }
 }
-

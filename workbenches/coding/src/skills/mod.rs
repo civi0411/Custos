@@ -14,8 +14,8 @@ pub use test::CargoTestSkill;
 pub use ui::{ComponentCloneSkill, LocalUiDiagnosticSkill};
 
 use async_trait::async_trait;
-use custos_core::contracts::skill::SkillSink;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
+use custos_engine::contracts::skill::SkillSink;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;

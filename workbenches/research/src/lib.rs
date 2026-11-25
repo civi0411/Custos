@@ -2,12 +2,9 @@
 //!
 //! Autonomous academic literature analysis, claim verification,
 //! note-taking, notebooks, and reproducible experiment execution.
-extern crate custos_contracts as custos_domain;
-extern crate custos_engine as custos_core;
 
 pub mod application;
 pub mod contracts;
-pub mod contribution;
 pub mod domain;
 pub mod fixtures;
 pub mod jobs;
@@ -20,13 +17,11 @@ pub mod skills;
 pub mod supervision;
 pub mod verifiers;
 
-pub use contribution::*;
-
 // Contracts re-exports (canonical ownership lives in platform/core & platform/domain)
 pub use contracts::research_ingress::{
     claim_draft, experiment_draft, passage_draft, source_draft, source_draft_with_bytes,
 };
-pub use custos_core::contracts::notebook::{
+pub use custos_engine::contracts::notebook::{
     NotebookDriverPort, NotebookStoragePort, NotebookWorkerResponse, NotebookWorkerSession,
 };
 
@@ -34,11 +29,10 @@ pub use repository::ResearchRepository;
 pub use services::{PreparedCodingHandoff, SynthesisService};
 
 // Domain re-exports
-pub use custos_domain::{
-    CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, FrozenTrainingRecipe,
-    KernelStatus, ModelEvaluationReport, ModelEvaluationSpec, NotebookCell, NotebookCellType,
-    NotebookDocument, NotebookKernelBinding, NotebookKernelState, TrainingExecutionReceipt,
-    TrainingStepTelemetry,
+pub use custos_contracts::{
+    CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, FrozenTrainingRecipe, KernelStatus,
+    ModelEvaluationReport, ModelEvaluationSpec, NotebookCell, NotebookCellType, NotebookDocument,
+    NotebookKernelBinding, NotebookKernelState, TrainingExecutionReceipt, TrainingStepTelemetry,
 };
 pub use domain::claim::*;
 pub use domain::note::{NoteRecord, NoteVersionRecord};
@@ -53,8 +47,8 @@ pub use roles::research_roles;
 pub use skills::*;
 pub use verifiers::*;
 
-use custos_core::contracts::pack::{DomainPack, WorkbenchModule};
-use custos_core::contracts::skill::SkillSink;
+use custos_engine::contracts::pack::{DomainPack, WorkbenchModule};
+use custos_engine::contracts::skill::SkillSink;
 use std::sync::Arc;
 
 /// Sovereign Workbench Module descriptor for Custos Research
@@ -84,4 +78,3 @@ impl WorkbenchModule for ResearchModule {
         &[include_str!("../migrations/research_schema.sql")]
     }
 }
-

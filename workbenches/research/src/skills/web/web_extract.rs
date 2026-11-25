@@ -5,7 +5,7 @@
 //! Marks output with `TaintLevel::Untrusted` to prevent prompt injection attacks.
 
 use async_trait::async_trait;
-use custos_core::contracts::skill::{
+use custos_engine::contracts::skill::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput,
 };
 use regex::Regex;
@@ -54,15 +54,11 @@ impl Skill for WebExtractSkill {
             .and_then(|v| v.as_str())
             .ok_or_else(|| SkillError::MissingArg("url".to_string()))?;
 
-        // Validate scheme (HTTP/HTTPS only)
-        if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err(SkillError::InvalidArg(
-                "Only http:// and https:// URLs are permitted".to_string(),
-            ));
-        }
+        custos_contracts::execution::validate_browser_url(url)
+            .map_err(|e| SkillError::SandboxViolation(format!("Blocked URL: {e}")))?;
 
-        // Fetch URL content
-        let resp = self
+        // Fetch URL content with 1 MB streaming cap
+        let mut resp = self
             .http_client
             .get(url)
             .send()
@@ -77,10 +73,24 @@ impl Skill for WebExtractSkill {
             )));
         }
 
-        let html = resp
-            .text()
+        const MAX_HTML_BYTES: usize = 1024 * 1024;
+        let mut body_bytes = Vec::new();
+        while let Some(chunk) = resp
+            .chunk()
             .await
-            .map_err(|e| SkillError::FetchError(format!("Failed to read body: {}", e)))?;
+            .map_err(|e| SkillError::FetchError(format!("Failed to read body: {}", e)))?
+        {
+            let remaining = MAX_HTML_BYTES.saturating_sub(body_bytes.len());
+            if remaining == 0 {
+                break;
+            }
+            let take = chunk.len().min(remaining);
+            body_bytes.extend_from_slice(&chunk[..take]);
+            if take < chunk.len() {
+                break;
+            }
+        }
+        let html = String::from_utf8_lossy(&body_bytes).into_owned();
 
         // Sanitize HTML into clean markdown-like text
         // Strip <script> and <style>
@@ -98,7 +108,7 @@ impl Skill for WebExtractSkill {
         let truncated = if cleaned.len() > 50_000 {
             format!(
                 "{}...\n[Truncated for context length]",
-                custos_domain::truncate_str_to_char_boundary(&cleaned, 50_000)
+                custos_contracts::truncate_str_to_char_boundary(&cleaned, 50_000)
             )
         } else {
             cleaned.to_string()

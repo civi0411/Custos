@@ -5,10 +5,10 @@
 //! atomic application without leaving rejected hunks or corrupted working tree.
 
 use async_trait::async_trait;
-use custos_adapters::host::operations::process::SandboxedProcess;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel, WriteTarget,
 };
+use custos_integrations::host::operations::process::SandboxedProcess;
 use serde_json::json;
 
 pub struct GitPatchSkill;
@@ -49,19 +49,47 @@ impl Skill for GitPatchSkill {
             return Err(SkillError::InvalidArg("diff cannot be empty".to_string()));
         }
 
-        // Write diff to a temporary file in the workspace or tempdir to pass to git apply
-        let patch_path = std::path::Path::new(workspace).join(".custos_pending.patch");
+        let ws_path = std::path::Path::new(workspace);
+        if let Some(ref scope) = ctx.scope_root {
+            let canon_root = scope.root.canonicalize().map_err(|e| {
+                SkillError::SandboxViolation(format!(
+                    "Invalid scope_root '{}': {e}",
+                    scope.root.display()
+                ))
+            })?;
+            let canon_ws = ws_path.canonicalize().map_err(|e| {
+                SkillError::InvalidArg(format!("Invalid workspace_path '{workspace}': {e}"))
+            })?;
+            if !canon_ws.starts_with(&canon_root) {
+                return Err(SkillError::SandboxViolation(format!(
+                    "workspace_path '{}' escapes scope_root '{}'",
+                    workspace,
+                    canon_root.display()
+                )));
+            }
+        }
+
+        // Write diff to a unique temporary file in the workspace
+        let patch_name = format!(".custos_pending_{}.patch", custos_contracts::new_id("p"));
+        let patch_path = ws_path.join(&patch_name);
         tokio::fs::write(&patch_path, diff.as_bytes()).await?;
 
-        // 1. Dry run: git apply --check .custos_pending.patch
+        // 1. Dry run: git apply --check <patch_name>
         let dry_run = SandboxedProcess::new("git")
             .arg("apply")
             .arg("--check")
-            .arg(".custos_pending.patch")
+            .arg(&patch_name)
             .cwd(workspace)
             .timeout_ms(10_000)
             .run()
-            .await?;
+            .await;
+        let dry_run = match dry_run {
+            Ok(out) => out,
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&patch_path).await;
+                return Err(e);
+            }
+        };
 
         if !dry_run.succeeded() {
             // Clean up temporary patch file
@@ -72,17 +100,18 @@ impl Skill for GitPatchSkill {
             )));
         }
 
-        // 2. Apply patch: git apply .custos_pending.patch
-        let apply_run = SandboxedProcess::new("git")
+        // 2. Apply patch
+        let apply_res = SandboxedProcess::new("git")
             .arg("apply")
-            .arg(".custos_pending.patch")
+            .arg(&patch_name)
             .cwd(workspace)
             .timeout_ms(15_000)
             .run()
-            .await?;
+            .await;
 
-        // Clean up temporary patch file
+        // Always clean up temporary patch file
         let _ = tokio::fs::remove_file(&patch_path).await;
+        let apply_run = apply_res?;
 
         if !apply_run.succeeded() {
             return Err(SkillError::SandboxViolation(format!(

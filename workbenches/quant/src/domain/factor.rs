@@ -3,8 +3,8 @@
 //! Models quantitative alpha signals, statistical hypotheses, and predictive metrics
 //! (Information Coefficient, Information Ratio, factor decay, and lookahead validation).
 
-use custos_domain::DomainError;
-use custos_domain::new_id;
+use custos_contracts::new_id;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 use super::ResearchRepository;
 use crate::domain::claim::{PassageAnchor, ResearchClaim, SourceRecord};
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use rusqlite::params;
 
 impl ResearchRepository {

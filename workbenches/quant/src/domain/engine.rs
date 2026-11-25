@@ -1,12 +1,17 @@
 //! Native High-Performance Simulation & Backtest Engine
 //!
-//! Models discrete-time, zero-I/O bar processing, realistic slippage, transaction costs,
-//! position accounting, and drawdown tracking for algorithmic strategies in Rust.
+//! Models discrete-time, zero-I/O bar processing with strict next-bar open execution
+//! (zero same-bar lookahead), intrabar protection (SL/TP/Trailing Stop), realistic slippage,
+//! transaction costs, FIFO trade fills, and equity curve accounting.
 
-use super::backtest::BacktestTearsheet;
+use super::backtest::{BacktestTearsheet, EquityPoint, MonthlyReturn};
+use super::order::OrderDirection;
+use super::review::{CloseReason, TradeFillRecord};
 use super::risk::ProtectionSpec;
-use custos_domain::DomainError;
+use chrono::{DateTime, Datelike};
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct OhlcvBar {
@@ -103,6 +108,13 @@ impl StrategyRule for DualMovingAverageRule {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BacktestSimulationOutput {
+    pub tearsheet: BacktestTearsheet,
+    pub fills: Vec<TradeFillRecord>,
+    pub period_returns: Vec<f64>,
+}
+
 pub struct NativeBacktestEngine;
 
 impl NativeBacktestEngine {
@@ -110,107 +122,313 @@ impl NativeBacktestEngine {
         strategy_id: &str,
         bars: &[OhlcvBar],
         config: &BacktestConfig,
-        mut rule: Box<dyn StrategyRule>,
+        rule: Box<dyn StrategyRule>,
     ) -> Result<BacktestTearsheet, DomainError> {
+        Ok(Self::run_detailed(strategy_id, "UNKNOWN", bars, config, rule, 1)?.tearsheet)
+    }
+
+    /// Runs a zero-lookahead simulation: signals evaluated at bar `i` close execute at
+    /// bar `i + 1` open; intrabar SL/TP/Trailing Stop are checked against `low`/`high`.
+    pub fn run_detailed(
+        strategy_id: &str,
+        symbol: &str,
+        bars: &[OhlcvBar],
+        config: &BacktestConfig,
+        mut rule: Box<dyn StrategyRule>,
+        trials_count: usize,
+    ) -> Result<BacktestSimulationOutput, DomainError> {
         if bars.len() < 5 {
             return Err(DomainError::Validation(
                 "Insufficient bar history for backtest simulation (minimum 5 bars required)".into(),
             ));
         }
 
-        let mut cash: f64 = config.initial_capital;
-        let mut position_qty: f64 = 0.0;
-        let mut entry_price: f64 = 0.0;
-        let mut peak_equity: f64 = config.initial_capital;
-        let mut max_drawdown: f64 = 0.0;
-        let mut daily_returns: Vec<f64> = Vec::with_capacity(bars.len());
-        let mut prev_equity: f64 = config.initial_capital;
-        let mut trades_count: usize = 0;
-        let mut winning_trades: usize = 0;
-        let mut gross_profit: f64 = 0.0;
-        let mut gross_loss: f64 = 0.0;
+        let mut cash = config.initial_capital;
+        let mut position_qty = 0.0_f64;
+        let mut entry_price = 0.0_f64;
+        let mut entry_comm_total = 0.0_f64;
+        let mut favorable_extreme = 0.0_f64;
+        let mut trailing_armed = false;
 
-        for i in 1..bars.len() {
-            let current_bar = bars[i];
-            let current_price = current_bar.close;
+        let mut peak_equity = config.initial_capital;
+        let mut max_drawdown = 0.0_f64;
+        let mut prev_equity = config.initial_capital;
+        let mut period_returns = Vec::with_capacity(bars.len());
+        let mut equity_curve = Vec::with_capacity(bars.len());
+        let mut fills: Vec<TradeFillRecord> = Vec::new();
+        let mut monthly_bounds: BTreeMap<(i32, u32), (f64, f64)> = BTreeMap::new();
 
-            // 1. Position Protection evaluation (Stop Loss / Take Profit / Trailing Stop)
+        let mut trades_count = 0usize;
+        let mut winning_trades = 0usize;
+        let mut gross_profit = 0.0_f64;
+        let mut gross_loss = 0.0_f64;
+        let mut pending_action = SignalAction::Hold;
+
+        let mut fill_seq = 0usize;
+
+        for (i, bar) in bars.iter().enumerate() {
+            // 1. Execute signal decided at previous bar's close on THIS bar's open (zero lookahead)
+            if i > 0 {
+                let open_px = if bar.open > 0.0 { bar.open } else { bar.close };
+                match pending_action {
+                    SignalAction::TargetPercent(target_pct) => {
+                        let total_equity = cash + position_qty * open_px;
+                        let target_notional =
+                            total_equity * target_pct.clamp(-config.leverage, config.leverage);
+                        let target_qty = target_notional / open_px;
+                        let delta_qty = target_qty - position_qty;
+
+                        if delta_qty.abs() * open_px > 5.0 {
+                            let exec_price = if delta_qty > 0.0 {
+                                open_px * (1.0 + config.slippage_bps * 1e-4)
+                            } else {
+                                open_px * (1.0 - config.slippage_bps * 1e-4)
+                            };
+                            let cost = delta_qty * exec_price;
+                            let comm = cost.abs() * config.commission_rate;
+                            cash -= cost + comm;
+                            fill_seq += 1;
+
+                            let closing_existing = position_qty.abs() > 1e-6
+                                && position_qty.signum() != delta_qty.signum();
+                            let direction = if delta_qty > 0.0 {
+                                if closing_existing {
+                                    OrderDirection::BuyToCover
+                                } else {
+                                    OrderDirection::Buy
+                                }
+                            } else if closing_existing {
+                                OrderDirection::Sell
+                            } else {
+                                OrderDirection::SellShort
+                            };
+
+                            if closing_existing {
+                                let closed_qty = position_qty.abs().min(delta_qty.abs());
+                                let close_ratio = closed_qty / position_qty.abs();
+                                let allocated_open_comm = entry_comm_total * close_ratio;
+                                let net_pnl =
+                                    (exec_price - entry_price) * closed_qty * position_qty.signum()
+                                        - allocated_open_comm
+                                        - comm;
+                                trades_count += 1;
+                                if net_pnl > 0.0 {
+                                    winning_trades += 1;
+                                    gross_profit += net_pnl;
+                                } else {
+                                    gross_loss += net_pnl.abs();
+                                }
+                                entry_comm_total =
+                                    (entry_comm_total - allocated_open_comm).max(0.0);
+                            }
+
+                            let new_qty = position_qty + delta_qty;
+                            if position_qty.abs() < 1e-6
+                                || position_qty.signum() != new_qty.signum()
+                            {
+                                entry_price = if new_qty.abs() > 1e-6 {
+                                    exec_price
+                                } else {
+                                    0.0
+                                };
+                                entry_comm_total = if new_qty.abs() > 1e-6 { comm } else { 0.0 };
+                                favorable_extreme = entry_price;
+                                trailing_armed = false;
+                            } else if position_qty.signum() == delta_qty.signum() {
+                                entry_price = (position_qty.abs() * entry_price
+                                    + delta_qty.abs() * exec_price)
+                                    / new_qty.abs();
+                                entry_comm_total += comm;
+                            }
+                            position_qty = if new_qty.abs() < 1e-9 { 0.0 } else { new_qty };
+
+                            fills.push(TradeFillRecord {
+                                fill_id: format!("sim_fill_{strategy_id}_{fill_seq}"),
+                                order_id: format!("sim_ord_{strategy_id}_{fill_seq}"),
+                                symbol: symbol.to_string(),
+                                direction,
+                                price: exec_price,
+                                quantity: delta_qty.abs(),
+                                commission: comm,
+                                timestamp: bar.timestamp,
+                                exit_reason: closing_existing
+                                    .then(|| CloseReason::SignalTrigger.as_str().to_string()),
+                            });
+                        }
+                    }
+                    SignalAction::ClosePosition => {
+                        if position_qty.abs() > 1e-6 {
+                            let exec_price = open_px
+                                * (1.0 - config.slippage_bps * 1e-4 * position_qty.signum());
+                            let proceeds = position_qty * exec_price;
+                            let comm = proceeds.abs() * config.commission_rate;
+                            cash += proceeds - comm;
+                            let net_pnl =
+                                (exec_price - entry_price) * position_qty - entry_comm_total - comm;
+                            trades_count += 1;
+                            if net_pnl > 0.0 {
+                                winning_trades += 1;
+                                gross_profit += net_pnl;
+                            } else {
+                                gross_loss += net_pnl.abs();
+                            }
+                            fill_seq += 1;
+                            fills.push(TradeFillRecord {
+                                fill_id: format!("sim_fill_{strategy_id}_{fill_seq}"),
+                                order_id: format!("sim_ord_{strategy_id}_{fill_seq}"),
+                                symbol: symbol.to_string(),
+                                direction: if position_qty > 0.0 {
+                                    OrderDirection::Sell
+                                } else {
+                                    OrderDirection::BuyToCover
+                                },
+                                price: exec_price,
+                                quantity: position_qty.abs(),
+                                commission: comm,
+                                timestamp: bar.timestamp,
+                                exit_reason: Some(CloseReason::SignalTrigger.as_str().to_string()),
+                            });
+                            position_qty = 0.0;
+                            entry_price = 0.0;
+                            entry_comm_total = 0.0;
+                            trailing_armed = false;
+                        }
+                    }
+                    SignalAction::Hold => {}
+                }
+            }
+
+            // 2. Intrabar Protection evaluation (pessimistic order: Stop Loss -> Trailing Stop -> Take Profit)
             if let Some(ref prot) = config.protection {
                 if position_qty.abs() > 1e-6 && entry_price > 0.0 {
-                    let pnl_pct =
-                        (current_price - entry_price) / entry_price * position_qty.signum();
-                    if (prot.stop_loss_pct > 0.0 && pnl_pct <= -prot.stop_loss_pct)
-                        || (prot.take_profit_pct > 0.0 && pnl_pct >= prot.take_profit_pct)
+                    let is_long = position_qty > 0.0;
+                    if is_long {
+                        favorable_extreme = favorable_extreme.max(bar.high);
+                    } else {
+                        favorable_extreme = if favorable_extreme <= 0.0 {
+                            bar.low
+                        } else {
+                            favorable_extreme.min(bar.low)
+                        };
+                    }
+
+                    let favorable_gain = if is_long {
+                        (favorable_extreme - entry_price) / entry_price
+                    } else {
+                        (entry_price - favorable_extreme) / entry_price
+                    };
+                    if prot.trailing_stop_pct > 0.0
+                        && favorable_gain >= prot.trailing_activation_pct
                     {
+                        trailing_armed = true;
+                    }
+
+                    let sl_trigger_px = if prot.stop_loss_pct > 0.0 {
+                        Some(if is_long {
+                            entry_price * (1.0 - prot.stop_loss_pct)
+                        } else {
+                            entry_price * (1.0 + prot.stop_loss_pct)
+                        })
+                    } else {
+                        None
+                    };
+                    let trail_trigger_px = if trailing_armed && prot.trailing_stop_pct > 0.0 {
+                        Some(if is_long {
+                            favorable_extreme * (1.0 - prot.trailing_stop_pct)
+                        } else {
+                            favorable_extreme * (1.0 + prot.trailing_stop_pct)
+                        })
+                    } else {
+                        None
+                    };
+                    let tp_trigger_px = if prot.take_profit_pct > 0.0 {
+                        Some(if is_long {
+                            entry_price * (1.0 + prot.take_profit_pct)
+                        } else {
+                            entry_price * (1.0 - prot.take_profit_pct)
+                        })
+                    } else {
+                        None
+                    };
+
+                    let triggered = sl_trigger_px
+                        .filter(|&px| {
+                            if is_long {
+                                bar.low <= px
+                            } else {
+                                bar.high >= px
+                            }
+                        })
+                        .map(|px| (px, CloseReason::ServerStopLoss))
+                        .or_else(|| {
+                            trail_trigger_px
+                                .filter(|&px| {
+                                    if is_long {
+                                        bar.low <= px
+                                    } else {
+                                        bar.high >= px
+                                    }
+                                })
+                                .map(|px| (px, CloseReason::TrailingStop))
+                        })
+                        .or_else(|| {
+                            tp_trigger_px
+                                .filter(|&px| {
+                                    if is_long {
+                                        bar.high >= px
+                                    } else {
+                                        bar.low <= px
+                                    }
+                                })
+                                .map(|px| (px, CloseReason::ServerTakeProfit))
+                        });
+
+                    if let Some((raw_exit_px, close_reason)) = triggered {
                         let slippage_factor =
                             1.0 - config.slippage_bps * 1e-4 * position_qty.signum();
-                        let exit_price = current_price * slippage_factor;
+                        let exit_price = raw_exit_px * slippage_factor;
                         let proceeds = position_qty * exit_price;
-                        let commission = proceeds.abs() * config.commission_rate;
-                        cash += proceeds - commission;
-
-                        let trade_pnl = (exit_price - entry_price) * position_qty;
-                        if trade_pnl > 0.0 {
-                            winning_trades += 1;
-                            gross_profit += trade_pnl;
-                        } else {
-                            gross_loss += trade_pnl.abs();
-                        }
-                        trades_count += 1;
-                        position_qty = 0.0;
-                        entry_price = 0.0;
-                    }
-                }
-            }
-
-            // 2. Strategy Rule evaluation
-            let action = rule.on_bar(i, &bars[..=i]);
-            match action {
-                SignalAction::TargetPercent(target_pct) => {
-                    let total_equity = cash + position_qty * current_price;
-                    let target_notional =
-                        total_equity * target_pct.clamp(-config.leverage, config.leverage);
-                    let target_qty = target_notional / current_price;
-                    let delta_qty = target_qty - position_qty;
-
-                    if delta_qty.abs() * current_price > 5.0 {
-                        let exec_price = if delta_qty > 0.0 {
-                            current_price * (1.0 + config.slippage_bps * 1e-4)
-                        } else {
-                            current_price * (1.0 - config.slippage_bps * 1e-4)
-                        };
-                        let cost = delta_qty * exec_price;
-                        let comm = cost.abs() * config.commission_rate;
-                        cash -= cost + comm;
-
-                        if position_qty.abs() < 1e-6 {
-                            entry_price = exec_price;
-                        } else if position_qty.signum() == delta_qty.signum() {
-                            entry_price =
-                                (position_qty * entry_price + cost) / (position_qty + delta_qty);
-                        } else {
-                            trades_count += 1;
-                        }
-                        position_qty += delta_qty;
-                    }
-                }
-                SignalAction::ClosePosition => {
-                    if position_qty.abs() > 1e-6 {
-                        let exec_price = current_price
-                            * (1.0 - config.slippage_bps * 1e-4 * position_qty.signum());
-                        let proceeds = position_qty * exec_price;
                         let comm = proceeds.abs() * config.commission_rate;
                         cash += proceeds - comm;
+
+                        let net_pnl =
+                            (exit_price - entry_price) * position_qty - entry_comm_total - comm;
                         trades_count += 1;
+                        if net_pnl > 0.0 {
+                            winning_trades += 1;
+                            gross_profit += net_pnl;
+                        } else {
+                            gross_loss += net_pnl.abs();
+                        }
+                        fill_seq += 1;
+                        fills.push(TradeFillRecord {
+                            fill_id: format!("sim_fill_{strategy_id}_{fill_seq}"),
+                            order_id: format!("sim_ord_{strategy_id}_{fill_seq}"),
+                            symbol: symbol.to_string(),
+                            direction: if is_long {
+                                OrderDirection::Sell
+                            } else {
+                                OrderDirection::BuyToCover
+                            },
+                            price: exit_price,
+                            quantity: position_qty.abs(),
+                            commission: comm,
+                            timestamp: bar.timestamp,
+                            exit_reason: Some(close_reason.as_str().to_string()),
+                        });
                         position_qty = 0.0;
                         entry_price = 0.0;
+                        entry_comm_total = 0.0;
+                        trailing_armed = false;
                     }
                 }
-                SignalAction::Hold => {}
             }
 
-            // 3. Mark to Market Equity & Drawdown accounting
-            let current_equity = cash + position_qty * current_price;
+            // 3. Evaluate strategy rule strictly on closed history `bars[..=i]` for NEXT bar execution
+            pending_action = rule.on_bar(i, &bars[..=i]);
+
+            // 4. Mark-to-market equity, drawdown & monthly tracking
+            let current_equity = cash + position_qty * bar.close;
             peak_equity = peak_equity.max(current_equity);
             let dd = if peak_equity > 0.0 {
                 (peak_equity - current_equity) / peak_equity
@@ -219,28 +437,42 @@ impl NativeBacktestEngine {
             };
             max_drawdown = max_drawdown.max(dd);
 
-            let period_ret = if prev_equity > 0.0 {
-                (current_equity - prev_equity) / prev_equity
-            } else {
-                0.0
-            };
-            daily_returns.push(period_ret);
+            if i > 0 {
+                let period_ret = if prev_equity > 0.0 {
+                    (current_equity - prev_equity) / prev_equity
+                } else {
+                    0.0
+                };
+                period_returns.push(period_ret);
+            }
             prev_equity = current_equity;
+            equity_curve.push(EquityPoint {
+                timestamp: bar.timestamp,
+                equity: current_equity,
+                drawdown: dd,
+            });
+
+            if let Some(dt) = DateTime::from_timestamp(bar.timestamp, 0) {
+                let ym = (dt.year(), dt.month());
+                monthly_bounds
+                    .entry(ym)
+                    .and_modify(|(_, end_eq)| *end_eq = current_equity)
+                    .or_insert((current_equity, current_equity));
+            }
         }
 
-        // 4. Performance calculation
         let total_return = (prev_equity - config.initial_capital) / config.initial_capital;
-        let mean_ret = if !daily_returns.is_empty() {
-            daily_returns.iter().sum::<f64>() / daily_returns.len() as f64
+        let mean_ret = if !period_returns.is_empty() {
+            period_returns.iter().sum::<f64>() / period_returns.len() as f64
         } else {
             0.0
         };
-        let var_ret = if daily_returns.len() > 1 {
-            daily_returns
+        let var_ret = if period_returns.len() > 1 {
+            period_returns
                 .iter()
                 .map(|r| (r - mean_ret).powi(2))
                 .sum::<f64>()
-                / (daily_returns.len() - 1) as f64
+                / (period_returns.len() - 1) as f64
         } else {
             0.0
         };
@@ -253,46 +485,71 @@ impl NativeBacktestEngine {
         let win_rate = if trades_count > 0 {
             winning_trades as f64 / trades_count as f64
         } else {
-            0.5
+            0.0
         };
         let profit_factor = if gross_loss > 1e-6 {
             gross_profit / gross_loss
         } else if gross_profit > 0.0 {
-            2.0
+            gross_profit
         } else {
-            1.0
+            0.0
         };
 
-        // 5. Deflated Sharpe Ratio (Multiple testing correction)
+        let monthly_returns: Vec<MonthlyReturn> = monthly_bounds
+            .into_iter()
+            .map(|((year, month), (start_eq, end_eq))| MonthlyReturn {
+                year,
+                month,
+                return_pct: if start_eq > 1e-9 {
+                    (end_eq - start_eq) / start_eq
+                } else {
+                    0.0
+                },
+            })
+            .collect();
+
         let dsr = super::backtest::calculate_dsr(
             annualized_sharpe,
-            1,
-            daily_returns.len(),
+            trials_count.max(1),
+            period_returns.len().max(2),
             0.0,
             3.0,
             1.0,
         );
+        let inst = super::metrics::compute_institutional_suite(&period_returns, None, 252.0);
 
-        // 6. Institutional Risk/Return Metrics (Sortino, Downside Deviation, Omega, CVaR)
-        let inst = super::metrics::compute_institutional_suite(&daily_returns, None, 252.0);
+        let tearsheet = BacktestTearsheet::new(
+            strategy_id,
+            annualized_sharpe,
+            max_drawdown.clamp(0.0, 1.0),
+            total_return,
+        )?
+        .with_deflated_sharpe(dsr)
+        .with_extended_metrics(
+            std_ret * (252.0_f64).sqrt(),
+            win_rate,
+            profit_factor,
+            trades_count as f64,
+            monthly_returns,
+        )
+        .with_institutional_metrics(
+            inst.sortino_ratio,
+            inst.downside_deviation,
+            inst.omega_ratio,
+            inst.cvar_95,
+        )
+        .with_provenance(
+            true,
+            bars.first().map(|b| b.timestamp),
+            bars.last().map(|b| b.timestamp),
+            bars.len(),
+            equity_curve,
+        );
 
-        let sheet =
-            BacktestTearsheet::new(strategy_id, annualized_sharpe, max_drawdown, total_return)?
-                .with_deflated_sharpe(dsr)
-                .with_extended_metrics(
-                    std_ret * (252.0_f64).sqrt(),
-                    win_rate,
-                    profit_factor,
-                    trades_count as f64,
-                    Vec::new(),
-                )
-                .with_institutional_metrics(
-                    inst.sortino_ratio,
-                    inst.downside_deviation,
-                    inst.omega_ratio,
-                    inst.cvar_95,
-                );
-
-        Ok(sheet)
+        Ok(BacktestSimulationOutput {
+            tearsheet,
+            fills,
+            period_returns,
+        })
     }
 }

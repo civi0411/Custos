@@ -10,6 +10,7 @@ pub mod backtest;
 pub mod contracts;
 pub mod engine;
 pub mod factor;
+pub mod factor_dsl;
 pub mod gate;
 pub mod grid;
 pub mod lease;
@@ -19,22 +20,27 @@ pub mod orderbook;
 pub mod pbo;
 pub mod pipeline_invariant;
 pub mod portal;
+pub mod quality;
 pub mod review;
 pub mod risk;
+pub mod strategy;
 
-pub use backtest::{calculate_dsr, normal_cdf, probit, BacktestTearsheet, MonthlyReturn};
+pub use backtest::{
+    calculate_dsr, normal_cdf, probit, BacktestTearsheet, EquityPoint, MonthlyReturn,
+};
 pub use contracts::{
     ExchangeOrderAdapter, ExecutionStatus, FillSnapshot, LimitThenMarketExecutor,
     MarketOrderExecutor, MarketType, OrderExecutionStrategy, OrderIntent, OrderSide,
     PositionSnapshot, RestingLimitExecutor,
 };
 pub use engine::{
-    BacktestConfig, DualMovingAverageRule, NativeBacktestEngine, OhlcvBar, SignalAction,
-    StrategyRule,
+    BacktestConfig, BacktestSimulationOutput, DualMovingAverageRule, NativeBacktestEngine,
+    OhlcvBar, SignalAction, StrategyRule,
 };
 pub use factor::{
     compute_rank_ic, detect_lookahead_bias, AlphaFactor, BenjaminiHochberg, FactorClassification,
 };
+pub use factor_dsl::{FactorExpr, FormulaStrategyRule};
 pub use gate::{DecisionContext, GateOutcome, PreTradeDecisionGate};
 pub use grid::{
     GridCell, GridConfig, GridMode, GridOrderAction, GridStatusSummary, NativeGridEngine,
@@ -51,12 +57,17 @@ pub use order::{OrderDirection, OrderTicket, OrderTicketStatus, OrderType};
 pub use orderbook::{OrderBookLevel, OrderBookSnapshot};
 pub use pbo::{calculate_pbo_cscv, PboResult};
 pub use pipeline_invariant::ClosedBarInvariant;
-pub use portal::{BarTimeframe, BollingerBandsResult, MacdResult, NativeDataPortal};
+pub use portal::{
+    compute_wilder_atr_slice, compute_wilder_rsi_slice, BarTimeframe, BollingerBandsResult,
+    MacdResult, NativeDataPortal,
+};
+pub use quality::{assess_evidence_quality, EvidenceObservation, EvidenceQualitySummary};
 pub use review::{
-    DiagnosticCheck, ExitReasonCohort, HoldingCohort, PostTradeAnalyzer, PostTradeReviewReport,
-    TradeFillRecord,
+    CloseReason, DiagnosticCheck, ExitReasonCohort, HoldingCohort, PostTradeAnalyzer,
+    PostTradeReviewReport, TradeFillRecord,
 };
 pub use risk::{ProtectionSpec, ProtectionState, RiskBreach, RiskPermitConfig};
+pub use strategy::{DirectionMode, MarketCategory, QuantPositionRecord, QuantStrategyRecord};
 
 #[cfg(test)]
 mod tests {

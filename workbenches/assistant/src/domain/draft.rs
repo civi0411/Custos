@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 
 /// Safe Communication / Document Draft
@@ -114,4 +114,3 @@ mod tests {
         assert_eq!(draft.content, "Modified draft after approval");
     }
 }
-

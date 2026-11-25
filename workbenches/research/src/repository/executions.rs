@@ -1,7 +1,7 @@
 use super::ResearchRepository;
-use chrono::{DateTime, Utc};
 use crate::domain::claim::ResearchExperimentRun;
-use custos_domain::{
+use chrono::{DateTime, Utc};
+use custos_contracts::{
     DomainError, EnvSnapshot, ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, Recipe,
     RecipeEnvironmentSpec, RecipeInput,
 };
@@ -232,9 +232,9 @@ impl ResearchRepository {
                         .latest_protected_checkpoint_step
                         .is_some_and(|next| next >= step)
                 })
-                || previous
-                    .latest_observed_step
-                    .is_some_and(|step| !record.latest_observed_step.is_some_and(|next| next >= step))
+                || previous.latest_observed_step.is_some_and(|step| {
+                    !record.latest_observed_step.is_some_and(|next| next >= step)
+                })
                 || previous.latest_local_checkpoint_step.is_some_and(|step| {
                     !record
                         .latest_local_checkpoint_step
@@ -328,7 +328,7 @@ impl ResearchRepository {
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
-                custos_domain::new_id("exec_event"),
+                custos_contracts::new_id("exec_event"),
                 "research.execution.saved",
                 serde_json::json!({"execution_id": record.id, "recipe_id": record.recipe_id,
                     "protected_step": record.latest_protected_checkpoint_step})

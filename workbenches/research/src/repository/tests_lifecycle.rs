@@ -6,7 +6,7 @@ use crate::domain::claim::{
 use crate::domain::synthesis::{
     ClaimHandoffSummary, RecipeHandoffSummary, ResearchSynthesisProposal, SynthesisProposalStatus,
 };
-use custos_domain::{
+use custos_contracts::{
     EnvSnapshot, ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, Recipe,
     RecipeEnvironmentSpec, RecipeInput,
 };

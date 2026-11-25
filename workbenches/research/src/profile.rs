@@ -1,7 +1,7 @@
 //! Research Pack Profile (RFC 003 §4)
 
-use custos_core::contracts::pack::PackProfile;
-use custos_domain::oi::ExecutionTopology;
+use custos_contracts::oi::ExecutionTopology;
+use custos_engine::contracts::pack::PackProfile;
 
 /// Returns the default profile for the Research domain pack.
 pub fn research_profile() -> PackProfile {

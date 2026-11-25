@@ -3,7 +3,7 @@
   "name": "Engineering",
   "version": "0.1.0",
   "description": "Autonomous software engineering, Git worktrees, tests, and AST codebase intelligence.",
-  "builtin": true,
+  "builtin": false,
   "host_compatibility": ">=0.1.0",
   "capabilities": ["workspace", "terminal"],
   "contributions": {

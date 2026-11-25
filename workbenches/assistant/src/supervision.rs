@@ -1,6 +1,6 @@
 //! Supervision policy tailored to the Assistant Workbench.
 
-use custos_domain::supervision::{StepSpanKind, SupervisionProfile, ThresholdPolicy};
+use custos_contracts::supervision::{StepSpanKind, SupervisionProfile, ThresholdPolicy};
 
 pub fn assistant_supervision_profile() -> SupervisionProfile {
     SupervisionProfile::for_workbench(
@@ -17,4 +17,3 @@ pub fn assistant_supervision_profile() -> SupervisionProfile {
     )
     .with_exempt_kinds(vec![StepSpanKind::Session])
 }
-

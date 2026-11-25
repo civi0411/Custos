@@ -9,7 +9,7 @@
 //! reference verification. Results are candidates and must be treated as heuristic.
 
 use async_trait::async_trait;
-use custos_runtime::agent::skills::{
+use custos_engine::agent::skills::{
     Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, TaintLevel,
 };
 use regex::Regex;
@@ -17,7 +17,7 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 
 // Re-export canonical LexicalSearchSkill from host operations adapter
-pub use custos_adapters::host::operations::search::LexicalSearchSkill;
+pub use custos_integrations::host::operations::search::LexicalSearchSkill;
 
 /// Backwards-compatible alias for existing pipelines expecting `ast_search`.
 pub struct AstSearchSkill;
@@ -63,6 +63,24 @@ async fn execute_lexical_search(
             "workspace path not found: {}",
             workspace_str
         )));
+    }
+    if let Some(ref scope) = ctx.scope_root {
+        let canon_root = scope.root.canonicalize().map_err(|e| {
+            SkillError::SandboxViolation(format!(
+                "Invalid scope_root '{}': {e}",
+                scope.root.display()
+            ))
+        })?;
+        let canon_ws = workspace.canonicalize().map_err(|e| {
+            SkillError::InvalidArg(format!("Invalid workspace_path '{workspace_str}': {e}"))
+        })?;
+        if !canon_ws.starts_with(&canon_root) {
+            return Err(SkillError::SandboxViolation(format!(
+                "workspace_path '{}' escapes scope_root '{}'",
+                workspace_str,
+                canon_root.display()
+            )));
+        }
     }
 
     let def_pattern = format!(

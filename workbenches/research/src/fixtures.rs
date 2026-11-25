@@ -1,6 +1,6 @@
 //! Research Pack Task Fixtures (RFC 003 §4)
 
-use custos_domain::task::{ContractEvidence, EvidenceKind, TaskContract};
+use custos_contracts::task::{ContractEvidence, EvidenceKind, TaskContract};
 
 /// Fixture: Multi-source literature review and synthesis.
 pub fn research_synthesis_fixture() -> TaskContract {

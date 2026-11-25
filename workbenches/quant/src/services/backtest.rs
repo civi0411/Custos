@@ -3,10 +3,11 @@
 use super::dto::*;
 use crate::{
     calculate_dsr, calculate_pbo_cscv, detect_lookahead_bias, BacktestConfig, BacktestTearsheet,
-    BarTimeframe, DualMovingAverageRule, GridConfig, GridMode, MonthlyReturn, NativeBacktestEngine,
-    NativeDataPortal, NativeGridEngine, OhlcvBar, PboResult, ProtectionSpec, QuantPort,
+    BarTimeframe, DirectionMode, DualMovingAverageRule, FormulaStrategyRule, GridConfig, GridMode,
+    MarketCategory, MonthlyReturn, NativeBacktestEngine, NativeDataPortal, NativeGridEngine,
+    OhlcvBar, PboResult, ProtectionSpec, QuantPort, QuantStrategyRecord,
 };
-use custos_domain::DomainError;
+use custos_contracts::DomainError;
 
 pub struct BacktestService;
 
@@ -33,25 +34,40 @@ impl BacktestService {
             })?;
         }
 
+        let symbol_label = req.symbol.clone().unwrap_or_else(|| "UNKNOWN".to_string());
+
         // Resolve historical bars
         let maybe_bars: Option<Vec<OhlcvBar>> = if let Some(raw_bars) = req.bars {
             let b_vec: Vec<OhlcvBar> = raw_bars.into_iter().map(Into::into).collect();
             if b_vec.len() >= 5 {
                 Some(b_vec)
+            } else if req.symbol.is_some() {
+                return Err(DomainError::Validation(format!(
+                    "Insufficient real market bars for '{}' ({}); provide at least 5 bars",
+                    symbol_label, req.timeframe
+                )));
             } else {
                 None
             }
         } else if let Some(sym) = &req.symbol {
             match quant_port.get_market_bars(sym, &req.timeframe, 2000).await {
                 Ok(b) if b.len() >= 5 => Some(b),
-                _ => None,
+                _ => {
+                    return Err(DomainError::Validation(format!(
+                        "Insufficient real market bars for '{}' ({}); ingest at least 5 bars before running backtest",
+                        sym, req.timeframe
+                    )));
+                }
             }
         } else {
             None
         };
 
-        let sheet = if let Some(bars) = maybe_bars {
-            let prot_spec = if req.stop_loss_pct.is_some() || req.take_profit_pct.is_some() {
+        let (sheet, sim_fills) = if let Some(bars) = maybe_bars {
+            let prot_spec = if req.stop_loss_pct.is_some()
+                || req.take_profit_pct.is_some()
+                || req.trailing_stop_pct.is_some()
+            {
                 Some(ProtectionSpec::new(
                     req.stop_loss_pct.unwrap_or(0.05),
                     req.take_profit_pct.unwrap_or(0.15),
@@ -70,13 +86,25 @@ impl BacktestService {
                 protection: prot_spec,
             };
 
-            let rule = Box::new(DualMovingAverageRule::new(
-                req.fast_period,
-                req.slow_period,
-                req.target_weight,
-            ));
-            NativeBacktestEngine::run(&req.strategy_id, &bars, &cfg, rule)
-                .map_err(|e| DomainError::Validation(format!("Native simulation failed: {e}")))?
+            let rule = if let Some(formula) = req.formula.as_deref() {
+                FormulaStrategyRule::from_formula(formula, req.target_weight, false)?
+            } else {
+                Box::new(DualMovingAverageRule::new(
+                    req.fast_period,
+                    req.slow_period,
+                    req.target_weight,
+                ))
+            };
+            let output = NativeBacktestEngine::run_detailed(
+                &req.strategy_id,
+                &symbol_label,
+                &bars,
+                &cfg,
+                rule,
+                req.trials_count.max(1),
+            )
+            .map_err(|e| DomainError::Validation(format!("Native simulation failed: {e}")))?;
+            (output.tearsheet, output.fills)
         } else {
             let dsr = calculate_dsr(
                 req.annualized_sharpe,
@@ -105,16 +133,61 @@ impl BacktestService {
                 .map(Into::into)
                 .collect();
 
-            s.with_extended_metrics(
-                req.volatility,
-                req.win_rate,
-                req.profit_factor,
-                req.turnover,
-                monthly,
+            (
+                s.with_extended_metrics(
+                    req.volatility,
+                    req.win_rate,
+                    req.profit_factor,
+                    req.turnover,
+                    monthly,
+                ),
+                Vec::new(),
             )
         };
 
         quant_port.save_tearsheet(&sheet, &req.task_id).await?;
+        quant_port.clear_backtest_fills(&req.strategy_id).await?;
+        for fill in &sim_fills {
+            quant_port
+                .save_fill(fill, &req.strategy_id, &req.task_id, "backtest")
+                .await?;
+        }
+        let strat_formula = req
+            .formula
+            .clone()
+            .unwrap_or_else(|| format!("dual_ma({}, {})", req.fast_period, req.slow_period));
+        let existing_strat = quant_port
+            .get_strategy(&req.strategy_id)
+            .await
+            .ok()
+            .flatten();
+        let (strat_name, strat_market, strat_venue, strat_dir) = match existing_strat {
+            Some(s) => (
+                s.name,
+                MarketCategory::parse_explicit(&s.market).unwrap_or(MarketCategory::USStock),
+                s.venue,
+                DirectionMode::from_str_loose(&s.direction_mode),
+            ),
+            None => (
+                req.strategy_id.clone(),
+                MarketCategory::USStock,
+                "local".to_string(),
+                DirectionMode::LongOnly,
+            ),
+        };
+        if let Ok(mut strat) = QuantStrategyRecord::new(
+            Some(req.strategy_id.clone()),
+            strat_name,
+            strat_market,
+            strat_venue,
+            symbol_label,
+            req.timeframe.clone(),
+            strat_formula,
+            strat_dir,
+        ) {
+            strat.latest_sharpe = Some(sheet.annualized_sharpe);
+            let _ = quant_port.save_strategy(&strat).await;
+        }
         Ok(sheet)
     }
 

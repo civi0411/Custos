@@ -3,9 +3,9 @@
 //! Models order tickets, execution constraints, algorithmic routing choices (TWAP, VWAP),
 //! human approval gates, and seamless cross-workbench handoff into the governed Outbox.
 
-use custos_domain::DomainError;
-use custos_domain::{digest, new_id};
-use custos_domain::OutboxActionItem;
+use custos_contracts::DomainError;
+use custos_contracts::OutboxActionItem;
+use custos_contracts::{digest, new_id};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -211,13 +211,16 @@ impl OrderTicket {
 
     /// Converts this OrderTicket into an OutboxActionItem for governed Copilot outbox delivery.
     pub fn to_outbox_action_item(&self, task_id: &str) -> OutboxActionItem {
-        let payload_digest = digest(
-            format!(
-                "{}:{}:{}:{}:{}",
-                self.id, self.strategy_id, self.symbol, self.direction, self.quantity
-            )
-            .as_bytes(),
-        );
+        let canonical_payload = serde_json::json!({
+            "id": self.id,
+            "strategy_id": self.strategy_id,
+            "symbol": self.symbol,
+            "direction": self.direction.to_string(),
+            "quantity": self.quantity,
+            "order_type": self.order_type,
+            "limit_price": self.limit_price,
+        });
+        let payload_digest = digest(canonical_payload.to_string().as_bytes());
 
         let payload_json = serde_json::to_string(self).ok();
 
