@@ -34,7 +34,7 @@ The system is evolving according to the modular architecture refactor plan ([cod
 4. **Zero-Mock & Data Truthfulness:** Market datasets and scientific claims must reflect genuine sources or explicitly labeled simulation/demo environments, never fabricated or spoofed (F02).
 5. **Boundary Isolation:** Platform owns the control plane (Task/Session/Run, authority, scheduling, canonical storage). Vertical Workbenches (Assistant, Coding, Research, Quant) own specialized domain semantics, schemas, and UI views. Capabilities (workspace, terminal, notebook, compute, inference) serve multiple workbenches on-demand.
 
-Driver source descriptors currently live beside compiled modules in `platform/adapters/src/`; do not recreate uncompiled copies under a root capability scaffold. Tests and development automation live in `tests/desktop/` and `xtask/scripts/`.
+Driver source descriptors currently live beside compiled modules in `platform/integrations/src/`; do not recreate uncompiled copies under a root capability scaffold. Tests and development automation live in `tests/desktop/` and `xtask/scripts/`.
 
 ---
 
