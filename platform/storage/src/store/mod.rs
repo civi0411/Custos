@@ -1,10 +1,10 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
     BrowserRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
-    ExperimentAttemptRepository, FleetAutomationRepository, OutboxRepository, PackageRepository,
-    ProviderRepository, ReplanRepository, RunRepository, SessionRepository,
-    SharedCapabilitiesRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
-    WorkspaceRepository,
+    ExperimentAttemptRepository, FleetAutomationRepository, McpServerRepository, MemoryRepository,
+    OutboxRepository, PackageRepository, ProviderRepository, ReplanRepository, RunRepository,
+    SessionRepository, SharedCapabilitiesRepository, SpanRepository, TaskRepository,
+    WorkflowRevisionRepository, WorkspaceRepository,
 };
 pub use custos_contracts::contracts::storage::{
     CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort,
@@ -49,6 +49,8 @@ pub struct SqliteTaskStore {
     pub(super) experiment_attempt_repo: ExperimentAttemptRepository,
     pub(super) package_repo: PackageRepository,
     pub(super) shared_capabilities_repo: SharedCapabilitiesRepository,
+    pub(super) memory_repo: MemoryRepository,
+    pub(super) mcp_server_repo: McpServerRepository,
 }
 
 impl SqliteTaskStore {
@@ -70,6 +72,8 @@ impl SqliteTaskStore {
         let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let package_repo = PackageRepository::new(db.clone());
         let shared_capabilities_repo = SharedCapabilitiesRepository::new(db.clone());
+        let memory_repo = MemoryRepository::new(db.clone());
+        let mcp_server_repo = McpServerRepository::new(db.clone());
         Self {
             db,
             task_repo,
@@ -89,6 +93,8 @@ impl SqliteTaskStore {
             experiment_attempt_repo,
             package_repo,
             shared_capabilities_repo,
+            memory_repo,
+            mcp_server_repo,
         }
     }
 
@@ -213,6 +219,14 @@ impl SqliteTaskStore {
 
     pub fn command_ledger(&self) -> &CommandLedgerRepository {
         &self.command_ledger_repo
+    }
+
+    pub fn memory(&self) -> &MemoryRepository {
+        &self.memory_repo
+    }
+
+    pub fn mcp_servers(&self) -> &McpServerRepository {
+        &self.mcp_server_repo
     }
 
     /// Health check pinging SQLite to verify read/write availability and WAL consistency

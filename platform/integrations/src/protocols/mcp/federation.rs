@@ -96,6 +96,20 @@ impl McpFederationHub {
         Ok(())
     }
 
+    /// Unregister an MCP server by namespace prefix.
+    pub async fn unregister_server(&self, prefix: &str) -> bool {
+        let mut guard = self.servers.write().await;
+        guard.remove(prefix).is_some()
+    }
+
+    /// Return all currently registered MCP server namespace prefixes.
+    pub async fn list_registered_prefixes(&self) -> Vec<String> {
+        let guard = self.servers.read().await;
+        let mut prefixes: Vec<String> = guard.keys().cloned().collect();
+        prefixes.sort();
+        prefixes
+    }
+
     /// List all federated tools across all registered servers with namespaced names (`prefix__name`).
     /// Output is deterministically sorted alphabetically by tool name.
     pub async fn list_federated_tools(&self) -> Result<Vec<ToolDefinition>> {

@@ -7,6 +7,7 @@
 //! are intercepted and transformed into `ActionIntent`s that require cryptographic
 //! `ExecutionPermit`s from the Security Kernel (`custos-contracts`).
 
+use custos_contracts::contracts::memory::MemoryPort;
 use custos_contracts::inference::ModelPort;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -35,6 +36,7 @@ pub struct GovernedAgentRuntime {
     available_tools: Vec<serde_json::Value>,
     tool_executor: Option<Arc<dyn GovernedToolExecutor>>,
     pack_registry: Option<Arc<crate::DomainPackRegistry>>,
+    memory_port: Option<Arc<dyn MemoryPort>>,
     max_iterations: usize,
     max_tool_output_bytes: usize,
     cancelled_runs: Arc<RwLock<HashSet<String>>>,
@@ -53,6 +55,7 @@ impl GovernedAgentRuntime {
             available_tools,
             tool_executor: None,
             pack_registry: None,
+            memory_port: None,
             max_iterations: DEFAULT_MAX_ITERATIONS,
             max_tool_output_bytes: DEFAULT_MAX_TOOL_OUTPUT_BYTES,
             cancelled_runs: Arc::new(RwLock::new(HashSet::new())),
@@ -67,6 +70,11 @@ impl GovernedAgentRuntime {
 
     pub fn with_pack_registry(mut self, registry: Arc<crate::DomainPackRegistry>) -> Self {
         self.pack_registry = Some(registry);
+        self
+    }
+
+    pub fn with_memory_port(mut self, memory: Arc<dyn MemoryPort>) -> Self {
+        self.memory_port = Some(memory);
         self
     }
 
