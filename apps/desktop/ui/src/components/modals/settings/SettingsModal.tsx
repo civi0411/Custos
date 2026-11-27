@@ -20,6 +20,7 @@ import {
 import { useAppContext } from '@/context/AppContext';
 import { formatKeyCombo } from '@/lib/utils';
 import { DaemonPane } from './DaemonPane';
+import { McpServersPane } from './McpServersPane';
 import { CloudProvidersUnifiedPane } from '../ai-setup/CloudProvidersUnifiedPane';
 import { LocalAiUnifiedPane } from '../ai-setup/LocalAiUnifiedPane';
 import { CostQuotasPane } from '../ai-setup/CostQuotasPane';
@@ -298,6 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>View Skills Catalog</span>
                     </button>
                   </SettingRow>
+                  <McpServersPane onShowToast={onShowToast} />
                 </div>
               </div>
             )}

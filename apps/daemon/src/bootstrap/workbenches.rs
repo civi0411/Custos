@@ -76,6 +76,16 @@ pub fn init_workbenches_and_harness(
     ));
 
     let mcp_hub = Arc::new(McpFederationHub::new());
+    {
+        let store_ref = Arc::clone(store);
+        let hub_ref = Arc::clone(&mcp_hub);
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                crate::application::mcp_registry::register_enabled_mcp_servers(&store_ref, &hub_ref)
+                    .await;
+            });
+        }
+    }
 
     // Dynamic Tool Disclosure & Governed Tool Authorization (R4 / F4)
     let default_tools = custos_engine::compile_governed_tools(
@@ -99,6 +109,7 @@ pub fn init_workbenches_and_harness(
             default_tools,
         )
         .with_pack_registry(pack_registry.clone())
+        .with_memory_port(Arc::new(store.memory().clone()))
         .with_tool_executor(tool_executor),
     );
     harness_reg.register(

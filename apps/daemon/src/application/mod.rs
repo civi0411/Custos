@@ -6,6 +6,7 @@ mod compute;
 mod environment;
 mod execution;
 mod integrations;
+pub mod mcp_registry;
 mod oi;
 mod packs;
 mod pipeline;
@@ -121,6 +122,10 @@ impl LocalApiDispatcher {
 
             // Group: Supervision & Watchdog — Aliased to workflow telemetry
             "supervision" => self.handle_workflow(req).await,
+
+            // Group: MCP Federation & Memory Governance
+            "mcp" => self.handle_mcp(req).await,
+            "memory" => self.handle_memory(req).await,
             _ => ApiResponse::error(req.id.clone(), format!("Unknown method: {}", req.method)),
         }
     }
