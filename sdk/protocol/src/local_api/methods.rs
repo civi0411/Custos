@@ -199,3 +199,12 @@ pub const METHOD_ASSISTANT_OUTBOX_DISPATCH: &str = "v1.assistant.outbox.dispatch
 
 pub const METHOD_WORKSPACES_AGENT_STEER: &str = "v1.workspaces.agent_steer";
 pub const METHOD_RESOURCES_CAPABILITIES: &str = "v1.resources.capabilities";
+
+pub const METHOD_MCP_SERVERS_LIST: &str = "v1.mcp.servers.list";
+pub const METHOD_MCP_SERVERS_SAVE: &str = "v1.mcp.servers.save";
+pub const METHOD_MCP_SERVERS_TOGGLE: &str = "v1.mcp.servers.toggle";
+pub const METHOD_MCP_SERVERS_DELETE: &str = "v1.mcp.servers.delete";
+pub const METHOD_MCP_TOOLS_LIST: &str = "v1.mcp.tools.list";
+
+pub const METHOD_MEMORY_PROPOSALS_LIST: &str = "v1.memory.proposals.list";
+pub const METHOD_MEMORY_PROPOSALS_RESOLVE: &str = "v1.memory.proposals.resolve";

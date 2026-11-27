@@ -92,6 +92,32 @@ impl AgentRuntimePort for GovernedAgentRuntime {
             ));
         }
 
+        if let Some(ref memory) = self.memory_port {
+            let query = custos_contracts::RecallQuery {
+                text: worker_run.worker_id.clone(),
+                limit: 8,
+                token_budget: Some(1024),
+            };
+            let scope = custos_contracts::MemoryScope {
+                task_id: Some(worker_run.task_id.clone()),
+                project: None,
+                include_personal: true,
+            };
+            match memory.recall_context(&query, &scope).await {
+                Ok(entries) if !entries.is_empty() => {
+                    prompt_content.push_str("--- Recalled Long-Term Memory ---\n");
+                    for entry in entries {
+                        prompt_content.push_str(&format!("[{}] {}\n", entry.source, entry.content));
+                    }
+                    prompt_content.push('\n');
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(task_id = %worker_run.task_id, "Memory recall skipped: {err}");
+                }
+            }
+        }
+
         // Fast path: if no tool executor is configured, preserve single-turn intent extraction
         let active_tools = self.resolve_tools();
         let executor = match &self.tool_executor {

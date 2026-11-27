@@ -147,5 +147,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../../migrations/0045_shared_capabilities.sql"
     ))?;
     conn.execute_batch(include_str!("../../migrations/0046_run_supervision.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0047_memory_store.sql"))?;
+    conn.execute_batch(include_str!("../../migrations/0048_mcp_servers.sql"))?;
     Ok(())
 }
