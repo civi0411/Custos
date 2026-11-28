@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ChevronUp,
   ChevronDown,
@@ -9,9 +9,31 @@ import {
   Check,
   PanelLeft,
   PanelLeftClose,
+  MessageSquarePlus,
+  Send,
 } from 'lucide-react';
 import type { WorkspaceDiffEntry, WorkspaceFileDiff, WorkspaceFileContent } from '@/types/domain';
+import { GhostDismissButton } from '@/components/common/SecuritySurface';
 import { getFileIcon } from './types';
+
+export interface DiffLineAnnotation {
+  id: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  linePreview: string;
+  comment: string;
+}
+
+export function formatDiffAnnotationBatch(annotations: DiffLineAnnotation[]): string {
+  return [
+    `Inline Diff Review Batch (${annotations.length} notes):`,
+    ...annotations.map(
+      (a, i) =>
+        `${i + 1}. ${a.filePath}:${a.startLine}${a.endLine !== a.startLine ? `-${a.endLine}` : ''} (${a.linePreview.trim().slice(0, 80)})\n   Note: ${a.comment}`
+    ),
+  ].join('\n');
+}
 
 export interface DiffViewerCanvasProps {
   selectedPath: string;
@@ -32,6 +54,12 @@ export interface DiffViewerCanvasProps {
   onDiscardCurrent: () => void;
   onCopyPath: () => void;
   copied: boolean;
+  annotations?: DiffLineAnnotation[];
+  onAddAnnotation?: (annotation: Omit<DiffLineAnnotation, 'id'>) => void;
+  onRemoveAnnotation?: (id: string) => void;
+  onSendAnnotationBatch?: () => void;
+  onClearAnnotations?: () => void;
+  sendingAnnotations?: boolean;
 }
 
 export const DiffViewerCanvas: React.FC<DiffViewerCanvasProps> = ({
@@ -52,7 +80,16 @@ export const DiffViewerCanvas: React.FC<DiffViewerCanvasProps> = ({
   onDiscardCurrent,
   onCopyPath,
   copied,
+  annotations = [],
+  onAddAnnotation,
+  onRemoveAnnotation,
+  onSendAnnotationBatch,
+  onClearAnnotations,
+  sendingAnnotations = false,
 }) => {
+  const [draftLine, setDraftLine] = useState<{ lineNum: number; preview: string } | null>(null);
+  const [draftComment, setDraftComment] = useState('');
+  const fileAnnotations = annotations.filter((a) => a.filePath === selectedPath);
   return (
     <>
       {/* Diff Header */}
@@ -180,6 +217,29 @@ export const DiffViewerCanvas: React.FC<DiffViewerCanvasProps> = ({
         </div>
       </div>
 
+      {/* Annotation Batch Bar */}
+      {annotations.length > 0 && onSendAnnotationBatch && (
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[11px]">
+          <span className="font-mono text-[var(--color-editor-fg)]">
+            {annotations.length} inline diff {annotations.length === 1 ? 'note' : 'notes'} queued for agent
+          </span>
+          <div className="flex items-center gap-1.5">
+            {onClearAnnotations && (
+              <GhostDismissButton label="Clear" onClick={onClearAnnotations} disabled={sendingAnnotations} />
+            )}
+            <button
+              type="button"
+              disabled={sendingAnnotations}
+              onClick={onSendAnnotationBatch}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-white text-black font-semibold hover:bg-white/90 transition disabled:opacity-50"
+            >
+              <Send className="h-3 w-3" />
+              <span>{sendingAnnotations ? 'Sending…' : 'Send to Agent'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Diff Viewer Body */}
       <div className="flex-1 overflow-auto p-3 font-mono text-xs">
         <div className="space-y-0.5">
@@ -188,6 +248,8 @@ export const DiffViewerCanvas: React.FC<DiffViewerCanvasProps> = ({
               const isAdd = line.startsWith('+') && !line.startsWith('+++');
               const isDel = line.startsWith('-') && !line.startsWith('---');
               const isHunk = line.startsWith('@@');
+              const lineNum = idx + 1;
+              const lineNotes = fileAnnotations.filter((a) => a.startLine === lineNum);
 
               let lineClass = 'text-[var(--color-fg-muted)]';
               let bgClass = '';
@@ -203,14 +265,87 @@ export const DiffViewerCanvas: React.FC<DiffViewerCanvasProps> = ({
               }
 
               return (
-                <div
-                  key={idx}
-                  className={`flex px-2 py-0.5 whitespace-pre rounded-xs ${lineClass} ${bgClass}`}
-                >
-                  <span className="w-8 shrink-0 select-none text-[10px] text-[var(--color-fg-subtle)] text-right pr-2">
-                    {idx + 1}
-                  </span>
-                  <span>{line}</span>
+                <div key={idx}>
+                  <div
+                    className={`group flex items-start px-2 py-0.5 whitespace-pre rounded-xs ${lineClass} ${bgClass}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!onAddAnnotation) return;
+                        setDraftLine({ lineNum, preview: line });
+                        setDraftComment('');
+                      }}
+                      className="w-8 shrink-0 select-none text-[10px] text-[var(--color-fg-subtle)] hover:text-white text-right pr-2 cursor-pointer"
+                      title={onAddAnnotation ? `Annotate line ${lineNum}` : undefined}
+                    >
+                      <span className="group-hover:hidden">{lineNum}</span>
+                      <MessageSquarePlus className="hidden group-hover:inline h-3 w-3 text-white/80" />
+                    </button>
+                    <span>{line}</span>
+                  </div>
+
+                  {lineNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="ml-10 my-1 flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-default)] text-[11px] font-sans text-[var(--color-editor-fg)]"
+                    >
+                      <span>{note.comment}</span>
+                      {onRemoveAnnotation && (
+                        <GhostDismissButton
+                          label="Remove"
+                          onClick={() => onRemoveAnnotation(note.id)}
+                          className="py-0.5! text-[10px]!"
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  {draftLine?.lineNum === lineNum && onAddAnnotation && (
+                    <div className="ml-10 my-1 flex items-center gap-1.5 p-1.5 rounded bg-[var(--color-surface-1)] border border-[var(--color-border-default)] font-sans">
+                      <input
+                        autoFocus
+                        value={draftComment}
+                        onChange={(e) => setDraftComment(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && draftComment.trim()) {
+                            onAddAnnotation({
+                              filePath: selectedPath,
+                              startLine: lineNum,
+                              endLine: lineNum,
+                              linePreview: draftLine.preview,
+                              comment: draftComment.trim(),
+                            });
+                            setDraftLine(null);
+                            setDraftComment('');
+                          } else if (e.key === 'Escape') {
+                            setDraftLine(null);
+                          }
+                        }}
+                        placeholder={`Review note on line ${lineNum}…`}
+                        className="flex-1 bg-transparent text-xs text-[var(--color-editor-fg)] focus:outline-none px-1"
+                      />
+                      <GhostDismissButton label="Cancel" onClick={() => setDraftLine(null)} />
+                      <button
+                        type="button"
+                        disabled={!draftComment.trim()}
+                        onClick={() => {
+                          onAddAnnotation({
+                            filePath: selectedPath,
+                            startLine: lineNum,
+                            endLine: lineNum,
+                            linePreview: draftLine.preview,
+                            comment: draftComment.trim(),
+                          });
+                          setDraftLine(null);
+                          setDraftComment('');
+                        }}
+                        className="px-2 py-0.5 rounded bg-white text-black text-[11px] font-semibold disabled:opacity-40"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })

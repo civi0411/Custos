@@ -1137,3 +1137,7 @@ diagrams/generated/
 !docs/UPSTREAM_SOURCE_MAP.md
 !tests/**
 !evaluation/datasets/**
+
+# Temporary local-only product website & mobile web build output
+apps/website/
+apps/desktop/ui/dist-mobile-web/

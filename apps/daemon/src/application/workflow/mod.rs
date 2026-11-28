@@ -269,11 +269,82 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "resume_run" => {
+                let workflow = match self.kernel.workflow.as_ref() {
+                    Some(w) => w,
+                    None => {
+                        return ApiResponse::error(req.id, "WorkflowPort not configured on daemon")
+                    }
+                };
+                let run_id = match req.params.get("run_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.to_string(),
+                    _ => return ApiResponse::error(req.id, "Missing run_id"),
+                };
+                let _checkpoint_id = req
+                    .params
+                    .get("checkpoint_id")
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+                match workflow.resume(&run_id).await {
+                    Ok(handle) => match serde_json::to_value(&handle) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             // All telemetry and watchdog submethods routed cleanly:
             telemetry_submethod => {
                 let sub_str = telemetry_submethod.to_string();
                 self.handle_workflow_telemetry(req, &sub_str).await
             }
+        }
+    }
+
+    pub(crate) async fn handle_hooks(&self, req: ApiRequest) -> ApiResponse {
+        let submethod = req
+            .method
+            .strip_prefix("v1.hooks.")
+            .or_else(|| req.method.strip_prefix("custos.hooks."))
+            .unwrap_or(req.method.as_str());
+        match submethod {
+            "permission.pending" => {
+                let pending = self.kernel.hook_channel.list_pending();
+                ApiResponse::success(req.id, serde_json::json!(pending))
+            }
+            "permission.resolve" => {
+                let request_id = match req.params.get("request_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.to_string(),
+                    _ => return ApiResponse::error(req.id, "Missing request_id"),
+                };
+                let allow = req
+                    .params
+                    .get("allow")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let reason = req
+                    .params
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+                match self
+                    .kernel
+                    .hook_channel
+                    .resolve(&request_id, allow, reason)
+                {
+                    Ok(()) => {
+                        let _ = self.kernel.event_bus.send(
+                            crate::api::contexts::DaemonBroadcastEvent::HookPermissionResolved {
+                                request_id,
+                                allow,
+                            },
+                        );
+                        ApiResponse::success(req.id, serde_json::json!({ "ok": true }))
+                    }
+                    Err(err) => ApiResponse::error(req.id, err.to_string()),
+                }
+            }
+            _ => ApiResponse::error(req.id, format!("Unknown hooks method: {}", req.method)),
         }
     }
 }

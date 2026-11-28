@@ -8,6 +8,13 @@ use custos_sdk::local_api::{ApiRequest, LocalApiClient, METHOD_CAPABILITIES_LIST
 use custos_sdk::profile::{ensure_daemon_client_async, ProfileResolver};
 use serde_json::{json, Value};
 
+pub mod commands;
+use commands::{
+    execute_automation_command, execute_browser_command, execute_mcp_command,
+    execute_memory_command, execute_outbox_command, execute_worktree_command, send_rpc,
+    AutomationCommand, BrowserCommand, McpCommand, MemoryCommand, OutboxCommand, WorktreeCommand,
+};
+
 #[derive(Debug, Parser)]
 #[command(name = "custos", about = "Custos headless CLI client")]
 pub struct CliArgs {
@@ -35,6 +42,36 @@ pub enum CliCommand {
     Supervision {
         #[command(subcommand)]
         action: SupervisionCommand,
+    },
+    /// Worktree candidate management and agent steering
+    Worktrees {
+        #[command(subcommand)]
+        action: WorktreeCommand,
+    },
+    /// Headless browser session, tab, snapshot, and interaction commands
+    Browser {
+        #[command(subcommand)]
+        action: BrowserCommand,
+    },
+    /// Memory proposal inspection and resolution
+    Memory {
+        #[command(subcommand)]
+        action: MemoryCommand,
+    },
+    /// MCP server and tool management
+    Mcp {
+        #[command(subcommand)]
+        action: McpCommand,
+    },
+    /// Assistant outbox approval and dispatch
+    Outbox {
+        #[command(subcommand)]
+        action: OutboxCommand,
+    },
+    /// Headless automation job management
+    Automation {
+        #[command(subcommand)]
+        action: AutomationCommand,
     },
     /// Send a raw JSON-RPC request to the daemon
     Request {
@@ -158,16 +195,16 @@ pub async fn execute_with_client(
         }
         CliCommand::Tasks { action } => execute_task_command(client, action).await,
         CliCommand::Supervision { action } => execute_supervision_command(client, action).await,
+        CliCommand::Worktrees { action } => execute_worktree_command(client, action).await,
+        CliCommand::Browser { action } => execute_browser_command(client, action).await,
+        CliCommand::Memory { action } => execute_memory_command(client, action).await,
+        CliCommand::Mcp { action } => execute_mcp_command(client, action).await,
+        CliCommand::Outbox { action } => execute_outbox_command(client, action).await,
+        CliCommand::Automation { action } => execute_automation_command(client, action).await,
         CliCommand::Request { method, params, id } => {
             let parsed_params: Value = serde_json::from_str(&params)
                 .map_err(|e| format!("Invalid JSON for --params: {e}"))?;
-            let resp = client
-                .send_request(ApiRequest::new(id, method, parsed_params))
-                .await?;
-            if let Some(err) = resp.error {
-                return Err(err);
-            }
-            Ok(resp.result.unwrap_or(Value::Null))
+            send_rpc(client, &id, &method, parsed_params).await
         }
     }
 }
@@ -384,5 +421,69 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(raw["pong"], true);
+    }
+
+    #[tokio::test]
+    async fn cli_parses_and_dispatches_agent_drivable_subcommands() {
+        let wt = CliArgs::try_parse_from(["custos", "worktrees", "spawn", "ws-1", "--count", "3"])
+            .unwrap();
+        assert!(matches!(
+            wt.command,
+            CliCommand::Worktrees {
+                action: WorktreeCommand::Spawn { count: 3, .. }
+            }
+        ));
+
+        let br = CliArgs::try_parse_from(["custos", "browser", "snapshot", "tab-1"]).unwrap();
+        assert!(matches!(
+            br.command,
+            CliCommand::Browser {
+                action: BrowserCommand::Snapshot { .. }
+            }
+        ));
+
+        let mem = CliArgs::try_parse_from(["custos", "memory", "proposals"]).unwrap();
+        assert!(matches!(
+            mem.command,
+            CliCommand::Memory {
+                action: MemoryCommand::Proposals { .. }
+            }
+        ));
+
+        let mcp = CliArgs::try_parse_from(["custos", "mcp", "servers"]).unwrap();
+        assert!(matches!(
+            mcp.command,
+            CliCommand::Mcp {
+                action: McpCommand::Servers
+            }
+        ));
+
+        let outbox = CliArgs::try_parse_from(["custos", "outbox", "approve", "act-1"]).unwrap();
+        assert!(matches!(
+            outbox.command,
+            CliCommand::Outbox {
+                action: OutboxCommand::Approve { .. }
+            }
+        ));
+
+        let auto = CliArgs::try_parse_from(["custos", "automation", "run", "job-1"]).unwrap();
+        assert!(matches!(
+            auto.command,
+            CliCommand::Automation {
+                action: AutomationCommand::Run { .. }
+            }
+        ));
+
+        let client = LocalApiClient::new(Box::new(FnTransport::new(|req: ApiRequest| async move {
+            ApiResponse::success(req.id, json!({ "method": req.method, "params": req.params }))
+        })));
+
+        let res = execute_with_client(&client, br.command).await.unwrap();
+        assert_eq!(res["method"], "v1.browser.tabs.snapshot");
+        assert_eq!(res["params"]["tab_id"], "tab-1");
+
+        let res = execute_with_client(&client, auto.command).await.unwrap();
+        assert_eq!(res["method"], "v1.automation.jobs.run");
+        assert_eq!(res["params"]["job_id"], "job-1");
     }
 }

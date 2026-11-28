@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_bind =
         std::env::var("CUSTOS_HTTP_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     let http_api = local_api.clone();
-    let (http_port, http_task) = match custos_daemon::start_http_server(&http_bind, http_api).await
+    let (http_port, mut http_task) = match custos_daemon::start_http_server(&http_bind, http_api).await
     {
         Ok(res) => res,
         Err(err) => {
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty());
-    let tcp_task = tokio::spawn(async move {
+    let mut tcp_task = tokio::spawn(async move {
         const MAX_TCP_LINE_BYTES: usize = 10 * 1024 * 1024;
         while let Ok((mut socket, _peer)) = tcp_listener.accept().await {
             let api = tcp_api.clone();
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Stdio handler: processes incoming requests if piped
     let stdio_api = runtime.local_api.clone();
-    let stdio_task = tokio::spawn(async move {
+    let mut stdio_task = tokio::spawn(async move {
         let stdin = BufReader::new(tokio::io::stdin());
         let mut lines = stdin.lines();
         let mut stdout = tokio::io::stdout();
@@ -161,29 +161,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut stdio_closed_idle = false;
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            eprintln!("Custos daemon received interrupt signal, shutting down...");
-        }
-        _ = tcp_task => {}
-        _ = http_task => {}
-        res = stdio_task, if !stdio_closed_idle => {
-            if let Ok(true) = res {
-                eprintln!("Custos daemon stdio channel closed after processing requests, shutting down...");
-            } else {
-                // Stdio was closed without requests (/dev/null stdin): keep ctrl_c, tcp, and http active.
-                stdio_closed_idle = true;
-            }
-        }
-    }
-    if stdio_closed_idle {
+    #[cfg(unix)]
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    #[cfg(not(unix))]
+    let sigterm = std::future::pending::<()>();
+
+    loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                eprintln!("Custos daemon received interrupt signal, shutting down...");
+                eprintln!("Custos daemon received SIGINT, shutting down...");
+                break;
+            }
+            _ = async {
+                #[cfg(unix)]
+                { sigterm.recv().await; }
+                #[cfg(not(unix))]
+                { sigterm.await; }
+            } => {
+                eprintln!("Custos daemon received SIGTERM, shutting down...");
+                break;
+            }
+            _ = &mut tcp_task => {
+                eprintln!("Custos daemon TCP listener exited, shutting down...");
+                break;
+            }
+            _ = &mut http_task => {
+                eprintln!("Custos daemon HTTP listener exited, shutting down...");
+                break;
+            }
+            res = &mut stdio_task, if !stdio_closed_idle => {
+                if let Ok(true) = res {
+                    eprintln!("Custos daemon stdio channel closed after processing requests, shutting down...");
+                    break;
+                } else {
+                    // Stdio closed without requests (/dev/null): keep monitoring tcp, http, and signals.
+                    stdio_closed_idle = true;
+                }
             }
         }
     }
 
+    custos_integrations::host::caffeinate::CAFFEINATE_MANAGER.set_mode("off");
     let _ = profile.remove_port();
     drop(lock);
 

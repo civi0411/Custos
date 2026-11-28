@@ -126,6 +126,8 @@ impl LocalApiDispatcher {
             // Group: MCP Federation & Memory Governance
             "mcp" => self.handle_mcp(req).await,
             "memory" => self.handle_memory(req).await,
+            // Group: Held Permission Hooks (Claude Code / CLI)
+            "hooks" => self.handle_hooks(req).await,
             _ => ApiResponse::error(req.id.clone(), format!("Unknown method: {}", req.method)),
         }
     }

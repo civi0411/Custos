@@ -1,8 +1,9 @@
 use super::security::{is_allowed_origin, is_authorized_ipc_client};
 use super::server::{MAX_BODY_SIZE, READ_TIMEOUT};
-use super::sse::handle_sse_events;
+use super::sse::{handle_global_events, handle_sse_events};
 use crate::api::LocalApiDispatcher;
 use crate::custos_local_api::ApiRequest;
+use custos_engine::authority::PermissionHookRequest;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -70,6 +71,7 @@ pub async fn handle_http_client(
     let mut req_origin: Option<String> = None;
     let mut auth_header: Option<String> = None;
     let mut token_header: Option<String> = None;
+    let mut caller_scope_header: Option<String> = None;
     let mut content_length = 0;
     let mut last_event_id = None;
     for line in lines {
@@ -80,6 +82,7 @@ pub async fn handle_http_client(
                 "origin" => req_origin = Some(header_val),
                 "authorization" => auth_header = Some(header_val),
                 "x-custos-token" => token_header = Some(header_val),
+                "x-custos-caller-scope" => caller_scope_header = Some(header_val),
                 "last-event-id" => last_event_id = header_val.parse::<u64>().ok(),
                 "content-length" => content_length = header_val.parse::<usize>().unwrap_or(0),
                 _ => {}
@@ -153,6 +156,10 @@ Content-Length: {}\r\n\
         return Ok(());
     }
 
+    if method == "GET" && path == "/api/events/global" {
+        return handle_global_events(&mut stream, &api, &cors_origin_header).await;
+    }
+
     if method == "GET" && path.starts_with("/api/events?") {
         return handle_sse_events(&mut stream, &api, path, last_event_id, &cors_origin_header)
             .await;
@@ -169,6 +176,110 @@ Content-Length: {}\r\n\
             body.len(),
             cors_origin_header,
             body
+        );
+        stream.write_all(resp.as_bytes()).await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
+    // Handle POST /v1/hooks/permission (HeldPermissionHookChannel: holds HTTP up to 122s)
+    if method == "POST" && path == "/v1/hooks/permission" {
+        let body_bytes = match read_request_body(
+            &mut stream,
+            &buf[header_end_pos..total_read],
+            content_length,
+            &cors_origin_header,
+        )
+        .await
+        {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        let (status_line, resp_json) = match serde_json::from_slice::<PermissionHookRequest>(&body_bytes) {
+            Ok(hook_req) => {
+                let tool_name = hook_req.tool_name.clone();
+                let session_id = hook_req.session_id.clone();
+                match api.hook_channel().register(hook_req) {
+                    Ok((req_id, rx)) => {
+                        let _ = api.event_bus().send(
+                            crate::api::contexts::DaemonBroadcastEvent::HookPermissionRequested {
+                                request_id: req_id.clone(),
+                                tool_name,
+                                session_id,
+                            },
+                        );
+                        let decision = api.hook_channel().await_decision(&req_id, rx).await;
+                        ("200 OK", serde_json::json!({ "request_id": req_id, "decision": decision }).to_string())
+                    }
+                    Err(err) => ("500 Internal Server Error", serde_json::json!({ "error": err.to_string() }).to_string()),
+                }
+            }
+            Err(err) => ("400 Bad Request", serde_json::json!({ "error": format!("Invalid hook payload: {err}") }).to_string()),
+        };
+        let resp = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",
+            resp_json.len(),
+            cors_origin_header,
+            resp_json
+        );
+        stream.write_all(resp.as_bytes()).await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
+    if method == "GET" && path == "/v1/hooks/permission/pending" {
+        let resp_json = serde_json::to_string(&api.hook_channel().list_pending()).unwrap_or_else(|_| "[]".into());
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",
+            resp_json.len(),
+            cors_origin_header,
+            resp_json
+        );
+        stream.write_all(resp.as_bytes()).await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
+    if method == "POST" && path == "/v1/hooks/permission/resolve" {
+        let body_bytes = match read_request_body(
+            &mut stream,
+            &buf[header_end_pos..total_read],
+            content_length,
+            &cors_origin_header,
+        )
+        .await
+        {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        #[derive(serde::Deserialize)]
+        struct ResolveReq {
+            request_id: String,
+            allow: bool,
+            reason: Option<String>,
+        }
+        let (status_line, resp_json) = match serde_json::from_slice::<ResolveReq>(&body_bytes) {
+            Ok(req) => match api.hook_channel().resolve(&req.request_id, req.allow, req.reason) {
+                Ok(()) => {
+                    let _ = api.event_bus().send(
+                        crate::api::contexts::DaemonBroadcastEvent::HookPermissionResolved {
+                            request_id: req.request_id,
+                            allow: req.allow,
+                        },
+                    );
+                    ("200 OK", serde_json::json!({ "ok": true }).to_string())
+                }
+                Err(err) => ("404 Not Found", serde_json::json!({ "ok": false, "error": err.to_string() }).to_string()),
+            },
+            Err(err) => ("400 Bad Request", serde_json::json!({ "ok": false, "error": format!("Invalid resolve JSON: {err}") }).to_string()),
+        };
+        let resp = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",
+            resp_json.len(),
+            cors_origin_header,
+            resp_json
         );
         stream.write_all(resp.as_bytes()).await?;
         stream.flush().await?;
@@ -233,8 +344,15 @@ Content-Length: {}\r\n\
             Err(e) => return Err(e),
         };
 
+        let scope = super::caller_scope::CallerScope::from_header(caller_scope_header.as_deref());
         let body_str = String::from_utf8_lossy(&body_bytes);
         let api_response = match serde_json::from_str::<ApiRequest>(&body_str) {
+            Ok(req) if !super::caller_scope::CallerScopePolicy::allows(scope, &req.method) => {
+                crate::custos_local_api::ApiResponse::error(
+                    req.id,
+                    format!("Forbidden: caller scope does not permit '{}'", req.method),
+                )
+            }
             Ok(req) => api.handle_request(req).await,
             Err(err) => crate::custos_local_api::ApiResponse::error(
                 "",

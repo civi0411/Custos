@@ -97,7 +97,7 @@ pub(crate) use custos_workbench_research::ResearchRepository;
 
 pub mod admission;
 pub mod commands;
-mod contexts;
+pub(crate) mod contexts;
 
 /// Local API Dispatcher wrapping 4 cohesive bounded sub-contexts for IPC callers.
 pub struct LocalApiDispatcher {
@@ -149,6 +149,18 @@ impl LocalApiDispatcher {
         }
     }
 
+    pub fn hook_channel(&self) -> &Arc<custos_engine::authority::HeldPermissionHookChannel> {
+        &self.kernel.hook_channel
+    }
+
+    pub fn event_bus(&self) -> &contexts::GlobalEventBus {
+        &self.kernel.event_bus
+    }
+
+    pub fn scheduler(&self) -> &Arc<custos_engine::orchestration::WorkflowScheduler> {
+        &self.kernel.scheduler
+    }
+
     /// Production constructor: receives explicit graph dependencies instantiated by the composition root.
     pub fn with_dependencies(
         task_service: Arc<TaskService>,
@@ -156,6 +168,7 @@ impl LocalApiDispatcher {
         bridge_service: Arc<BridgeService>,
         deps: LocalApiDependencies,
     ) -> Self {
+        let (event_bus, _) = tokio::sync::broadcast::channel(256);
         Self {
             kernel: contexts::KernelServices {
                 task_service,
@@ -165,6 +178,13 @@ impl LocalApiDispatcher {
                 usage_runs: None,
                 sqlite_store: None,
                 supervision: Arc::new(custos_engine::workflow::SupervisionCoordinator::default()),
+                hook_channel: Arc::new(
+                    custos_engine::authority::HeldPermissionHookChannel::new(
+                        custos_engine::authority::HookHoldPolicy::default(),
+                    ),
+                ),
+                event_bus,
+                scheduler: Arc::new(custos_engine::orchestration::WorkflowScheduler::new()),
             },
             env: contexts::EnvironmentServices {
                 workspace: None,

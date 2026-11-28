@@ -378,15 +378,17 @@ async fn test_browser_fleet_automation_api() {
         params: serde_json::json!({ "job_id": job.id }),
     };
     let run_job_res = dispatcher.handle_request(run_job_req).await;
-    assert!(!run_job_res.is_success());
-    assert!(run_job_res.error.unwrap().contains("executor"));
+    assert!(run_job_res.is_success());
+    let run_val = run_job_res.result.unwrap();
+    assert_eq!(run_val["status"], "dispatched_to_task_kernel");
+    assert!(!run_val["task_id"].as_str().unwrap_or("").is_empty());
 
     let persisted = store
         .fleet_automation()
         .get_headless_job(&job.id)
         .unwrap()
         .unwrap();
-    assert_eq!(persisted.status, HeadlessJobStatus::Pending);
+    assert_eq!(persisted.status, HeadlessJobStatus::Running);
     assert_eq!(persisted.exit_code, None);
 }
 

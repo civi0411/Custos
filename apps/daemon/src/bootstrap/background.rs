@@ -80,7 +80,7 @@ pub fn spawn_background_sweepers(
     });
 
     // Background Telemetry Retention Pruner: runs every hour and prunes historical spans/logs older than 30 days
-    let pruning_store = store;
+    let pruning_store = store.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
@@ -101,6 +101,24 @@ pub fn spawn_background_sweepers(
                 Err(err) => {
                     tracing::warn!(error = %err, "Historical telemetry pruning failed");
                 }
+            }
+        }
+    });
+
+    // Background WorkflowScheduler Ticker: runs every 30s honoring WakeSettleGate
+    let scheduler = Arc::new(custos_engine::orchestration::WorkflowScheduler::new());
+    let _scheduler_store = store;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let now = chrono::Utc::now();
+            if !scheduler.check_wake_settled(now.timestamp_millis()) {
+                continue;
+            }
+            let due = scheduler.get_due_jobs(now).await;
+            for job in due {
+                tracing::info!(job_id = %job.id, name = %job.name, "Scheduler due job ready for dispatch");
             }
         }
     });
