@@ -232,3 +232,60 @@ pub trait WorkflowRevisionPort: Send + Sync {
 /// Composite Persistence Port for Workflow Revisions, Decisions, and Replanning.
 pub trait WorkflowStore: WorkflowRevisionPort + DecisionPort + ReplanPort {}
 impl<T: WorkflowRevisionPort + DecisionPort + ReplanPort + ?Sized> WorkflowStore for T {}
+
+use crate::task::oi::{
+    AgentPersonaProfile, PersonaItem, PersonaItemBucket, PersonaRoom, PersonaRoomMessage,
+};
+
+/// Descriptor of an execution harness/model available for OI strategy selection.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExecutorDescriptor {
+    pub harness_id: String,
+    pub supports_worktree: bool,
+    pub supports_read_only: bool,
+}
+
+/// Port exposing available runtime executors to `DecisionSnapshotExtractor`.
+pub trait ExecutorRegistryPort: Send + Sync {
+    fn list_available_executors(&self) -> Vec<ExecutorDescriptor>;
+}
+
+/// ISP Persistence Port for Sovereign Persona Profiles.
+#[async_trait]
+pub trait PersonaRegistryPort: Send + Sync {
+    async fn get_persona(&self, persona_id: &str) -> Result<Option<AgentPersonaProfile>, DomainError>;
+    async fn list_personas(&self) -> Result<Vec<AgentPersonaProfile>, DomainError>;
+    async fn upsert_persona(&self, profile: &AgentPersonaProfile) -> Result<(), DomainError>;
+    async fn set_persona_enabled(&self, persona_id: &str, enabled: bool) -> Result<(), DomainError>;
+}
+
+/// ISP Persistence Port for Persona Action Queue (`persona_items`).
+#[async_trait]
+pub trait PersonaTriagePort: Send + Sync {
+    async fn get_item(&self, item_id: &str) -> Result<Option<PersonaItem>, DomainError>;
+    async fn list_items(
+        &self,
+        persona_id: Option<&str>,
+        bucket: Option<PersonaItemBucket>,
+    ) -> Result<Vec<PersonaItem>, DomainError>;
+    async fn upsert_item(&self, item: &PersonaItem) -> Result<(), DomainError>;
+    async fn resolve_item(
+        &self,
+        item_id: &str,
+        resolved_at: &str,
+    ) -> Result<(), DomainError>;
+}
+
+/// ISP Persistence Port for Multi-Persona `@mention` Group Rooms.
+#[async_trait]
+pub trait PersonaRoomPort: Send + Sync {
+    async fn create_room(&self, room: &PersonaRoom) -> Result<(), DomainError>;
+    async fn get_room(&self, room_id: &str) -> Result<Option<PersonaRoom>, DomainError>;
+    async fn list_rooms(&self) -> Result<Vec<PersonaRoom>, DomainError>;
+    async fn append_room_message(&self, message: &PersonaRoomMessage) -> Result<(), DomainError>;
+    async fn list_room_messages(
+        &self,
+        room_id: &str,
+        limit: usize,
+    ) -> Result<Vec<PersonaRoomMessage>, DomainError>;
+}

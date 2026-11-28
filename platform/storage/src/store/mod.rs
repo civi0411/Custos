@@ -2,8 +2,8 @@ use crate::connection::DbConnection;
 use crate::repositories::{
     BrowserRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
     ExperimentAttemptRepository, FleetAutomationRepository, McpServerRepository, MemoryRepository,
-    OutboxRepository, PackageRepository, ProviderRepository, ReplanRepository, RunRepository,
-    SessionRepository, SharedCapabilitiesRepository, SpanRepository, TaskRepository,
+    OutboxRepository, PackageRepository, PersonaRepository, ProviderRepository, ReplanRepository,
+    RunRepository, SessionRepository, SharedCapabilitiesRepository, SpanRepository, TaskRepository,
     WorkflowRevisionRepository, WorkspaceRepository,
 };
 pub use custos_contracts::contracts::storage::{
@@ -51,6 +51,7 @@ pub struct SqliteTaskStore {
     pub(super) shared_capabilities_repo: SharedCapabilitiesRepository,
     pub(super) memory_repo: MemoryRepository,
     pub(super) mcp_server_repo: McpServerRepository,
+    pub(super) persona_repo: PersonaRepository,
 }
 
 impl SqliteTaskStore {
@@ -74,6 +75,7 @@ impl SqliteTaskStore {
         let shared_capabilities_repo = SharedCapabilitiesRepository::new(db.clone());
         let memory_repo = MemoryRepository::new(db.clone());
         let mcp_server_repo = McpServerRepository::new(db.clone());
+        let persona_repo = PersonaRepository::new(db.clone());
         Self {
             db,
             task_repo,
@@ -95,6 +97,7 @@ impl SqliteTaskStore {
             shared_capabilities_repo,
             memory_repo,
             mcp_server_repo,
+            persona_repo,
         }
     }
 
@@ -227,6 +230,10 @@ impl SqliteTaskStore {
 
     pub fn mcp_servers(&self) -> &McpServerRepository {
         &self.mcp_server_repo
+    }
+
+    pub fn personas(&self) -> &PersonaRepository {
+        &self.persona_repo
     }
 
     /// Health check pinging SQLite to verify read/write availability and WAL consistency

@@ -8,7 +8,9 @@ pub mod estimator;
 pub mod explain;
 pub mod hard_filters;
 pub mod join_policy;
+pub mod look_around;
 pub mod persona;
+pub mod persona_executor;
 pub mod replanner;
 pub mod selector;
 pub mod snapshot_extractor;
@@ -26,7 +28,11 @@ pub use estimator::*;
 pub use explain::*;
 pub use hard_filters::HardFilters;
 pub use join_policy::{JoinEvaluation, JoinEvaluator, JoinPolicy};
-pub use persona::PersonaDispatcher;
+pub use look_around::{
+    build_up_next_item, LookAroundDedupFilter, LookAroundSandboxPolicy, LookAroundSuggestion,
+};
+pub use persona::{ActsForTrustGuard, ClampedAuthority, PersonaDispatcher, WhoCanAskGuard};
+pub use persona_executor::{PersonaPlanRunner, TaskRuntimeStepExecutor};
 pub use replanner::*;
 pub use selector::*;
 pub use snapshot_extractor::DecisionSnapshotExtractor;

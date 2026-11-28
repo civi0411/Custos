@@ -80,7 +80,7 @@ pub fn spawn_background_sweepers(
     });
 
     // Background Telemetry Retention Pruner: runs every hour and prunes historical spans/logs older than 30 days
-    let pruning_store = store.clone();
+    let pruning_store = store;
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
@@ -104,11 +104,38 @@ pub fn spawn_background_sweepers(
             }
         }
     });
+}
 
-    // Background WorkflowScheduler Ticker: runs every 30s honoring WakeSettleGate
-    let scheduler = Arc::new(custos_engine::orchestration::WorkflowScheduler::new());
-    let _scheduler_store = store;
+/// Spawns the unified WorkflowScheduler ticker sharing the coordinator/API scheduler instance.
+pub fn spawn_workflow_scheduler_ticker(
+    scheduler: Arc<custos_engine::orchestration::WorkflowScheduler>,
+    store: Arc<SqliteTaskStore>,
+    task_service: Arc<custos_engine::TaskService>,
+    workflow: Arc<dyn custos_contracts::WorkflowPort>,
+    event_bus: crate::api::contexts::GlobalEventBus,
+) {
     tokio::spawn(async move {
+        if let Ok(jobs) = store.fleet_automation().list_headless_jobs() {
+            for job in jobs {
+                if let custos_contracts::HeadlessTrigger::Cron { ref schedule } = job.trigger {
+                    scheduler
+                        .schedule(
+                            job.name.clone(),
+                            custos_engine::orchestration::scheduler::JobRecurrence::Cron {
+                                expression: schedule.clone(),
+                            },
+                            chrono::Utc::now(),
+                            serde_json::json!({
+                                "headless_job_id": job.id,
+                                "prompt": job.spec.command_or_script,
+                                "workspace_id": job.spec.workspace_id,
+                            }),
+                        )
+                        .await;
+                }
+            }
+        }
+
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
@@ -118,7 +145,57 @@ pub fn spawn_background_sweepers(
             }
             let due = scheduler.get_due_jobs(now).await;
             for job in due {
-                tracing::info!(job_id = %job.id, name = %job.name, "Scheduler due job ready for dispatch");
+                let job_key = job.id.to_string();
+                let lane = scheduler.lane_for(&job_key).await;
+                let _guard = lane.lock().await;
+                let _ = scheduler.mark_running(&job.id).await;
+
+                let prompt = job
+                    .contract_payload
+                    .get("prompt")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&job.name)
+                    .to_string();
+                let workspace_id = job
+                    .contract_payload
+                    .get("workspace_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+
+                let title = format!("Scheduled: {}", job.name);
+                match task_service.create_task(title).await {
+                    Ok(task) => {
+                        let mut cmd = custos_contracts::StartRunCommand::new(
+                            task.id.clone(),
+                            format!("scheduler:{job_key}"),
+                        )
+                        .with_prompt(prompt);
+                        if let Some(ws_id) = workspace_id {
+                            cmd = cmd.with_workspace_id(ws_id);
+                        }
+                        match workflow.start_run_background(cmd).await {
+                            Ok(_) => {
+                                let _ = event_bus.send(
+                                    crate::api::contexts::DaemonBroadcastEvent::AutomationJobDispatched {
+                                        job_id: job_key,
+                                        task_id: task.id.clone(),
+                                    },
+                                );
+                                let _ = scheduler.mark_finished(&job.id, true, None).await;
+                            }
+                            Err(err) => {
+                                let _ = scheduler
+                                    .mark_finished(&job.id, false, Some(err.to_string()))
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        let _ = scheduler
+                            .mark_finished(&job.id, false, Some(err.to_string()))
+                            .await;
+                    }
+                }
             }
         }
     });

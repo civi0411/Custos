@@ -211,3 +211,14 @@ pub const METHOD_MCP_TOOLS_LIST: &str = "v1.mcp.tools.list";
 
 pub const METHOD_MEMORY_PROPOSALS_LIST: &str = "v1.memory.proposals.list";
 pub const METHOD_MEMORY_PROPOSALS_RESOLVE: &str = "v1.memory.proposals.resolve";
+
+pub const METHOD_PERSONAS_LIST: &str = "v1.personas.list";
+pub const METHOD_PERSONAS_GET: &str = "v1.personas.get";
+pub const METHOD_PERSONAS_UPSERT: &str = "v1.personas.upsert";
+pub const METHOD_PERSONAS_ASK: &str = "v1.personas.ask";
+pub const METHOD_PERSONAS_ITEMS_LIST: &str = "v1.personas.items.list";
+pub const METHOD_PERSONAS_ITEMS_RESOLVE: &str = "v1.personas.items.resolve";
+pub const METHOD_PERSONAS_ROOMS_CREATE: &str = "v1.personas.rooms.create";
+pub const METHOD_PERSONAS_ROOMS_LIST: &str = "v1.personas.rooms.list";
+pub const METHOD_PERSONAS_ROOMS_POST_MESSAGE: &str = "v1.personas.rooms.post_message";
+pub const METHOD_PERSONAS_ROOMS_HISTORY: &str = "v1.personas.rooms.history";

@@ -4,7 +4,7 @@
 //! Task, Budget, Outbox, and Contract criteria.
 
 use custos_contracts::contracts::storage::{OutboxPort, OutboxStatus};
-use custos_contracts::{DecisionSnapshot, DomainError, Task};
+use custos_contracts::{DecisionSnapshot, DomainError, ExecutorRegistryPort, Task};
 
 pub struct DecisionSnapshotExtractor;
 
@@ -12,6 +12,25 @@ impl DecisionSnapshotExtractor {
     pub async fn extract_snapshot(
         task: &Task,
         outbox: Option<&dyn OutboxPort>,
+        remaining_budget_tokens: u64,
+        remaining_budget_usd: f32,
+    ) -> Result<DecisionSnapshot, DomainError> {
+        Self::extract_snapshot_with_executors(
+            task,
+            outbox,
+            None,
+            None,
+            remaining_budget_tokens,
+            remaining_budget_usd,
+        )
+        .await
+    }
+
+    pub async fn extract_snapshot_with_executors(
+        task: &Task,
+        outbox: Option<&dyn OutboxPort>,
+        executors: Option<&dyn ExecutorRegistryPort>,
+        pinned_model: Option<String>,
         remaining_budget_tokens: u64,
         remaining_budget_usd: f32,
     ) -> Result<DecisionSnapshot, DomainError> {
@@ -41,6 +60,15 @@ impl DecisionSnapshotExtractor {
             (Vec::new(), Vec::new())
         };
 
+        let available_executors = executors
+            .map(|reg| {
+                reg.list_available_executors()
+                    .into_iter()
+                    .map(|e| e.harness_id)
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(DecisionSnapshot {
             task_id: task.id.clone(),
             task_version: task.epoch,
@@ -55,11 +83,11 @@ impl DecisionSnapshotExtractor {
                 0
             },
             criteria,
-            pinned_model: None,
+            pinned_model,
             required_capabilities,
             egress_rules: Vec::new(),
             unknowns: Vec::new(),
-            available_executors: Vec::new(),
+            available_executors,
         })
     }
 }

@@ -26,6 +26,8 @@ pub struct MemoryScope {
     pub task_id: Option<String>,
     pub project: Option<String>,
     pub include_personal: bool,
+    #[serde(default)]
+    pub persona_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +58,8 @@ pub struct FactProposal {
     pub confidence: f32,
     /// CAS hashes / evidence ids supporting the proposal.
     pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub persona_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

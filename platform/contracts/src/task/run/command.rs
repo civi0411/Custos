@@ -31,6 +31,12 @@ pub struct StartRunCommand {
     pub reasoning_effort: Option<String>,
     #[serde(default)]
     pub provider_account_id: Option<String>,
+    #[serde(default)]
+    pub workspace_lease_id: Option<String>,
+    #[serde(default)]
+    pub isolated_worktree: bool,
+    #[serde(default)]
+    pub persona_id: Option<String>,
 }
 
 impl StartRunCommand {
@@ -50,6 +56,9 @@ impl StartRunCommand {
             model: None,
             reasoning_effort: None,
             provider_account_id: None,
+            workspace_lease_id: None,
+            isolated_worktree: false,
+            persona_id: None,
         }
     }
 

@@ -139,10 +139,15 @@ pub fn init_coordinators_and_api(
     .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
     .with_oauth_callback_server(oauth_callback_server);
 
+    let push_gateway = Arc::new(custos_protocol::relay::ZeroPiiPushGateway::new(Arc::new(
+        crate::push::RelayZeroPiiPushAdapter::from_env(),
+    )));
+
     let local_api = Arc::new(
         local_api
             .with_outbox(Arc::new(store.outbox().clone()))
-            .with_admission_coordinator(admission_coordinator.clone()),
+            .with_admission_coordinator(admission_coordinator.clone())
+            .with_push_gateway(push_gateway),
     );
 
     Ok(CoordinatorServices {

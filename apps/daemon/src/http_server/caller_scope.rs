@@ -50,6 +50,7 @@ impl CallerScopePolicy {
                     "v1.memory.proposals.",
                     "v1.hooks.permission.",
                     "v1.terminal.",
+                    "v1.personas.",
                 ];
                 ALLOWED_PREFIXES
                     .iter()

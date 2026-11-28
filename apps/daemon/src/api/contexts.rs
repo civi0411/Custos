@@ -18,6 +18,16 @@ pub enum DaemonBroadcastEvent {
         job_id: String,
         task_id: String,
     },
+    PersonaItemUpdated {
+        persona_id: String,
+        item_id: String,
+        bucket: String,
+    },
+    PersonaRoomMessageAdded {
+        persona_id: String,
+        room_id: String,
+        message_id: String,
+    },
 }
 
 pub type GlobalEventBus = tokio::sync::broadcast::Sender<DaemonBroadcastEvent>;
@@ -32,6 +42,7 @@ pub(crate) struct KernelServices {
     pub(crate) supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
     pub(crate) hook_channel: Arc<custos_engine::authority::HeldPermissionHookChannel>,
     pub(crate) event_bus: GlobalEventBus,
+    pub(crate) push_gateway: Option<Arc<custos_protocol::relay::ZeroPiiPushGateway>>,
     pub(crate) scheduler: Arc<custos_engine::orchestration::WorkflowScheduler>,
 }
 

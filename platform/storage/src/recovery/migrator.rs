@@ -161,5 +161,27 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             "../../migrations/0049_worker_provider_session.sql"
         ))?;
     }
+    conn.execute_batch(include_str!("../../migrations/0050_personas.sql"))?;
+    let fact_columns = conn
+        .prepare("PRAGMA table_info(memory_facts)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !fact_columns.iter().any(|column| column == "persona_scope") {
+        conn.execute_batch(
+            "ALTER TABLE memory_facts ADD COLUMN persona_scope TEXT;
+             CREATE INDEX IF NOT EXISTS idx_memory_facts_persona_scope
+                 ON memory_facts (persona_scope, valid_to, recorded_at DESC);",
+        )?;
+    }
+    let proposal_columns = conn
+        .prepare("PRAGMA table_info(memory_fact_proposals)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !proposal_columns
+        .iter()
+        .any(|column| column == "persona_scope")
+    {
+        conn.execute_batch("ALTER TABLE memory_fact_proposals ADD COLUMN persona_scope TEXT;")?;
+    }
     Ok(())
 }

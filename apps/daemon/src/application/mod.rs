@@ -9,6 +9,7 @@ mod integrations;
 pub mod mcp_registry;
 mod oi;
 mod packs;
+mod personas;
 mod pipeline;
 mod providers;
 #[cfg(feature = "custos-workbench-quant")]
@@ -128,6 +129,8 @@ impl LocalApiDispatcher {
             "memory" => self.handle_memory(req).await,
             // Group: Held Permission Hooks (Claude Code / CLI)
             "hooks" => self.handle_hooks(req).await,
+            // Group: Sovereign Personas ("Digital Colleagues")
+            "personas" => self.handle_personas(req).await,
             _ => ApiResponse::error(req.id.clone(), format!("Unknown method: {}", req.method)),
         }
     }
