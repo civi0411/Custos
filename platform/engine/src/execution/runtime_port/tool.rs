@@ -40,6 +40,11 @@ pub trait GovernedToolExecutor: Send + Sync {
         name: &str,
         params: &serde_json::Value,
     ) -> Result<ToolResult, DomainError>;
+
+    /// Optional dynamic tool declarations (e.g. federated MCP tools) disclosed at turn start.
+    async fn dynamic_tools(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
 }
 
 /// Evaluates tool name and arguments to classify deterministic risk level

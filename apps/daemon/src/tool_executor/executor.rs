@@ -184,6 +184,31 @@ impl custos_engine::agent::runtime_port::GovernedToolExecutor for DaemonGoverned
         }
         res
     }
+
+    async fn dynamic_tools(&self) -> Vec<serde_json::Value> {
+        let Some(ref hub) = self.mcp_hub else {
+            return Vec::new();
+        };
+        match hub.list_federated_tools().await {
+            Ok(tools) => tools
+                .into_iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        }
+                    })
+                })
+                .collect(),
+            Err(err) => {
+                tracing::warn!("Failed to list federated MCP tools: {err}");
+                Vec::new()
+            }
+        }
+    }
 }
 
 impl DaemonGovernedToolExecutor {

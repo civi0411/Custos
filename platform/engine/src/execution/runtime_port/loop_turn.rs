@@ -93,8 +93,17 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         }
 
         if let Some(ref memory) = self.memory_port {
+            let query_text = context_pack
+                .items
+                .first()
+                .map(|item| {
+                    let mut text = item.content.clone();
+                    truncate_to_char_boundary(&mut text, 120);
+                    text
+                })
+                .unwrap_or_default();
             let query = custos_contracts::RecallQuery {
-                text: worker_run.worker_id.clone(),
+                text: query_text,
                 limit: 8,
                 token_budget: Some(1024),
             };
@@ -119,7 +128,27 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         }
 
         // Fast path: if no tool executor is configured, preserve single-turn intent extraction
-        let active_tools = self.resolve_tools();
+        let mut active_tools = self.resolve_tools();
+        if let Some(ref exec) = self.tool_executor {
+            let dynamic = exec.dynamic_tools().await;
+            for tool in dynamic {
+                let name = tool
+                    .get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str());
+                let already_present = name.is_some_and(|n| {
+                    active_tools.iter().any(|t| {
+                        t.get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|v| v.as_str())
+                            == Some(n)
+                    })
+                });
+                if !already_present {
+                    active_tools.push(tool);
+                }
+            }
+        }
         let executor = match &self.tool_executor {
             Some(exec) if !active_tools.is_empty() => exec.clone(),
             _ => {
