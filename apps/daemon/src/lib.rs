@@ -12,6 +12,7 @@ pub mod auth;
 pub mod bootstrap;
 pub mod http_server;
 pub mod profile;
+pub mod push;
 #[cfg(feature = "roaming")]
 pub mod roaming_bridge;
 pub mod runtime;

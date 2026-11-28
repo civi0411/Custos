@@ -14,7 +14,7 @@ pub mod kernel;
 pub mod storage;
 pub mod workbenches;
 
-pub use background::spawn_background_sweepers;
+pub use background::{spawn_background_sweepers, spawn_workflow_scheduler_ticker};
 pub use coordinators::{init_coordinators_and_api, CoordinatorServices};
 pub use kernel::{init_kernel_services, KernelServices};
 pub use storage::reconcile_storage_on_startup;

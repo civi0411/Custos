@@ -67,6 +67,7 @@ mod tests {
                 object: format!("o{i}"),
                 confidence: 0.9,
                 evidence_refs: vec!["cas:1".into()],
+                persona_scope: None,
             });
         }
         assert!(ConsolidationValidator::validate(&draft, 10, &policy).is_err());

@@ -278,6 +278,7 @@ mod tests {
             task_id: None,
             project: Some("project_b".into()),
             include_personal: false,
+            persona_scope: None,
         };
         let entries = store.recall_context(&query, &scope_b).await.unwrap();
         assert_eq!(entries.len(), 1);

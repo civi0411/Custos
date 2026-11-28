@@ -167,6 +167,15 @@ impl CustosRuntime {
             kernel_services.supervision,
         )?;
 
+        // Phase 5b: Unified WorkflowScheduler ticker sharing the API scheduler instance
+        crate::bootstrap::spawn_workflow_scheduler_ticker(
+            coords.local_api.scheduler().clone(),
+            store.clone(),
+            kernel_services.task_service.clone(),
+            coords.workflow.clone(),
+            coords.local_api.event_bus().clone(),
+        );
+
         Ok(Self {
             store,
             credentials,

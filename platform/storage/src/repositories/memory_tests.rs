@@ -15,6 +15,7 @@ async fn memory_repository_persists_fts5_and_enforces_proposal_governance() {
                 object: "SQLite WAL".into(),
                 confidence: 0.90,
                 evidence_refs: vec![],
+                persona_scope: None,
             },
             "run_1".into(),
         )
@@ -47,6 +48,7 @@ async fn memory_repository_persists_fts5_and_enforces_proposal_governance() {
                 object: "rusqlite bundled FTS5".into(),
                 confidence: 0.95,
                 evidence_refs: vec!["cas:abc123".into()],
+                persona_scope: None,
             },
             "run_2".into(),
         )

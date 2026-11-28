@@ -80,17 +80,41 @@ export class StableLogicalRpcClient {
     return this.calm.onConnected();
   }
 
-  async request<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  async request<T = unknown>(
+    method: string,
+    params: Record<string, unknown> = {},
+    guard?: (v: unknown) => v is T
+  ): Promise<T> {
     if (!this.channel) {
       throw new Error(`No active physical channel for RPC ${method}`);
     }
     const id = `mob-${++this.seq}`;
     const raw = await this.channel.sendFrame(JSON.stringify({ id, method, params }));
-    const parsed = JSON.parse(raw) as { result?: T; error?: string };
-    if (parsed.error) {
-      throw new Error(parsed.error);
-    }
-    return parsed.result as T;
+    return salvageRpcResult<T>(raw, guard);
   }
+}
+
+export function salvageRpcResult<T>(
+  raw: string,
+  guard?: (v: unknown) => v is T
+): T {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('RPC frame is not valid JSON');
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('RPC frame is not an object');
+  }
+  const frame = parsed as Record<string, unknown>;
+  if (typeof frame['error'] === 'string' && frame['error'].length > 0) {
+    throw new Error(frame['error']);
+  }
+  const result = frame['result'];
+  if (guard && !guard(result)) {
+    throw new Error('RPC result failed defensive type guard');
+  }
+  return result as T;
 }
 

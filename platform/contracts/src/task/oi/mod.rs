@@ -7,6 +7,7 @@ pub mod candidate;
 pub mod evaluation;
 pub mod explain;
 pub mod persona;
+pub mod persona_triage;
 pub mod placement;
 pub mod proposal;
 pub mod record;
@@ -21,7 +22,13 @@ pub use evaluation::{
     OptimizationEvaluator, TaskExecutionMetrics,
 };
 pub use explain::{CandidateExplanation, ExplainReport};
-pub use persona::{AgentPersonaProfile, PersonaWorkbench, WhoCanAskPolicy};
+pub use persona::{
+    ActsForTrustPolicy, AgentPersonaProfile, CallerIdentity, MemoryScopeId, WhoCanAskPolicy,
+};
+pub use persona_triage::{
+    PersonaAskOption, PersonaAskQuestion, PersonaItem, PersonaItemBucket, PersonaItemKind,
+    PersonaItemSource, PersonaRoom, PersonaRoomMessage, PersonaRoomSenderKind,
+};
 pub use placement::NodePlacement;
 pub use proposal::StrategyProposal;
 pub use record::DecisionRecord;

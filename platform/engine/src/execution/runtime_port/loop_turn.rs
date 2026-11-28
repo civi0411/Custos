@@ -111,6 +111,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                 task_id: Some(worker_run.task_id.clone()),
                 project: None,
                 include_personal: true,
+                persona_scope: None,
             };
             match memory.recall_context(&query, &scope).await {
                 Ok(entries) if !entries.is_empty() => {

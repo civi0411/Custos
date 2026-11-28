@@ -165,6 +165,7 @@ async fn vertical_slice_links_all_ports() {
                 object: "add".into(),
                 confidence: 0.9,
                 evidence_refs: vec![receipt.output_digest.clone()],
+                persona_scope: None,
             },
             new_id("wrun"),
         )

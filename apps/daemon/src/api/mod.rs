@@ -161,6 +161,18 @@ impl LocalApiDispatcher {
         &self.kernel.scheduler
     }
 
+    pub fn with_push_gateway(
+        mut self,
+        gateway: Arc<custos_protocol::relay::ZeroPiiPushGateway>,
+    ) -> Self {
+        self.kernel.push_gateway = Some(gateway);
+        self
+    }
+
+    pub fn push_gateway(&self) -> Option<&Arc<custos_protocol::relay::ZeroPiiPushGateway>> {
+        self.kernel.push_gateway.as_ref()
+    }
+
     /// Production constructor: receives explicit graph dependencies instantiated by the composition root.
     pub fn with_dependencies(
         task_service: Arc<TaskService>,
@@ -184,6 +196,7 @@ impl LocalApiDispatcher {
                     ),
                 ),
                 event_bus,
+                push_gateway: None,
                 scheduler: Arc::new(custos_engine::orchestration::WorkflowScheduler::new()),
             },
             env: contexts::EnvironmentServices {

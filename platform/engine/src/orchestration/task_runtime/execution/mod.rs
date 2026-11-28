@@ -182,10 +182,9 @@ impl TaskRuntime {
             return Err(e);
         }
 
-        // Native agents must run in the registered workspace selected by the user.
-        // A second implicit lease would be based on the daemon's own cwd and could
-        // be removed before the user has reviewed the agent's changes.
-        let lease = if actual_mode != "native" {
+        // Native agents normally run in the registered workspace selected by the user,
+        // unless isolated_worktree / workspace_lease_id is explicitly requested (e.g. T4Worktree).
+        let lease = if actual_mode != "native" || cmd.isolated_worktree || cmd.workspace_lease_id.is_some() {
             if let Some(ref lm) = self.lease_manager {
                 lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
             } else {

@@ -103,12 +103,38 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, e.to_string());
                 }
 
-                tracing::info!(job_id = %job.id, task_id = %task.id, "Dispatched automation job into governed TaskService");
+                let mut run_id: Option<String> = None;
+                if let Some(ref workflow) = self.kernel.workflow {
+                    let mut cmd = custos_contracts::StartRunCommand::new(
+                        task.id.clone(),
+                        format!("automation:{}", job.id),
+                    )
+                    .with_prompt(job.spec.command_or_script.clone());
+                    if let Some(ref ws_id) = job.spec.workspace_id {
+                        cmd = cmd.with_workspace_id(ws_id.clone());
+                    }
+                    match workflow.start_run_background(cmd).await {
+                        Ok(handle) => run_id = Some(handle.run_id),
+                        Err(e) => {
+                            tracing::warn!(job_id = %job.id, error = %e, "Failed to start automation background run");
+                        }
+                    }
+                }
+
+                let _ = self.kernel.event_bus.send(
+                    crate::api::contexts::DaemonBroadcastEvent::AutomationJobDispatched {
+                        job_id: job.id.clone(),
+                        task_id: task.id.clone(),
+                    },
+                );
+
+                tracing::info!(job_id = %job.id, task_id = %task.id, ?run_id, "Dispatched automation job into governed TaskService");
                 ApiResponse::success(
                     req.id,
                     serde_json::json!({
                         "job": job,
                         "task_id": task.id,
+                        "run_id": run_id,
                         "status": "dispatched_to_task_kernel"
                     }),
                 )
