@@ -7,6 +7,7 @@ pub mod a2a;
 pub mod harness;
 pub mod local_api;
 pub mod profile;
+pub mod relay;
 pub mod research;
 pub mod wire_types;
 pub mod worker;

@@ -79,7 +79,8 @@ pub use task::{
     ErrorGroupSummary, EvidenceKind, ExecutionTopology, FindingKind, KernelPort, LatencyBreakdown,
     LaunchAttempt, LaunchStatus, LiveRunEvent, LiveRunReplay, LiveRunSnapshot, LogSeverity,
     LongRunningRule, ModelCandidateConfig, NoActivityRule, NodeAttempt, NodePlacement,
-    OiPlannerPort, PossibleLoopRule, Recipe, RecipeEnvironmentSpec, RecipeInput,
+    AgentPersonaProfile,
+    OiPlannerPort, PersonaWorkbench, PossibleLoopRule, Recipe, RecipeEnvironmentSpec, RecipeInput,
     ReconciliationSummary, RejectionReason, RepeatedErrorRule, RepeatedToolRule, ReplanBrief,
     ReplanRecord, ReplanTrigger, RequestedModelScope, RevisionNode, Run, RunHandle,
     RunInspectionReport, RunMetricsSummary, RunOverviewSummary, RunPort, RunStatus, RunStepSpan,
@@ -87,6 +88,7 @@ pub use task::{
     StepSpanStatus, StrategyProposal, SupervisionFinding, SupervisionLogEntry, SupervisionProfile,
     SupervisionRule, SupervisionRunRecord, SupervisionRunStatus, SupervisionSeverity,
     SupervisionSnapshot, Task, TaskAdvanced, TaskBlocked, TaskCancelled, TaskCompleted,
+    WhoCanAskPolicy,
     TaskContract, TaskContractRevision, TaskContractV1, TaskCreated, TaskEvent, TaskRevision,
     TaskSnapshotImported, TaskStatus, TaskStore, ThresholdPolicy, TransferPrivacyDecision,
     UsageExecutorKind, UsageMeasurement, UsageRecord, WorkerResult, WorkerRun, WorkerStatus,
@@ -128,8 +130,9 @@ pub use evidence::{
 
 // --- Context & Memory ---
 pub use context::{
-    AnnotationRecord, AnnotationStatus, AnnotationTarget, ContextDeliveryState, ContextItem,
-    ContextPack, ContextReceipt, FactProposal, MemoryEntry, MemoryError, MemoryPort, MemoryScope,
+    AnnotationRecord, AnnotationStatus, AnnotationTarget, ConsolidationPolicy, ConsolidationReport,
+    ContextDeliveryState, ContextItem, ContextPack, ContextReceipt, FactProposal,
+    MemoryConsolidationDraft, MemoryEntry, MemoryError, MemoryPort, MemoryScope,
     OmittedContextReason, OmittedContextRef, PersonalFact, ProposalReceipt, ProposalStatus,
     RecallQuery,
 };

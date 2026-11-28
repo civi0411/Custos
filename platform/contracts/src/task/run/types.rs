@@ -123,6 +123,8 @@ pub struct WorkerRun {
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
     pub continuation_packet_ref: Option<String>,
+    #[serde(default)]
+    pub provider_session_id: Option<String>,
 }
 
 impl WorkerRun {
@@ -139,11 +141,17 @@ impl WorkerRun {
             started_at: Utc::now(),
             ended_at: None,
             continuation_packet_ref: None,
+            provider_session_id: None,
         }
     }
 
     pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
         self.run_id = Some(run_id.into());
+        self
+    }
+
+    pub fn with_provider_session_id(mut self, provider_session_id: impl Into<String>) -> Self {
+        self.provider_session_id = Some(provider_session_id.into());
         self
     }
 
