@@ -213,6 +213,53 @@ impl T5LeadWorkerCoordinator {
             join_evaluation,
         })
     }
+
+    /// Executes decomposed nodes sequentially in topological order against a real `AgentRuntimePort`.
+    pub async fn execute_with_runtime(
+        decomposition: &LeadDecomposition<'_>,
+        revision: &WorkflowRevision,
+        runtime: &dyn crate::contracts::harness::AgentRuntimePort,
+    ) -> Result<T5SynthesisResult, DomainError> {
+        let mut worker_results = Vec::with_capacity(decomposition.ordered.len());
+        for ordered_node in &decomposition.ordered {
+            let node = ordered_node.node;
+            let worker_run = custos_contracts::WorkerRun::new(
+                revision.task_id.clone(),
+                format!("t5_{}", node.node_id),
+                1,
+            );
+            let context_pack = custos_contracts::ContextPack::new(
+                custos_contracts::new_id("ctx"),
+                vec![custos_contracts::ContextItem {
+                    id: custos_contracts::new_id("citem"),
+                    source: format!("t5_node:{}", node.node_id),
+                    content: format!(
+                        "Step: {} (role={}, depends_on={:?})",
+                        node.step_name, node.role, ordered_node.depends_on
+                    ),
+                    score: 1.0,
+                    tokens: 32,
+                    provenance_hash: None,
+                    is_tainted: false,
+                }],
+                32,
+                custos_contracts::digest(node.step_name.as_bytes()),
+            );
+            match runtime.execute_turn(&worker_run, &context_pack).await {
+                Ok(intents) => {
+                    let summary = format!("node={} intents={}", node.node_id, intents.len());
+                    worker_results.push(WorkerResult::success(node.node_id.clone(), summary));
+                }
+                Err(err) => {
+                    worker_results.push(WorkerResult::failed(
+                        node.node_id.clone(),
+                        format!("node={} error={err}", node.node_id),
+                    ));
+                }
+            }
+        }
+        Self::synthesise(worker_results, &revision.task_id)
+    }
 }
 
 #[cfg(test)]
