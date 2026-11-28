@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use custos_contracts::contracts::memory::MemoryPort;
 use custos_contracts::{
-    new_id, DomainError, FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact,
-    ProposalReceipt, ProposalStatus, RecallQuery, WorkerRunId,
+    new_id, ConsolidationPolicy, ConsolidationReport, DomainError, FactProposal,
+    MemoryConsolidationDraft, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt,
+    ProposalStatus, RecallQuery, WorkerRunId,
 };
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -185,6 +186,44 @@ impl MemoryRepository {
             proposal_id: proposal_id.to_string(),
             status: next_status,
         })
+    }
+
+    pub fn apply_consolidation(
+        &self,
+        worker_run_id: &str,
+        expected_active_count: usize,
+        draft: &MemoryConsolidationDraft,
+        policy: &ConsolidationPolicy,
+    ) -> Result<ConsolidationReport, DomainError> {
+        if draft.new_facts.len() > policy.max_new_facts {
+            return Err(DomainError::Validation("Consolidation exceeds max_new_facts".into()));
+        }
+        let mut conn = self.db.lock()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(format!("Consolidation tx failed: {e}")))?;
+        let active_count: i64 = tx
+            .query_row("SELECT COUNT(*) FROM memory_facts WHERE valid_to IS NULL", [], |r| r.get(0))
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        if usize::try_from(active_count).unwrap_or(0) != expected_active_count {
+            return Err(DomainError::Validation("Concurrent memory mutation detected".into()));
+        }
+        let now = Utc::now().to_rfc3339();
+        let mut archived = 0usize;
+        for id in &draft.archive_fact_ids {
+            archived += tx
+                .execute(
+                    "UPDATE memory_facts SET valid_to = ?1 WHERE id = ?2 AND valid_to IS NULL",
+                    params![&now, id],
+                )
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+        }
+        for fact in &draft.new_facts {
+            let refs = serde_json::to_string(&fact.evidence_refs).unwrap_or_else(|_| "[]".into());
+            insert_fact_tx(&tx, "semantic", None, None, &fact.subject, &fact.predicate, &fact.object, fact.confidence, &now, Some(worker_run_id), &refs)?;
+        }
+        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(ConsolidationReport { accepted_facts: draft.new_facts.len(), archived_facts: archived })
     }
 }
 

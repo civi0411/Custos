@@ -133,16 +133,11 @@ impl PeerDelegationRouter {
             }
         }
 
-        // Local or offline test dispatch
-        Ok(A2ADelegationResult {
-            delegation_id: req.delegation_id,
-            peer_endpoint_id: peer.endpoint_id.clone(),
-            status: A2ADelegationStatus::Delegated,
-            response: Some(format!(
-                "Delegated task '{}' to peer {}",
-                req.task, peer.endpoint_id
-            )),
-        })
+        // Fail closed if no live RoamingNode is wired instead of returning a synthetic delegation.
+        Err(RoamingError::Transport(format!(
+            "No live RoamingNode wired for peer {}; refusing offline delegation",
+            peer.endpoint_id
+        )))
     }
 }
 
@@ -200,9 +195,7 @@ mod tests {
             budget_limit_usd: Some(0.05),
         };
 
-        let result = router.delegate(req).await.unwrap();
-        assert_eq!(result.delegation_id, "del_123");
-        assert_eq!(result.peer_endpoint_id, endpoint_b.to_string());
-        assert_eq!(result.status, A2ADelegationStatus::Delegated);
+        let err = router.delegate(req).await.unwrap_err();
+        assert!(err.to_string().contains("No live RoamingNode wired"));
     }
 }

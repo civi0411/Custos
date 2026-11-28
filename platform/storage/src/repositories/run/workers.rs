@@ -14,8 +14,8 @@ impl RunRepository {
         let ended_at_str = wrun.ended_at.map(|dt| dt.to_rfc3339());
 
         let changed = conn.execute(
-            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version, provider_session_id)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?13
              WHERE ?12 = 0 OR EXISTS (SELECT 1 FROM worker_runs WHERE id = ?1)
              ON CONFLICT(id) DO UPDATE SET
                 attempt_id = excluded.attempt_id,
@@ -23,7 +23,8 @@ impl RunRepository {
                 status = excluded.status,
                 ended_at = excluded.ended_at,
                 continuation_packet_ref = excluded.continuation_packet_ref,
-                state_version = excluded.state_version
+                state_version = excluded.state_version,
+                provider_session_id = COALESCE(excluded.provider_session_id, worker_runs.provider_session_id)
              WHERE worker_runs.state_version = ?12
                AND worker_runs.run_id IS excluded.run_id AND worker_runs.task_id = excluded.task_id
                AND worker_runs.worker_id = excluded.worker_id AND worker_runs.started_at = excluded.started_at
@@ -46,6 +47,7 @@ impl RunRepository {
                 wrun.continuation_packet_ref,
                 next_version as i64,
                 wrun.state_version as i64,
+                wrun.provider_session_id,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -63,7 +65,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version, provider_session_id
                  FROM worker_runs WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -80,7 +82,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version, provider_session_id
                  FROM worker_runs WHERE task_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -100,7 +102,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version, provider_session_id
                  FROM worker_runs WHERE run_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -143,6 +145,7 @@ impl RunRepository {
             started_at,
             ended_at,
             continuation_packet_ref: row.get(9)?,
+            provider_session_id: row.get(11)?,
         })
     }
 }
