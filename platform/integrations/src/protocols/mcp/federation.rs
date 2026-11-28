@@ -113,13 +113,28 @@ impl McpFederationHub {
     /// List all federated tools across all registered servers with namespaced names (`prefix__name`).
     /// Output is deterministically sorted alphabetically by tool name.
     pub async fn list_federated_tools(&self) -> Result<Vec<ToolDefinition>> {
-        let guard = self.servers.read().await;
+        let targets: Vec<(String, Arc<dyn McpClientTrait>)> = {
+            let guard = self.servers.read().await;
+            guard
+                .iter()
+                .map(|(prefix, client)| (prefix.clone(), Arc::clone(client)))
+                .collect()
+        };
+
+        let mut join_set = tokio::task::JoinSet::new();
+        for (prefix, client) in targets {
+            join_set.spawn(async move {
+                let fetch_res =
+                    tokio::time::timeout(Duration::from_secs(10), client.list_tools(None)).await;
+                (prefix, fetch_res)
+            });
+        }
+
         let mut federated_tools = Vec::new();
-
-        for (prefix, client) in guard.iter() {
-            let fetch_future = client.list_tools(None);
-            let fetch_res = tokio::time::timeout(Duration::from_secs(10), fetch_future).await;
-
+        while let Some(joined) = join_set.join_next().await {
+            let Ok((prefix, fetch_res)) = joined else {
+                continue;
+            };
             match fetch_res {
                 Ok(Ok(tools)) => {
                     for tool in tools {

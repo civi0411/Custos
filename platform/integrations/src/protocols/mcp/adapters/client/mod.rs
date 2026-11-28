@@ -408,10 +408,37 @@ impl CustosMcpClient {
                 process,
             } => {
                 let mut lock = process.lock().await;
-                let proc = self
-                    .ensure_stdio_process(&mut lock, command, args, env, current_dir.as_ref())
-                    .await?;
-                proc.send_request(method, params).await
+                let first_res = {
+                    let proc = self
+                        .ensure_stdio_process(&mut lock, command, args, env, current_dir.as_ref())
+                        .await?;
+                    proc.send_request(method, params.clone()).await
+                };
+                match first_res {
+                    Ok(val) => Ok(val),
+                    Err(err) => {
+                        tracing::warn!(
+                            server = %self.server_name,
+                            method = %method,
+                            "MCP stdio process request failed ({err}); respawning once"
+                        );
+                        *lock = None;
+                        let proc = self
+                            .ensure_stdio_process(
+                                &mut lock,
+                                command,
+                                args,
+                                env,
+                                current_dir.as_ref(),
+                            )
+                            .await?;
+                        let retry_res = proc.send_request(method, params).await;
+                        if retry_res.is_err() {
+                            *lock = None;
+                        }
+                        retry_res
+                    }
+                }
             }
             TransportState::Http { client } => client.send_request(method, params).await,
         }
