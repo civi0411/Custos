@@ -35,6 +35,11 @@ lite = [
 local-inference = [
     "custos-integrations/local-inference-native",
 ]
+roaming = [
+    "custos-integrations/roaming",
+    "dep:anyhow",
+    "dep:futures",
+]
 
 [dependencies]
 custos-contracts = { workspace = true }
@@ -61,6 +66,8 @@ reqwest = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
 sha2 = { workspace = true }
+anyhow = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 custos-integrations = { workspace = true, features = ["test-support"] }

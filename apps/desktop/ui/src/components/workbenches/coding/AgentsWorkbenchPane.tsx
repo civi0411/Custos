@@ -102,8 +102,8 @@ export function AgentsWorkbenchPane({ sessionId, runId, tabId = 'agents', initia
     </select>
     <div className="wb-toolbar-spacer" />
     <div className="wb-segmented" role="group" aria-label="Agent interaction">
-      <button type="button" aria-pressed={mode === 'terminal'} onClick={() => setMode('terminal')}>Terminal</button>
-      <button type="button" aria-pressed={mode === 'run'} onClick={() => setMode('run')}>Task run</button>
+      <button type="button" aria-pressed={mode === 'terminal'} onClick={() => setMode('terminal')}>Raw PTY</button>
+      <button type="button" aria-pressed={mode === 'run'} onClick={() => setMode('run')}>Chat UI</button>
     </div>
     <button className="wb-icon-button" type="button" title="Refresh agents" aria-label="Refresh agent availability" disabled={loading} onClick={() => setLoadAttempt(value => value + 1)}><RefreshCw size={14} /></button>
     {onOpenTab && <button className="wb-icon-button" type="button" title="New agent tab" aria-label="New agent tab" onClick={() => onOpenTab('agents', undefined, 'Agents', 'primary', workspaceId)}><Plus size={14} /></button>}
@@ -111,7 +111,10 @@ export function AgentsWorkbenchPane({ sessionId, runId, tabId = 'agents', initia
     <WorkbenchError message={error || (mode === 'terminal' ? terminal.error : null)} onRetry={() => { setLoadAttempt(value => value + 1); void terminal.refresh(); }} />
     <div className="wb-context-line">
       {harness && getAgentBrandIcon(harness.id, 13, 'shrink-0')}
-      <span>{mode === 'terminal' ? 'Interactive CLI · provider governed' : 'Task run · ' + (harness?.profile.tool_mediation?.replace(/_/g, ' ') || 'assurance unavailable')}</span>
+      <span>
+        {mode === 'terminal' ? 'Interactive Raw PTY · provider governed' : 'Chat UI · ' + (harness?.profile.tool_mediation?.replace(/_/g, ' ') || 'assurance unavailable')}
+        {runSessionId ? ` · Session ${runSessionId.slice(-8)}` : ''}
+      </span>
       <span className="wb-toolbar-spacer" />
       {mode === 'terminal' ? <>
         <span role="status">{terminal.busy ? 'Connecting…' : terminal.session?.status.type || 'Not started'}</span>

@@ -7,6 +7,7 @@ pub mod approvals;
 pub mod audit;
 pub mod environment_gate;
 pub mod grants;
+pub mod hook_hold;
 pub mod path_sandbox;
 pub mod permits;
 pub mod policy;
@@ -16,6 +17,10 @@ pub use approvals::ApprovalManager;
 pub use audit::{AuditEntry, AuditLog};
 pub use environment_gate::EnvironmentGate;
 pub use grants::GrantStore;
+pub use hook_hold::{
+    HeldPermissionHookChannel, HookBehavior, HookDecision, HookHoldPolicy, PendingHookApproval,
+    PermissionHookRequest,
+};
 pub use path_sandbox::PathSandbox;
 pub use permits::PermitIssuer;
 pub use policy::{

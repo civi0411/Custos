@@ -38,15 +38,17 @@ impl CaffeinateManager {
     pub fn set_mode(&self, mode: &str) -> (String, bool) {
         let mut lock = self.state.lock().unwrap_or_else(|p| p.into_inner());
         let (current_mode, child) = &mut *lock;
-        *current_mode = mode.to_string();
+        let normalized = mode.trim().to_ascii_lowercase();
+        *current_mode = normalized.clone();
 
-        let should_run = mode == "always" || mode == "on";
+        let should_run = matches!(normalized.as_str(), "always" | "on" | "agent");
         if should_run {
-            if child.is_none() {
-                *child = std::process::Command::new("caffeinate")
-                    .args(["-i", "-s"])
-                    .spawn()
-                    .ok();
+            let alive = child
+                .as_mut()
+                .map(|c| c.try_wait().ok().flatten().is_none())
+                .unwrap_or(false);
+            if !alive {
+                *child = spawn_awake_assertion();
             }
         } else if let Some(mut c) = child.take() {
             let _ = c.kill();
@@ -58,5 +60,48 @@ impl CaffeinateManager {
             .map(|c| c.try_wait().ok().flatten().is_none())
             .unwrap_or(false);
         (current_mode.clone(), is_active)
+    }
+}
+
+fn spawn_awake_assertion() -> Option<std::process::Child> {
+    #[cfg(target_os = "macos")]
+    {
+        let pid = std::process::id().to_string();
+        return std::process::Command::new("caffeinate")
+            .args(["-i", "-s", "-w", &pid])
+            .spawn()
+            .ok();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return std::process::Command::new("systemd-inhibit")
+            .args([
+                "--what=sleep:handle-lid-switch",
+                "--mode=block",
+                "--why=Custos active agent run",
+                "cat",
+            ])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .ok();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caffeinate_recognizes_agent_mode_and_off() {
+        let mgr = CaffeinateManager::new();
+        let (mode, _) = mgr.set_mode("agent");
+        assert_eq!(mode, "agent");
+        let (off_mode, active) = mgr.set_mode("off");
+        assert_eq!(off_mode, "off");
+        assert!(!active);
     }
 }

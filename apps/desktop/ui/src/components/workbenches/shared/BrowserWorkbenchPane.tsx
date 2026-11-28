@@ -14,10 +14,12 @@ import {
   Trash2,
   ChevronDown,
   Search,
-  Home
+  Home,
+  Crosshair
 } from 'lucide-react';
 import { useNativeBrowser } from '@/hooks/useNativeBrowser';
 import { normalizeBrowserUrl } from '@/api/native_browser';
+import { formatGrabForAgent, sanitizeGrabPayload } from '@/utils/browserGrabSanitizer';
 export { normalizeBrowserUrl } from '@/api/native_browser';
 
 interface Props {
@@ -53,6 +55,12 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
   const [zoom, setZoom] = useState(100);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLogItem[]>([]);
+  const [pickMode, setPickMode] = useState(false);
+  const pickModeRef = useRef(false);
+  pickModeRef.current = pickMode;
+  const [pickSelector, setPickSelector] = useState('');
+  const [pickNote, setPickNote] = useState('');
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const viewport = useRef<HTMLDivElement>(null);
   const browser = useNativeBrowser({
@@ -186,10 +194,29 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
           className={buttonClass}
           aria-label="Insert page context into chat"
           disabled={!ready}
-          onClick={() => onAskAgent?.(`Browser URL: ${browser.currentUrl}\nViewport: ${selected.label}`)}
-          title="Send Page Context to Chat"
+          onClick={() => {
+            const sanitized = sanitizeGrabPayload({
+              url: browser.currentUrl || address,
+              tagName: 'document',
+              note: `Viewport: ${selected.label}`,
+            });
+            onAskAgent?.(formatGrabForAgent(sanitized));
+          }}
+          title="Send Sanitized Page Context to Chat"
         >
           <MessageSquarePlus size={14} />
+        </button>
+
+        {/* Pick Element (Design Grab) */}
+        <button
+          type="button"
+          className={`${buttonClass} ${pickMode ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)]' : ''}`}
+          aria-label="Pick element"
+          aria-pressed={pickMode}
+          onClick={() => setPickMode((prev) => !prev)}
+          title="Pick Element (Sanitized Design Grab)"
+        >
+          <Crosshair size={14} />
         </button>
 
         {/* Developer Console Drawer Toggle */}
@@ -306,6 +333,45 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         </span>
       </div>
 
+      {/* Pick Element (Trust-Boundary Sanitized Grab) */}
+      {pickMode && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-[var(--color-surface-1)] border-b border-[var(--color-border-muted)] text-[11px]">
+          <Crosshair size={12} className="text-[var(--color-accent)] shrink-0" />
+          <input
+            aria-label="Element selector"
+            value={pickSelector}
+            onChange={(e) => setPickSelector(e.target.value)}
+            placeholder="CSS selector or element tag (e.g. button.submit)"
+            className="w-56 px-2 py-0.5 rounded bg-[var(--color-canvas)] border border-[var(--color-border-default)] font-mono text-[11px] text-[var(--color-editor-fg)] focus:outline-none"
+          />
+          <input
+            aria-label="Grab note"
+            value={pickNote}
+            onChange={(e) => setPickNote(e.target.value)}
+            placeholder="Note for agent (query/hash & secrets auto-stripped)"
+            className="flex-1 min-w-0 px-2 py-0.5 rounded bg-[var(--color-canvas)] border border-[var(--color-border-default)] text-[11px] text-[var(--color-editor-fg)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const sanitized = sanitizeGrabPayload({
+                url: browser.currentUrl || address,
+                tagName: pickSelector.split(/[.#\s\[]/)[0] || 'element',
+                selector: pickSelector || undefined,
+                note: pickNote || `Viewport: ${selected.label}`,
+              });
+              onAskAgent?.(formatGrabForAgent(sanitized));
+              setPickSelector('');
+              setPickNote('');
+              setPickMode(false);
+            }}
+            className="px-2.5 py-0.5 rounded bg-white text-black font-semibold text-[11px] hover:bg-white/90 transition"
+          >
+            Grab to Chat
+          </button>
+        </div>
+      )}
+
       {/* Loading Progress Bar */}
       <div
         className="h-0.5 shrink-0 bg-[var(--color-border-muted)]"
@@ -330,10 +396,38 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         {!native ? (
           address && address !== 'about:blank' ? (
             <iframe
+              ref={iframeRef}
               src={address}
               title="Browser Preview"
               className="w-full h-full border-0 bg-white"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              onLoad={() => {
+                try {
+                  const doc = iframeRef.current?.contentDocument;
+                  if (!doc) return;
+                  doc.addEventListener('click', (ev) => {
+                    if (!pickModeRef.current) return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const el = ev.target as HTMLElement | null;
+                    if (!el) return;
+                    const attrs: Record<string, string> = {};
+                    for (const attr of Array.from(el.attributes)) {
+                      attrs[attr.name] = attr.value;
+                    }
+                    const sanitized = sanitizeGrabPayload({
+                      url: doc.location?.href || address,
+                      tagName: el.tagName,
+                      textContent: el.textContent || '',
+                      attributes: attrs,
+                    });
+                    onAskAgent?.(formatGrabForAgent(sanitized));
+                    setPickMode(false);
+                  }, true);
+                } catch {
+                  // Cross-origin iframe: manual selector bar above remains available.
+                }
+              }}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-[var(--color-fg-muted)] gap-2">

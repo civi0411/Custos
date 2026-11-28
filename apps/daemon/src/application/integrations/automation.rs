@@ -67,11 +67,50 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_AUTOMATION_JOBS_RUN => {
-                // Fail closed: a bare `permit_id` string is not proof of authority. Headless shell runs stay
-                // disabled until an executor verifies a real kernel ExecutionPermit bound to this job.
-                ApiResponse::error(
+                let fleet = match self.workbenches.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "FleetAutomationRepository not configured",
+                        )
+                    }
+                };
+                let Some(job_id) = req.params.get("job_id").and_then(|v| v.as_str()) else {
+                    return ApiResponse::error(req.id, "Missing required 'job_id' parameter");
+                };
+                let mut job = match fleet.get_headless_job(job_id) {
+                    Ok(Some(j)) => j,
+                    Ok(None) => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Automation job '{job_id}' not found"),
+                        )
+                    }
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                // Bridge headless job through TaskService + Supervision instead of raw unguarded shell
+                let title = format!("Automation: {}", job.name);
+                let task = match self.kernel.task_service.create_task(title).await {
+                    Ok(t) => t,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                job.status = HeadlessJobStatus::Running;
+                job.started_at = Some(chrono::Utc::now().timestamp_millis());
+                if let Err(e) = fleet.save_headless_job(&job) {
+                    return ApiResponse::error(req.id, e.to_string());
+                }
+
+                tracing::info!(job_id = %job.id, task_id = %task.id, "Dispatched automation job into governed TaskService");
+                ApiResponse::success(
                     req.id,
-                    "Headless execution is unavailable until an executor and scoped authority checks are connected",
+                    serde_json::json!({
+                        "job": job,
+                        "task_id": task.id,
+                        "status": "dispatched_to_task_kernel"
+                    }),
                 )
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),

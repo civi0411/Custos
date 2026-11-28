@@ -7,6 +7,7 @@ members = [
     "platform/engine",
     "apps/daemon",
     "apps/cli",
+    "apps/cloud",
     "apps/desktop/native",
     "sdk/protocol",
     "sdk/client-rust",

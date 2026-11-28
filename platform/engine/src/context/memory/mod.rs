@@ -1,3 +1,4 @@
+pub mod consolidation;
 pub mod store;
 pub mod traits;
 

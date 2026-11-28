@@ -6,3 +6,4 @@ export * from './CustomSelect';
 export * from './Tooltip';
 export * from './ActionIcon';
 export * from './JobActionButton';
+export * from './SecuritySurface';

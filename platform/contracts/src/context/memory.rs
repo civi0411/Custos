@@ -81,3 +81,35 @@ pub enum MemoryError {
     #[error("Memory backend failure: {0}")]
     Backend(String),
 }
+
+/// Tunable policy bounds for nightly/idle memory consolidation.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ConsolidationPolicy {
+    pub max_sessions: usize,
+    pub max_chars: usize,
+    pub max_new_facts: usize,
+    pub max_archive_ratio: f32,
+}
+
+impl Default for ConsolidationPolicy {
+    fn default() -> Self {
+        Self {
+            max_sessions: 20,
+            max_chars: 40_000,
+            max_new_facts: 6,
+            max_archive_ratio: 0.20,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemoryConsolidationDraft {
+    pub new_facts: Vec<FactProposal>,
+    pub archive_fact_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConsolidationReport {
+    pub accepted_facts: usize,
+    pub archived_facts: usize,
+}

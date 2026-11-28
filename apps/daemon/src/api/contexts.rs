@@ -2,6 +2,26 @@
 
 use super::*;
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DaemonBroadcastEvent {
+    HookPermissionRequested {
+        request_id: String,
+        tool_name: String,
+        session_id: Option<String>,
+    },
+    HookPermissionResolved {
+        request_id: String,
+        allow: bool,
+    },
+    AutomationJobDispatched {
+        job_id: String,
+        task_id: String,
+    },
+}
+
+pub type GlobalEventBus = tokio::sync::broadcast::Sender<DaemonBroadcastEvent>;
+
 pub(crate) struct KernelServices {
     pub(crate) task_service: Arc<TaskService>,
     pub(crate) session_manager: Arc<SessionManager>,
@@ -10,6 +30,9 @@ pub(crate) struct KernelServices {
     pub(crate) usage_runs: Option<Arc<dyn custos_engine::contracts::storage::RunPort>>,
     pub(crate) sqlite_store: Option<Arc<custos_storage::SqliteTaskStore>>,
     pub(crate) supervision: Arc<custos_engine::workflow::SupervisionCoordinator>,
+    pub(crate) hook_channel: Arc<custos_engine::authority::HeldPermissionHookChannel>,
+    pub(crate) event_bus: GlobalEventBus,
+    pub(crate) scheduler: Arc<custos_engine::orchestration::WorkflowScheduler>,
 }
 
 pub(crate) struct EnvironmentServices {

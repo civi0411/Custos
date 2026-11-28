@@ -1,0 +1,17 @@
+[package]
+name = "custos-cloud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Custos Zero-Knowledge Cloud: E2EE Relay, Zero-PII Push & Webhook Wake (1-Binary, 4 Roles)"
+
+[dependencies]
+async-trait = { workspace = true }
+custos-protocol = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+

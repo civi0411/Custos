@@ -7,8 +7,52 @@ use custos_contracts::DomainError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WakeSettlePolicy {
+    pub settle_ms: i64,
+    pub clock_jump_threshold_ms: i64,
+}
+
+impl Default for WakeSettlePolicy {
+    fn default() -> Self {
+        Self {
+            settle_ms: 15_000,
+            clock_jump_threshold_ms: 60_000,
+        }
+    }
+}
+
+/// Defers due job dispatch briefly after a system sleep/wake clock jump.
+pub struct WakeSettleGate {
+    policy: WakeSettlePolicy,
+    last_tick_ms: AtomicI64,
+    settled_after_ms: AtomicI64,
+}
+
+impl WakeSettleGate {
+    pub fn new(policy: WakeSettlePolicy, now_ms: i64) -> Self {
+        Self {
+            policy,
+            last_tick_ms: AtomicI64::new(now_ms),
+            settled_after_ms: AtomicI64::new(now_ms),
+        }
+    }
+
+    /// Returns true when settled; false if a wake jump was detected and settling is in progress.
+    pub fn check_settled(&self, now_ms: i64) -> bool {
+        let prev = self.last_tick_ms.swap(now_ms, Ordering::SeqCst);
+        if now_ms - prev > self.policy.clock_jump_threshold_ms {
+            self.settled_after_ms
+                .store(now_ms + self.policy.settle_ms, Ordering::SeqCst);
+            return false;
+        }
+        now_ms >= self.settled_after_ms.load(Ordering::SeqCst)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ScheduledJobId(pub String);
@@ -72,6 +116,9 @@ pub struct ScheduledJob {
 
 pub struct WorkflowScheduler {
     jobs: Arc<RwLock<HashMap<ScheduledJobId, ScheduledJob>>>,
+    generation: Arc<AtomicU64>,
+    lanes: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    wake_gate: WakeSettleGate,
 }
 
 impl Default for WorkflowScheduler {
@@ -84,7 +131,31 @@ impl WorkflowScheduler {
     pub fn new() -> Self {
         Self {
             jobs: Arc::new(RwLock::new(HashMap::new())),
+            generation: Arc::new(AtomicU64::new(1)),
+            lanes: Arc::new(Mutex::new(HashMap::new())),
+            wake_gate: WakeSettleGate::new(WakeSettlePolicy::default(), Utc::now().timestamp_millis()),
         }
+    }
+
+    pub fn current_generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    pub fn bump_generation(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub fn check_wake_settled(&self, now_ms: i64) -> bool {
+        self.wake_gate.check_settled(now_ms)
+    }
+
+    /// Serializes concurrent executions for the same job key.
+    pub async fn lane_for(&self, job_key: &str) -> Arc<Mutex<()>> {
+        let mut guard = self.lanes.lock().await;
+        guard
+            .entry(job_key.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 
     /// Schedule a new workflow job
@@ -170,11 +241,10 @@ impl WorkflowScheduler {
                         };
                     }
                 }
-                JobRecurrence::Cron { .. } => {
-                    // For cron without full parser crate, advance by standard 1 hour fallback or reschedule
+                JobRecurrence::Cron { expression } => {
                     if success {
                         job.status = JobStatus::Scheduled;
-                        job.next_run_at = Utc::now() + Duration::hours(1);
+                        job.next_run_at = next_cron_run(expression, Utc::now());
                     } else {
                         job.status = JobStatus::Failed {
                             reason: error_message.unwrap_or_else(|| "Cron step failed".into()),
@@ -204,6 +274,76 @@ impl WorkflowScheduler {
             })
         }
     }
+}
+
+fn cron_field_matches(field: &str, value: u32, min: u32, max: u32) -> bool {
+    for part in field.split(',') {
+        let part = part.trim();
+        let (range_part, step) = if let Some((r, s)) = part.split_once('/') {
+            let Ok(step_val) = s.parse::<u32>() else {
+                return false;
+            };
+            if step_val == 0 {
+                return false;
+            }
+            (r, step_val)
+        } else {
+            (part, 1)
+        };
+        let (start, end) = if range_part == "*" {
+            (min, max)
+        } else if let Some((a, b)) = range_part.split_once('-') {
+            let (Ok(sa), Ok(sb)) = (a.parse::<u32>(), b.parse::<u32>()) else {
+                return false;
+            };
+            (sa, sb)
+        } else {
+            let Ok(exact) = range_part.parse::<u32>() else {
+                return false;
+            };
+            if step == 1 {
+                if value == exact {
+                    return true;
+                }
+                continue;
+            }
+            (exact, max)
+        };
+        if value >= start && value <= end && (value - start) % step == 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Evaluates a 5-field UTC cron expression (`min hour dom month dow`) after `after`.
+/// Falls back to `after + 1 hour` only if the expression is malformed.
+pub fn next_cron_run(expr: &str, after: DateTime<Utc>) -> DateTime<Utc> {
+    use chrono::{Datelike, Timelike};
+    let fields: Vec<&str> = expr.split_whitespace().collect();
+    if fields.len() != 5 {
+        return after + Duration::hours(1);
+    }
+    let mut candidate = after + Duration::minutes(1);
+    candidate = candidate
+        .with_second(0)
+        .and_then(|d| d.with_nanosecond(0))
+        .unwrap_or(candidate);
+
+    // Bound scan to 7 days of minutes (10,080 iterations) for deterministic O(1) runtime.
+    for _ in 0..10_080 {
+        let m_ok = cron_field_matches(fields[0], candidate.minute(), 0, 59);
+        let h_ok = cron_field_matches(fields[1], candidate.hour(), 0, 23);
+        let dom_ok = cron_field_matches(fields[2], candidate.day(), 1, 31);
+        let mon_ok = cron_field_matches(fields[3], candidate.month(), 1, 12);
+        let dow = candidate.weekday().num_days_from_sunday();
+        let dow_ok = cron_field_matches(fields[4], dow, 0, 6);
+        if m_ok && h_ok && dom_ok && mon_ok && dow_ok {
+            return candidate;
+        }
+        candidate += Duration::minutes(1);
+    }
+    after + Duration::hours(1)
 }
 
 #[cfg(test)]
@@ -264,5 +404,37 @@ mod tests {
         let future = Utc::now() + Duration::seconds(305);
         let due_future = scheduler.get_due_jobs(future).await;
         assert_eq!(due_future.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_wake_settle_gate_generation_and_lanes() {
+        let scheduler = WorkflowScheduler::new();
+        assert_eq!(scheduler.current_generation(), 1);
+        assert_eq!(scheduler.bump_generation(), 2);
+
+        let base_ms = Utc::now().timestamp_millis();
+        assert!(scheduler.check_wake_settled(base_ms));
+        // Simulate laptop sleep jump (+120s > 60s threshold)
+        assert!(!scheduler.check_wake_settled(base_ms + 120_000));
+        // Still settling at +125s (< +135s)
+        assert!(!scheduler.check_wake_settled(base_ms + 125_000));
+        // Settled after 15s
+        assert!(scheduler.check_wake_settled(base_ms + 136_000));
+
+        let lane_a1 = scheduler.lane_for("job_1").await;
+        let lane_a2 = scheduler.lane_for("job_1").await;
+        assert!(Arc::ptr_eq(&lane_a1, &lane_a2));
+    }
+
+    #[test]
+    fn test_cron_next_run_computes_real_schedule() {
+        let base = chrono::DateTime::parse_from_rfc3339("2026-11-28T10:12:30Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let next = next_cron_run("*/15 * * * *", base);
+        assert_eq!(next.to_rfc3339(), "2026-11-28T10:15:00+00:00");
+
+        let daily = next_cron_run("30 14 * * *", base);
+        assert_eq!(daily.to_rfc3339(), "2026-11-28T14:30:00+00:00");
     }
 }

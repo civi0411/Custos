@@ -57,6 +57,17 @@ pub fn read_screenshot_base64(path: &str) -> Option<String> {
     })
 }
 
+fn validate_ssh_token(label: &str, value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with('-')
+        || trimmed.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
+        return Err(format!("Unsafe SSH {label}: '{value}'"));
+    }
+    Ok(())
+}
+
 fn build_ssh_command(
     ssh_bin: &Path,
     host: &str,
@@ -65,7 +76,13 @@ fn build_ssh_command(
     connect_timeout_secs: u64,
     key_path: Option<&str>,
     remote_cmd: &str,
-) -> Command {
+) -> Result<Command, String> {
+    validate_ssh_token("host", host)?;
+    validate_ssh_token("user", user)?;
+    if let Some(key) = key_path {
+        validate_ssh_token("key_path", key)?;
+    }
+
     let mut cmd = Command::new(ssh_bin);
     cmd.kill_on_drop(true)
         .arg("-o")
@@ -79,8 +96,8 @@ fn build_ssh_command(
     if let Some(key) = key_path {
         cmd.arg("-i").arg(key);
     }
-    cmd.arg(format!("{user}@{host}")).arg(remote_cmd);
-    cmd
+    cmd.arg("--").arg(format!("{user}@{host}")).arg(remote_cmd);
+    Ok(cmd)
 }
 
 /// Probes SSH host reachability, returning round-trip latency in milliseconds.
@@ -92,7 +109,7 @@ pub async fn ping_ssh_host(
     key_path: Option<&str>,
 ) -> Result<u64, String> {
     let start = Instant::now();
-    let mut cmd = build_ssh_command(ssh_bin, host, user, port, 3, key_path, "echo -n ping");
+    let mut cmd = build_ssh_command(ssh_bin, host, user, port, 3, key_path, "echo -n ping")?;
     let out = cmd.output().await.map_err(|e| e.to_string())?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
     if out.status.success() {
@@ -112,7 +129,8 @@ pub async fn exec_ssh_command(
     command: &str,
 ) -> Result<(Option<i32>, String, String, u64), std::io::Error> {
     let start = Instant::now();
-    let mut cmd = build_ssh_command(ssh_bin, host, user, port, 10, key_path, command);
+    let mut cmd = build_ssh_command(ssh_bin, host, user, port, 10, key_path, command)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     let out = tokio::time::timeout(Duration::from_secs(60), cmd.output())
         .await
         .map_err(|_| {
@@ -125,4 +143,34 @@ pub async fn exec_ssh_command(
         String::from_utf8_lossy(&out.stderr).into_owned(),
         elapsed_ms,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ssh_command_rejects_option_injection() {
+        let err = build_ssh_command(
+            Path::new("ssh"),
+            "-oProxyCommand=id",
+            "ubuntu",
+            22,
+            3,
+            None,
+            "echo hi",
+        )
+        .unwrap_err();
+        assert!(err.contains("Unsafe SSH host"));
+        assert!(build_ssh_command(
+            Path::new("ssh"),
+            "10.0.0.2",
+            "ubuntu",
+            22,
+            3,
+            None,
+            "echo hi",
+        )
+        .is_ok());
+    }
 }

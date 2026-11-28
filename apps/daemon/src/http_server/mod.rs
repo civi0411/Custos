@@ -1,7 +1,10 @@
+pub mod caller_scope;
 pub mod handler;
 pub mod security;
 pub mod server;
 pub mod sse;
+
+pub use caller_scope::{is_allowed_remote_ip, CallerScope, CallerScopePolicy};
 
 pub use handler::{find_header_end, handle_http_client};
 pub use security::{is_allowed_origin, is_authorized_ipc_client};

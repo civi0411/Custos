@@ -7,6 +7,7 @@
 //! - Handles dynamic resizing, stdin writes, and clean termination
 
 use super::buffer::BoundedTerminalBuffer;
+use super::osc_scanner::{Osc7501StatefulScanner, Osc7501Status};
 use async_trait::async_trait;
 use custos_contracts::contracts::terminal::{
     TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
@@ -25,11 +26,14 @@ struct TerminalSessionInstance {
     session: Arc<RwLock<TerminalSession>>,
     pty: Arc<RwLock<Option<Box<dyn TerminalProcessHandle>>>>,
     buffer: Arc<std::sync::Mutex<BoundedTerminalBuffer>>,
+    osc_status: Arc<std::sync::Mutex<Option<Osc7501Status>>>,
 }
 
 struct SessionConsumer {
     session: Arc<RwLock<TerminalSession>>,
     buffer: Arc<std::sync::Mutex<BoundedTerminalBuffer>>,
+    scanner: Arc<std::sync::Mutex<Osc7501StatefulScanner>>,
+    osc_status: Arc<std::sync::Mutex<Option<Osc7501Status>>>,
     pty: Arc<RwLock<Option<Box<dyn TerminalProcessHandle>>>>,
     session_id: String,
 }
@@ -38,6 +42,17 @@ impl TerminalOutputConsumer for SessionConsumer {
     fn on_output(&self, chunk: &[u8]) {
         if let Ok(mut buf) = self.buffer.lock() {
             buf.push(chunk);
+        }
+        if let Ok(mut scanner) = self.scanner.lock() {
+            let events = scanner.scan_chunk(chunk);
+            if !events.is_empty() {
+                if let Ok(mut status) = self.osc_status.lock() {
+                    *status = scanner.current_status.clone();
+                }
+            }
+            for ev in events {
+                tracing::debug!(session_id = %self.session_id, ?ev, "OSC 7501 terminal event");
+            }
         }
     }
 
@@ -87,6 +102,11 @@ impl TerminalCoordinator {
     pub fn with_max_buffer_bytes(mut self, bytes: usize) -> Self {
         self.max_buffer_bytes = bytes;
         self
+    }
+
+    pub async fn osc_status(&self, session_id: &str) -> Option<Osc7501Status> {
+        let instance = self.sessions.read().await.get(session_id).cloned()?;
+        instance.osc_status.lock().ok().and_then(|g| g.clone())
     }
 }
 
@@ -170,9 +190,13 @@ impl TerminalPort for TerminalCoordinator {
             self.max_buffer_bytes,
         )));
 
+        let osc_status_arc = Arc::new(std::sync::Mutex::new(None));
+
         let consumer = Arc::new(SessionConsumer {
             session: session_arc.clone(),
             buffer: buffer_arc.clone(),
+            scanner: Arc::new(std::sync::Mutex::new(Osc7501StatefulScanner::new())),
+            osc_status: osc_status_arc.clone(),
             pty: pty_arc.clone(),
             session_id: session_id.clone(),
         });
@@ -195,6 +219,7 @@ impl TerminalPort for TerminalCoordinator {
             session: session_arc,
             pty: pty_arc,
             buffer: buffer_arc,
+            osc_status: osc_status_arc,
         });
 
         // Register session

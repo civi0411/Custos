@@ -23,7 +23,11 @@ import {
   buildFileTree,
 } from './types';
 import { FileTreeNavigator } from './FileTreeNavigator';
-import { DiffViewerCanvas } from './DiffViewerCanvas';
+import {
+  DiffViewerCanvas,
+  formatDiffAnnotationBatch,
+  type DiffLineAnnotation,
+} from './DiffViewerCanvas';
 import { EmptyCanvasView } from './EmptyCanvasView';
 
 export const FilesChangesView: React.FC<FilesChangesPaneProps> = ({
@@ -61,6 +65,8 @@ export const FilesChangesView: React.FC<FilesChangesPaneProps> = ({
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [fileViewMode, setFileViewMode] = useState<'content' | 'diff'>(initialViewMode || 'content');
+  const [diffAnnotations, setDiffAnnotations] = useState<DiffLineAnnotation[]>([]);
+  const [sendingAnnotations, setSendingAnnotations] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialFilePath && initialFilePath !== selectedPath) {
@@ -402,6 +408,31 @@ export const FilesChangesView: React.FC<FilesChangesPaneProps> = ({
                   onDiscardCurrent={handleDiscardCurrent}
                   onCopyPath={handleCopyPath}
                   copied={copied}
+                  annotations={diffAnnotations}
+                  onAddAnnotation={(ann) =>
+                    setDiffAnnotations((prev) => [...prev, { ...ann, id: `ann-${Date.now()}-${Math.random()}` }])
+                  }
+                  onRemoveAnnotation={(id) =>
+                    setDiffAnnotations((prev) => prev.filter((a) => a.id !== id))
+                  }
+                  onClearAnnotations={() => setDiffAnnotations([])}
+                  sendingAnnotations={sendingAnnotations}
+                  onSendAnnotationBatch={async () => {
+                    if (!selectedWorkspaceId || diffAnnotations.length === 0) return;
+                    try {
+                      setSendingAnnotations(true);
+                      await daemonClient.steerWorkspaceAgent(
+                        selectedWorkspaceId,
+                        formatDiffAnnotationBatch(diffAnnotations)
+                      );
+                      setDiffAnnotations([]);
+                      onShowToast?.('Sent inline diff review batch to workspace agent');
+                    } catch (err) {
+                      onShowToast?.(`Failed to steer agent: ${String(err)}`);
+                    } finally {
+                      setSendingAnnotations(false);
+                    }
+                  }}
                 />
               ) : fileContent ? (
                 <CompanionFileViewer

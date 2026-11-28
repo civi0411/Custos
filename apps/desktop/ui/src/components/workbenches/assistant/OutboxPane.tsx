@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Copy, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { SecuritySurface } from '@/components/common/SecuritySurface';
 import { WorkbenchPane, WorkbenchEmptyState, WorkbenchError } from '@/components/common/WorkbenchPane';
 import type { OutboxActionItem } from '@/types/domain';
 
@@ -228,30 +229,42 @@ export function OutboxPane({ taskId, supportedOperations = [], onShowToast }: Ou
       </aside>
       <main className="min-w-0 min-h-0 flex-1 overflow-auto">
         {active ? <article className="wb-document select-text">
-          <div className="wb-document-actions">
-            {actions.approve && (
-              <button
-                type="button"
-                className="canvas-open-button bg-emerald-600/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-600/30 hover:border-emerald-500/50"
-                disabled={acting}
-                onClick={() => void act('approve')}
+          {(actions.approve || actions.dispatch) && (
+            <div className="mb-3">
+              <SecuritySurface
+                title={active.title || active.action_type}
+                subtitle={active.recipient || undefined}
+                badge="OUTBOX APPROVAL"
+                pending={acting}
+                pendingLabel="Submitting outbox decision…"
               >
-                <Check size={12} />
-                Approve Action
-              </button>
-            )}
-            {actions.dispatch && (
-              <button
-                type="button"
-                className="canvas-open-button bg-sky-600/20 text-sky-300 border-sky-500/30 hover:bg-sky-600/30 hover:border-sky-500/50"
-                disabled={acting}
-                onClick={() => void act('dispatch')}
-              >
-                <Send size={12} />
-                Dispatch Action
-              </button>
-            )}
-          </div>
+                <div className="flex items-center gap-2">
+                  {actions.approve && (
+                    <button
+                      type="button"
+                      className="canvas-open-button bg-emerald-600/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-600/30 hover:border-emerald-500/50"
+                      disabled={acting}
+                      onClick={() => void act('approve')}
+                    >
+                      <Check size={12} />
+                      Approve Action
+                    </button>
+                  )}
+                  {actions.dispatch && (
+                    <button
+                      type="button"
+                      className="canvas-open-button bg-sky-600/20 text-sky-300 border-sky-500/30 hover:bg-sky-600/30 hover:border-sky-500/50"
+                      disabled={acting}
+                      onClick={() => void act('dispatch')}
+                    >
+                      <Send size={12} />
+                      Dispatch Action
+                    </button>
+                  )}
+                </div>
+              </SecuritySurface>
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-1.5">
             <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-medium uppercase tracking-wide ${protocol.badgeClass}`}>
               {protocol.label}

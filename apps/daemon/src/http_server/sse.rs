@@ -117,3 +117,41 @@ pub async fn handle_sse_events(
     }
     Ok(())
 }
+
+/// Zero-polling global daemon event stream backed by `tokio::sync::broadcast`.
+pub async fn handle_global_events(
+    stream: &mut TcpStream,
+    api: &Arc<LocalApiDispatcher>,
+    cors_origin_header: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\n{}Connection: close\r\n\r\nretry: 1000\n\n",
+        cors_origin_header
+    );
+    write_live(stream, headers.as_bytes()).await?;
+
+    let mut rx = api.event_bus().subscribe();
+    let mut keepalive = tokio::time::interval(Duration::from_secs(15));
+    keepalive.tick().await;
+
+    loop {
+        tokio::select! {
+            ev = rx.recv() => match ev {
+                Ok(event) => {
+                    let data = serde_json::to_string(&event).map_err(std::io::Error::other)?;
+                    if write_live(stream, format!("event: daemon\ndata: {data}\n\n").as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            },
+            _ = keepalive.tick() => {
+                if write_live(stream, b": heartbeat\n\n").await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
+}

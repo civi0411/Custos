@@ -149,5 +149,17 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../../migrations/0046_run_supervision.sql"))?;
     conn.execute_batch(include_str!("../../migrations/0047_memory_store.sql"))?;
     conn.execute_batch(include_str!("../../migrations/0048_mcp_servers.sql"))?;
+    let worker_columns = conn
+        .prepare("PRAGMA table_info(worker_runs)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !worker_columns
+        .iter()
+        .any(|column| column == "provider_session_id")
+    {
+        conn.execute_batch(include_str!(
+            "../../migrations/0049_worker_provider_session.sql"
+        ))?;
+    }
     Ok(())
 }
